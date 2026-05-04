@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#efe6d2" />
+  <title>字灵 · Zì Líng</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-bar">
+      <div class="seal">字</div>
+      <div class="title-group">
+        <h1>字灵</h1>
+        <span class="subtitle">Zì Líng · 一只由字组成的小生灵</span>
+      </div>
+      <button class="icon-btn" id="infoBtn" aria-label="说明">?</button>
+    </header>
+
+    <section class="stage" id="stage">
+      <canvas id="petCanvas" aria-label="字灵画布"></canvas>
+      <div class="paper-grain" aria-hidden="true"></div>
+      <div class="ink-blot blot-1" aria-hidden="true"></div>
+      <div class="ink-blot blot-2" aria-hidden="true"></div>
+
+      <div class="form-label" id="formLabel">软团</div>
+
+      <div class="hint" id="hint">戳一戳 · 拖一拖 · 双击让它觅食</div>
+    </section>
+
+    <nav class="toolbar" role="toolbar" aria-label="互动">
+      <button class="tool" data-action="morph">
+        <span class="tool-glyph">变</span>
+        <span class="tool-label">换形</span>
+      </button>
+      <button class="tool" data-action="feed">
+        <span class="tool-glyph">觅</span>
+        <span class="tool-label">觅食</span>
+      </button>
+      <button class="tool" data-action="sleep">
+        <span class="tool-glyph">眠</span>
+        <span class="tool-label">小憩</span>
+      </button>
+      <button class="tool" data-action="shake">
+        <span class="tool-glyph">抖</span>
+        <span class="tool-label">抖擞</span>
+      </button>
+    </nav>
+
+    <section class="feed-panel" aria-label="可被吞食的诗笺">
+      <div class="panel-title">
+        <span class="dot"></span>
+        <span>今日诗笺 · 可喂食</span>
+      </div>
+
+      <article class="card poem" data-feedable>
+        <div class="card-meta">五言 · 夜坐</div>
+        <p class="poem-line">疏星落野塘，</p>
+        <p class="poem-line">寒露湿衣裳。</p>
+        <p class="poem-line">独坐听风久，</p>
+        <p class="poem-line">山深月自凉。</p>
+      </article>
+
+      <article class="card note" data-feedable>
+        <div class="card-meta">小记 · 今日</div>
+        <p>午后忽雨，檐下听了一刻。茶还温，字还在，一切都刚好。</p>
+      </article>
+
+      <article class="card tags" data-feedable>
+        <div class="card-meta">关键词</div>
+        <div class="tag-wrap">
+          <span class="tag">山居</span>
+          <span class="tag">听雨</span>
+          <span class="tag">煮茶</span>
+          <span class="tag">读信</span>
+          <span class="tag">晚风</span>
+          <span class="tag">旧梦</span>
+        </div>
+      </article>
+
+      <div class="panel-footnote">
+        点击诗笺中的任意字可喂给字灵 · 双击字灵可让它自行觅食
+      </div>
+    </section>
+
+    <div class="pouch" id="pouch" aria-label="字池">
+      <span class="pouch-label">字池</span>
+      <span class="pouch-count" id="pouchCount">0</span>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="./pet.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

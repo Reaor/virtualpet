@@ -1,0 +1,400 @@
+:root {
+  --paper: #efe6d2;
+  --paper-deep: #e4d8bd;
+  --paper-shadow: #d2c39e;
+  --ink: #1d1a15;
+  --ink-soft: #3b342a;
+  --ink-faded: rgba(29, 26, 21, 0.55);
+  --cinnabar: #9c3a2d;
+  --cinnabar-deep: #7d2c21;
+  --gold: #a98545;
+  --celadon: #6f8d7a;
+
+  --font-serif: "LXGW WenKai", "LXGW WenKai Screen", "Noto Serif SC",
+    "Songti SC", "STSong", "SimSun", serif;
+
+  --radius: 14px;
+  --shadow-soft: 0 2px 6px rgba(70, 50, 20, 0.08),
+    0 10px 30px rgba(70, 50, 20, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-serif);
+  overflow-x: hidden;
+  /* 防止移动端下拉刷新手势与画布冲突 */
+  overscroll-behavior: none;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse at 20% 0%, #f6eed9 0%, transparent 55%),
+    radial-gradient(ellipse at 100% 100%, #e8dcba 0%, transparent 60%),
+    var(--paper);
+}
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding: max(env(safe-area-inset-top), 16px) 16px
+    max(env(safe-area-inset-bottom), 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+}
+
+/* ---------- Top bar ---------- */
+.app-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 4px 2px;
+}
+
+.seal {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(180deg, var(--cinnabar) 0%, var(--cinnabar-deep) 100%);
+  border-radius: 6px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  box-shadow: 0 2px 4px rgba(124, 40, 30, 0.35),
+    inset 0 0 0 2px rgba(255, 255, 255, 0.15);
+  transform: rotate(-2deg);
+  user-select: none;
+}
+
+.title-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.title-group h1 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: 6px;
+  font-weight: 600;
+}
+.title-group .subtitle {
+  font-size: 11px;
+  color: var(--ink-faded);
+  letter-spacing: 1px;
+  margin-top: 2px;
+}
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid rgba(29, 26, 21, 0.2);
+  background: rgba(255, 255, 255, 0.4);
+  color: var(--ink-soft);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+/* ---------- Stage ---------- */
+.stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1.05;
+  max-height: 62vh;
+  border-radius: 22px;
+  background:
+    radial-gradient(ellipse at 50% 40%, #faf2de 0%, #e9dcbc 70%, #d9c79c 100%);
+  overflow: hidden;
+  box-shadow: var(--shadow-soft),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5),
+    inset 0 0 30px rgba(120, 90, 40, 0.08);
+  touch-action: none;
+}
+
+#petCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.paper-grain {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0.35;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.4  0 0 0 0 0.3  0 0 0 0 0.15  0 0 0 0.15 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+.ink-blot {
+  position: absolute;
+  z-index: 1;
+  border-radius: 50%;
+  filter: blur(20px);
+  pointer-events: none;
+  opacity: 0.25;
+}
+.blot-1 {
+  width: 180px;
+  height: 180px;
+  top: -40px;
+  left: -50px;
+  background: radial-gradient(circle, #5a4328 0%, transparent 70%);
+}
+.blot-2 {
+  width: 240px;
+  height: 240px;
+  bottom: -80px;
+  right: -70px;
+  background: radial-gradient(circle, #4c3a22 0%, transparent 70%);
+  opacity: 0.18;
+}
+
+.form-label {
+  position: absolute;
+  z-index: 4;
+  top: 14px;
+  left: 16px;
+  font-size: 13px;
+  letter-spacing: 4px;
+  color: var(--ink-soft);
+  background: rgba(255, 250, 235, 0.6);
+  padding: 4px 10px 4px 12px;
+  border-left: 2px solid var(--cinnabar);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  user-select: none;
+}
+
+.hint {
+  position: absolute;
+  z-index: 4;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--ink-faded);
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 0.6s ease;
+}
+.hint.hidden {
+  opacity: 0;
+}
+
+/* ---------- Toolbar ---------- */
+.toolbar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  padding: 0 2px;
+}
+
+.tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 0 8px;
+  background: rgba(255, 252, 240, 0.7);
+  border: 1px solid rgba(29, 26, 21, 0.1);
+  border-radius: 12px;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease;
+}
+.tool:active {
+  transform: scale(0.96);
+  background: rgba(255, 245, 220, 0.95);
+}
+.tool-glyph {
+  font-size: 20px;
+  letter-spacing: 0;
+  color: var(--cinnabar);
+}
+.tool-label {
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--ink-faded);
+}
+
+/* ---------- Feed panel (fake UI for pet to eat) ---------- */
+.feed-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 6px 2px 8px;
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  letter-spacing: 4px;
+  color: var(--ink-faded);
+  padding: 4px 2px;
+}
+.panel-title .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--cinnabar);
+}
+
+.card {
+  background: rgba(255, 253, 244, 0.85);
+  border: 1px solid rgba(29, 26, 21, 0.08);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-soft);
+  position: relative;
+}
+.card::before {
+  /* 诗笺右侧的微微阴影线 */
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  right: 10px;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(29, 26, 21, 0.12),
+    transparent
+  );
+  opacity: 0.6;
+}
+
+.card-meta {
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--cinnabar);
+  margin-bottom: 6px;
+}
+
+.poem-line {
+  margin: 2px 0;
+  font-size: 18px;
+  letter-spacing: 4px;
+  line-height: 1.8;
+  color: var(--ink);
+}
+.note p {
+  font-size: 15px;
+  line-height: 1.9;
+  letter-spacing: 2px;
+  color: var(--ink-soft);
+  margin: 0;
+}
+.tag-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  padding-top: 2px;
+}
+.tag {
+  font-size: 14px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: rgba(156, 58, 45, 0.08);
+  color: var(--cinnabar-deep);
+  letter-spacing: 2px;
+}
+
+/* 被字灵"吃掉"的字的效果 —— 由 JS 给每个字符拆分 span 后添加 .eaten */
+.glyph {
+  display: inline-block;
+  transition: color 0.25s ease, transform 0.25s ease, opacity 0.4s ease;
+  will-change: transform, opacity;
+}
+.glyph.eaten {
+  opacity: 0;
+  transform: translateY(-6px) scale(1.4);
+}
+.glyph.bitten {
+  color: var(--cinnabar);
+}
+
+.panel-footnote {
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--ink-faded);
+  padding: 4px 0 0;
+}
+
+/* ---------- Pouch ---------- */
+.pouch {
+  position: fixed;
+  right: 12px;
+  bottom: calc(max(env(safe-area-inset-bottom), 12px) + 6px);
+  background: rgba(255, 253, 244, 0.95);
+  border: 1px solid rgba(29, 26, 21, 0.12);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--ink-soft);
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  z-index: 10;
+}
+.pouch-count {
+  color: var(--cinnabar);
+  font-weight: 600;
+  min-width: 10px;
+  text-align: center;
+}
+
+/* ---------- Toast ---------- */
+.toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  background: rgba(29, 26, 21, 0.88);
+  color: #f4ead0;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  letter-spacing: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s, transform 0.3s;
+  z-index: 100;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 360px) {
+  .title-group h1 { font-size: 18px; }
+  .poem-line { font-size: 16px; }
+}
