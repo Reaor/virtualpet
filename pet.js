@@ -54,6 +54,13 @@
     月: "moon",
     花: "flower",
     蝶: "butterfly",
+    网: "emoji_face_c",
+    符: "emoji_face_c",
+    情: "emoji_face_a",
+    绘: "emoji_face_b",
+    时: "clock",
+    钟: "clock",
+    数: "digit_8",
     龙: "dragon",
     云: "cloud",
     心: "heart",
@@ -83,37 +90,44 @@
   }
 
   // ---------- 剪影采样 ---------- //
-  // 把绘制好的不透明像素均匀抽 N 个作为目标点
+  // 把绘制好的不透明像素均匀抽 N 个作为目标点（步长 1 更密）
   function sampleSilhouette(drawFn, S, count) {
+    const cap = 280;
+    const sampleS = Math.min(Math.round(S), cap);
+    const scale = sampleS / S;
     const c = document.createElement("canvas");
-    c.width = S;
-    c.height = S;
+    c.width = sampleS;
+    c.height = sampleS;
     const ctx = c.getContext("2d", { willReadFrequently: true });
-    ctx.clearRect(0, 0, S, S);
+    ctx.clearRect(0, 0, sampleS, sampleS);
+    ctx.save();
+    ctx.scale(scale, scale);
     drawFn(ctx, S);
-    const img = ctx.getImageData(0, 0, S, S).data;
+    ctx.restore();
+    const img = ctx.getImageData(0, 0, sampleS, sampleS).data;
 
-    // 收集所有不透明像素
     const px = [];
-    for (let y = 0; y < S; y += 2) {
-      for (let x = 0; x < S; x += 2) {
-        if (img[(y * S + x) * 4 + 3] > 128) px.push(x, y);
+    for (let y = 0; y < sampleS; y += 1) {
+      for (let x = 0; x < sampleS; x += 1) {
+        if (img[(y * sampleS + x) * 4 + 3] > 128) px.push(x, y);
       }
     }
     if (px.length === 0) return [];
 
-    // 均匀抽样
     const total = px.length / 2;
     const step = Math.max(1, Math.floor(total / count));
     const points = [];
+    const off = sampleS / 2;
     for (let i = 0; i < total && points.length < count; i += step) {
-      const jitter = () => (Math.random() - 0.5) * 0.45;
-      points.push({ x: px[i * 2] - S / 2 + jitter(), y: px[i * 2 + 1] - S / 2 + jitter() });
+      const jitter = () => (Math.random() - 0.5) * 0.22;
+      points.push({
+        x: (px[i * 2] - off) / scale + jitter(),
+        y: (px[i * 2 + 1] - off) / scale + jitter(),
+      });
     }
-    // 若不足，用已有点复制补齐
     while (points.length < count) {
       const p = points[points.length % Math.max(1, points.length)] || { x: 0, y: 0 };
-      points.push({ x: p.x + rand(-3, 3), y: p.y + rand(-3, 3) });
+      points.push({ x: p.x + rand(-2, 2), y: p.y + rand(-2, 2) });
     }
     return points.slice(0, count);
   }
@@ -140,6 +154,22 @@
       });
     }
     return out;
+  }
+
+（Unicode 标准表情，非图片资产） */
+  const EMOJI_MOSAIC_A =
+    "😀😃😄😁😆🥹😅😂🤣🙂😉😊😇🥰😍🤩😘😗☺️😚🤪😜🤔🤨😐😑😶😏😒🙄😬😌😔😪🤤😴🥱😵🤯🥳🥸😎🤓🧐😕😟🙁☹️😮😯😲😳🥺😦😧😨😰😥😢😭😱😖😣😞😓😩😫🥱🤤🫠🫡🫥😶‍🌫️🫨";
+  const EMOJI_MOSAIC_B =
+    "👍👎👌✌️🤞🫰🤟🤘🫶🙌👏🙏💪🦾🖐️✋🤚👋🤝💅❤️🧡💛💚💙💜🖤🤍💔❤️‍🔥💯🔥✨⭐🌟💫⚡️☄️🎉🎊🎈🎁🏆🥇🎯📌📍🔔🔕💬💭🗯️♨️🎵🎶🔊🔇";
+
+  function glyphUsesEmojiFont(str) {
+    if (!str || !str.length) return false;
+    const cp = str.codePointAt(0);
+    return (
+      (cp >= 0x1f000 && cp <= 0x1faff) ||
+      (cp >= 0x2600 && cp <= 0x27bf) ||
+      (cp >= 0x2300 && cp <= 0x23ff)
+    );
   }
 
   // ---------- 形态库 ---------- //
@@ -262,35 +292,69 @@
     },
 
     dragon: {
-      label: "龙",
+      label: "飞龙",
       build(n, S) {
-        // 蜿蜒体：沿 S 形曲线铺厚度
-        const outline = [];
-        const steps = 180;
-        for (let i = 0; i < steps; i++) {
-          const t = i / steps;
-          const x = (t - 0.5) * S * 0.82;
-          const y = Math.sin(t * Math.PI * 2.2) * S * 0.18;
-          outline.push({ x, y });
-        }
-        const body = fillFromOutline(outline, Math.max(0, n - 8), S * 0.05);
-        // 龙首更密（体积更大）
-        const head = [];
-        for (let i = 0; i < 8; i++) {
-          head.push({
-            x: outline[outline.length - 1].x + rand(-S * 0.05, S * 0.05),
-            y: outline[outline.length - 1].y + rand(-S * 0.05, S * 0.05),
-          });
-        }
-        const targets = body.concat(head);
-        const headP = outline[outline.length - 1];
+        const targets = sampleSilhouette((ctx, s) => {
+          ctx.fillStyle = "#000";
+          const cx = s * 0.46;
+          const cy = s * 0.48;
+          // 胸腹
+          ctx.beginPath();
+          ctx.ellipse(cx - s * 0.02, cy + s * 0.06, s * 0.2, s * 0.14, -0.15, 0, TAU);
+          ctx.fill();
+          // 长颈抬头
+          ctx.beginPath();
+          ctx.moveTo(cx - s * 0.12, cy - s * 0.02);
+          ctx.quadraticCurveTo(cx - s * 0.22, cy - s * 0.22, cx - s * 0.08, cy - s * 0.38);
+          ctx.quadraticCurveTo(cx + s * 0.02, cy - s * 0.34, cx - s * 0.02, cy - s * 0.12);
+          ctx.quadraticCurveTo(cx + s * 0.06, cy + s * 0.02, cx - s * 0.02, cy + s * 0.1);
+          ctx.closePath();
+          ctx.fill();
+          // 头与吻
+          ctx.beginPath();
+          ctx.ellipse(cx - s * 0.06, cy - s * 0.4, s * 0.1, s * 0.07, 0.35, 0, TAU);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(cx + s * 0.02, cy - s * 0.38);
+          ctx.lineTo(cx + s * 0.16, cy - s * 0.36);
+          ctx.lineTo(cx + s * 0.06, cy - s * 0.32);
+          ctx.closePath();
+          ctx.fill();
+          // 双翼（三角帆）
+          ctx.beginPath();
+          ctx.moveTo(cx - s * 0.08, cy + s * 0.02);
+          ctx.lineTo(cx - s * 0.42, cy - s * 0.28);
+          ctx.lineTo(cx - s * 0.18, cy + s * 0.08);
+          ctx.closePath();
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(cx + s * 0.06, cy + s * 0.04);
+          ctx.lineTo(cx + s * 0.38, cy - s * 0.2);
+          ctx.lineTo(cx + s * 0.12, cy + s * 0.12);
+          ctx.closePath();
+          ctx.fill();
+          // 长尾
+          ctx.beginPath();
+          ctx.moveTo(cx + s * 0.08, cy + s * 0.12);
+          ctx.quadraticCurveTo(cx + s * 0.38, cy + s * 0.28, cx + s * 0.42, cy + s * 0.42);
+          ctx.lineTo(cx + s * 0.32, cy + s * 0.38);
+          ctx.quadraticCurveTo(cx + s * 0.2, cy + s * 0.22, cx + s * 0.02, cy + s * 0.14);
+          ctx.closePath();
+          ctx.fill();
+          // 后腿
+          ctx.beginPath();
+          ctx.ellipse(cx - s * 0.06, cy + s * 0.2, s * 0.05, s * 0.1, 0.4, 0, TAU);
+          ctx.fill();
+        }, S, n);
+        const hx = -S * 0.06;
+        const hy = -S * 0.4;
         return {
           targets,
           eyes: [
-            { x: headP.x - S * 0.03, y: headP.y - S * 0.04 },
-            { x: headP.x + S * 0.03, y: headP.y - S * 0.02 },
+            { x: hx - S * 0.04, y: hy - S * 0.02 },
+            { x: hx + S * 0.02, y: hy - S * 0.02 },
           ],
-          eyeSize: 1.5,
+          eyeSize: 1.35,
         };
       },
     },
@@ -521,7 +585,192 @@
         };
       },
     },
+
+    /** 表情拼盘 A：圆脸 + 大眼 + 弧嘴（Unicode 表情粒子） */
+    emoji_face_a: {
+      label: "表情·圆",
+      build(n, S) {
+        const targets = sampleSilhouette((ctx, s) => {
+          ctx.fillStyle = "#000";
+          ctx.beginPath();
+          ctx.arc(s / 2, s / 2 + s * 0.04, s * 0.34, 0, TAU);
+          ctx.fill();
+          ctx.globalCompositeOperation = "destination-out";
+          ctx.beginPath();
+          ctx.arc(s * 0.38, s * 0.46, s * 0.07, 0, TAU);
+          ctx.arc(s * 0.62, s * 0.46, s * 0.07, 0, TAU);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(s / 2, s * 0.62, s * 0.12, s * 0.05, 0, 0, TAU);
+          ctx.fill();
+          ctx.globalCompositeOperation = "source-over";
+        }, S, n);
+        return {
+          targets,
+          eyes: [
+            { x: -S * 0.22, y: -S * 0.06 },
+            { x: S * 0.22, y: -S * 0.06 },
+          ],
+          eyeSize: 1.15,
+          emojiPalette: EMOJI_MOSAIC_A,
+        };
+      },
+    },
+
+    /** 表情拼盘 B：宽脸笑眼（Unicode 表情粒子） */
+    emoji_face_b: {
+      label: "表情·笑",
+      build(n, S) {
+        const targets = sampleSilhouette((ctx, s) => {
+          ctx.fillStyle = "#000";
+          ctx.beginPath();
+          ctx.ellipse(s / 2, s / 2 + s * 0.05, s * 0.38, s * 0.3, 0, 0, TAU);
+          ctx.fill();
+          ctx.globalCompositeOperation = "destination-out";
+          ctx.beginPath();
+          ctx.ellipse(s * 0.36, s * 0.46, s * 0.07, s * 0.05, -0.2, 0, TAU);
+          ctx.ellipse(s * 0.64, s * 0.46, s * 0.07, s * 0.05, 0.2, 0, TAU);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(s / 2, s * 0.62, s * 0.16, s * 0.08, 0, 0.2, Math.PI - 0.2);
+          ctx.fill();
+          ctx.globalCompositeOperation = "source-over";
+        }, S, n);
+        return {
+          targets,
+          eyes: [
+            { x: -S * 0.2, y: -S * 0.02 },
+            { x: S * 0.2, y: -S * 0.02 },
+          ],
+          eyeSize: 1.1,
+          emojiPalette: EMOJI_MOSAIC_B,
+        };
+      },
+    },
+
+    /** 表情拼盘 C：手势与心形符号云 */
+    emoji_face_c: {
+      label: "表情·符号",
+      build(n, S) {
+        const targets = sampleSilhouette((ctx, s) => {
+          ctx.fillStyle = "#000";
+          ctx.beginPath();
+          ctx.arc(s / 2, s / 2, s * 0.35, 0, TAU);
+          ctx.fill();
+        }, S, n);
+        return {
+          targets,
+          eyes: [
+            { x: -S * 0.18, y: -S * 0.08 },
+            { x: S * 0.18, y: -S * 0.08 },
+          ],
+          eyeSize: 1.1,
+          emojiPalette: EMOJI_MOSAIC_B + EMOJI_MOSAIC_A,
+        };
+      },
+    },
   };
+
+  /** 5×7 点阵数字 → 局部坐标点列表 */
+  function digitPattern5x7(d) {
+    const p = {
+      0: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+      1: ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
+      2: ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
+      3: ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
+      4: ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
+      5: ["11111", "10000", "10000", "11110", "00001", "00001", "11110"],
+      6: ["01110", "10000", "10000", "11110", "10001", "10001", "01110"],
+      7: ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
+      8: ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
+      9: ["01110", "10001", "10001", "01111", "00001", "00001", "01110"],
+    };
+    return p[d] || p[0];
+  }
+
+  function mergeDigitRows(leftRows, gapCols, rightRows) {
+    const g = ".".repeat(gapCols);
+    return leftRows.map((row, i) => row + g + (rightRows[i] || ""));
+  }
+
+  function rowsToTargets(rows, cell, n, jitter = 0.12) {
+    const h = rows.length;
+    const w = rows[0] ? rows[0].length : 0;
+    const pts = [];
+    for (let y = 0; y < h; y++) {
+      const row = rows[y] || "";
+      for (let x = 0; x < row.length; x++) {
+        const ch = row[x];
+        if (ch === "1") {
+          pts.push({
+            x: (x - w / 2 + 0.5) * cell,
+            y: (y - h / 2 + 0.5) * cell,
+          });
+        }
+      }
+    }
+    if (pts.length === 0) {
+      return Array.from({ length: n }, () => ({ x: 0, y: 0 }));
+    }
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const p = pts[i % pts.length];
+      out.push({
+        x: p.x + rand(-cell * jitter, cell * jitter),
+        y: p.y + rand(-cell * jitter, cell * jitter),
+      });
+    }
+    return out;
+  }
+
+  function colonRows() {
+    const dot = ".....1.....";
+    const emp = "...........";
+    return [dot, dot, emp, dot, dot, emp, emp];
+  }
+
+    label: "计时",
+    build(n, S) {
+      const d = new Date();
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      const r1 = mergeDigitRows(digitPattern5x7(hh[0]), 1, digitPattern5x7(hh[1]));
+      const rMid = mergeDigitRows(r1, 1, colonRows());
+      const rows = mergeDigitRows(rMid, 1, mergeDigitRows(digitPattern5x7(mm[0]), 1, digitPattern5x7(mm[1])));
+      const cell = S * 0.028;
+      const targets = rowsToTargets(rows, cell, n, 0.08);
+      return {
+        targets,
+        ordered: true,
+        eyes: [
+          { x: -S * 0.25, y: -S * 0.32 },
+          { x: S * 0.25, y: -S * 0.32 },
+        ],
+        eyeSize: 1,
+      };
+    },
+  };
+
+  for (let di = 0; di <= 9; di++) {
+    const ds = String(di);
+    FORMS[`digit_${di}`] = {
+      label: `数字·${ds}`,
+      build(n, S) {
+        const cell = S * 0.058;
+        const rows = digitPattern5x7(ds);
+        const targets = rowsToTargets(rows, cell, n, 0.1);
+        return {
+          targets,
+          ordered: true,
+          eyes: [
+            { x: -S * 0.1, y: -S * 0.2 },
+            { x: S * 0.1, y: -S * 0.2 },
+          ],
+          eyeSize: 1.05,
+        };
+      },
+    };
+  }
 
   const FORM_ORDER = [
     "blob",
@@ -536,6 +785,11 @@
     "heart",
     "moon",
     "star",
+    "emoji_face_a",
+    "emoji_face_b",
+    "emoji_face_c",
+    "digit_8",
+    "clock",
     "dragon",
   ];
 
@@ -564,6 +818,13 @@
       this.particleCount = opts.particleCount || 160;
       this.pool = (opts.pool || DEFAULT_POOL).slice();
       this.eatenChars = []; // 吞下的字，会混入 pool
+      /** 多次「写入躯体」累积队列，轮换贴到更多粒子上 */
+      this.bodyCharQueue = [];
+      this.bodyCharQueueMax = opts.bodyCharQueueMax != null ? opts.bodyCharQueueMax : 96;
+      /** 计时形态刷新间隔（秒） */
+      this.clockRefreshSec = opts.clockRefreshSec != null ? opts.clockRefreshSec : 30;
+      this._lastClockTick = 0;
+      this._clockMinuteSlot = -1;
 
       this.glyphs = [];
       this.eyes = [
@@ -657,6 +918,10 @@
       /** 浅色画布（与 App 式浅 UI 搭配） */
       this.lightCanvas = opts.lightCanvas !== false;
 
+      this.emojiFontStack =
+        opts.emojiFontStack ||
+        '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+
       this.onFormChange = typeof opts.onFormChange === "function" ? opts.onFormChange : null;
       this._resize();
       window.addEventListener("resize", this._resize);
@@ -678,7 +943,7 @@
       this.center = { x: this.width / 2, y: this.height / 2 };
       // 身体参考尺寸：按短边
       this.size = Math.min(this.width, this.height) * 0.9;
-      this.gridCell = clamp(Math.round(this.size * 0.03), 8, 13);
+      this.gridCell = clamp(Math.round(this.size * 0.024), 5, 10);
       this.anchor = { x: this.center.x, y: this.center.y };
       if (this.pos.x === 0 && this.pos.y === 0) {
         this.pos.x = this.center.x;
@@ -730,6 +995,7 @@
       if (this.morphGlyphToTarget) this._cancelMorph(false);
       this.form = name;
       this.formStartTime = performance.now();
+      if (name === "clock") this._clockMinuteSlot = -1;
       const S = this.size;
       const data = FORMS[name].build(this.particleCount, S);
       // 稳定分配
@@ -763,6 +1029,10 @@
       this.formData = data;
       this._cinnabarIdx = null; // 换形 → 重新挑朱砂字
       if (this.faceLayerMode) this._assignFaceGlyphs();
+      this._applyEmojiPaletteIfNeeded();
+      if (!(this.formData && this.formData.emojiPalette)) {
+        this._reapplyBodyFromQueue();
+      }
       if (this.gridSnapping) this._snapGlyphTargetsToGrid();
       this._resolveUniqueLocalGrid();
       this._applyGridTypography();
@@ -1006,6 +1276,12 @@
       this.morphStepAcc = 0;
 
       this._applyGridTypography();
+      if (this.formData && this.formData.emojiPalette) {
+        this._applyEmojiPaletteIfNeeded();
+      }
+      if (!(this.formData && this.formData.emojiPalette)) {
+        this._reapplyBodyFromQueue();
+      }
       if (typeof this.onFormChange === "function") {
         try {
           this.onFormChange(this.form);
@@ -1104,6 +1380,20 @@
           g.targetRot = this._quantizeTargetRot(rand(-spread, spread));
           g.size = em * lerp(1.06, 0.9, g.edge);
         }
+      }
+    }
+
+    /** 表情系列形态：躯体字换成 Unicode 表情（依赖系统彩色字体） */
+    _applyEmojiPaletteIfNeeded() {
+      const pal = this.formData && this.formData.emojiPalette;
+      if (!pal || !pal.length) return;
+      const chars = Array.from(pal);
+      if (!chars.length) return;
+      let k = 0;
+      for (const g of this.glyphs) {
+        if (g.faceRole) continue;
+        g.char = chars[k % chars.length];
+        k++;
       }
     }
 
@@ -1645,6 +1935,20 @@
         this.pos.y = clamp(this.pos.y, pad, this.height - pad);
       }
 
+      if (
+        this.form === "clock" &&
+        this.mode === "idle" &&
+        !this.dragging &&
+        !this.morphGlyphToTarget
+      ) {
+        const d = new Date();
+        const slot = d.getHours() * 60 + d.getMinutes();
+        if (slot !== this._clockMinuteSlot) {
+          this._clockMinuteSlot = slot;
+          this.setForm("clock", true);
+        }
+      }
+
       // 朝向：速度方向决定左右翻面 & 小角度倾斜
       if (Math.abs(this.vel.x) > 40) {
         this.facingFlip = this.vel.x > 0 ? 1 : -1;
@@ -2005,6 +2309,12 @@
           const cap = this.gridCell * 0.88 * this.scale;
           if (size > cap) size = cap;
         }
+        const ch0 = g.char && g.char.length ? g.char.codePointAt(0) : 0;
+        const emojiLike = glyphUsesEmojiFont(g.char);
+        if (emojiLike) {
+          const capE = (this.gridCell || 10) * 0.92 * this.scale;
+          if (size > capE) size = capE;
+        }
         const flashW = opts.flashWeight != null ? opts.flashWeight : 0.5;
         const flashBoost = 1 + Math.min(flash, 0.52) * flashW * 0.42;
         const alpha =
@@ -2012,7 +2322,10 @@
           flashBoost *
           lerp(0.94, 0.42, edge) *
           g.alpha;
-        ctx.font = `${size.toFixed(1)}px "LXGW WenKai", serif`;
+        const fontMain = '"LXGW WenKai", serif';
+        ctx.font = emojiLike
+          ? `${size.toFixed(1)}px ${this.emojiFontStack}, ${fontMain}`
+          : `${size.toFixed(1)}px ${fontMain}`;
         if (opts.color) {
           const c = opts.color;
           if (c.startsWith("#") && (c.length === 7 || c.length === 9)) {
@@ -2105,16 +2418,44 @@
       ctx.restore();
     }
 
-    /** 将一段文字「贴」到躯体外圈粒子上（如日程标题），不占用眉眼位 */
+    /** 将一段文字「贴」到躯体粒子上；多次写入会**累积队列**并覆盖更多字 */
     attachBodyChars(text) {
       const arr = Array.from(String(text || "")).filter((c) => c.trim());
       if (!arr.length) return;
+      for (const c of arr) {
+        this.bodyCharQueue.push(c);
+        if (this.bodyCharQueue.length > this.bodyCharQueueMax) {
+          this.bodyCharQueue.splice(0, this.bodyCharQueue.length - this.bodyCharQueueMax);
+        }
+      }
       const pool = this.glyphs
         .map((g, i) => ({ g, i }))
-        .filter((x) => !x.g.faceRole && x.g.edge > 0.32)
-        .sort(() => Math.random() - 0.5);
-      for (let j = 0; j < arr.length && j < pool.length; j++) {
-        pool[j].g.char = arr[j];
+        .filter((x) => !x.g.faceRole)
+        .sort((a, b) => b.g.edge - a.g.edge);
+      const q = this.bodyCharQueue;
+      const nQ = q.length;
+      const nP = pool.length;
+      if (!nP || !nQ) return;
+      const take = Math.min(nP, Math.max(nQ, Math.floor(nP * 0.55)));
+      for (let j = 0; j < take; j++) {
+        pool[j].g.char = q[j % nQ];
+      }
+    }
+
+    /** 换形后仅按已有队列重贴字，不追加队列 */
+    _reapplyBodyFromQueue() {
+      const q = this.bodyCharQueue;
+      if (!q || !q.length) return;
+      const pool = this.glyphs
+        .map((g, i) => ({ g, i }))
+        .filter((x) => !x.g.faceRole)
+        .sort((a, b) => b.g.edge - a.g.edge);
+      const nQ = q.length;
+      const nP = pool.length;
+      if (!nP) return;
+      const take = Math.min(nP, Math.max(nQ, Math.floor(nP * 0.55)));
+      for (let j = 0; j < take; j++) {
+        pool[j].g.char = q[j % nQ];
       }
     }
 

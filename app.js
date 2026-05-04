@@ -21,8 +21,10 @@
   }
 
   const pet = new Pet(canvas, {
-    particleCount: 150,
-    onFormChange() {},
+    particleCount: 220,
+    onFormChange(key) {
+      if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
+    },
   });
   window._pet = pet; // 便于调试
 
@@ -415,6 +417,6 @@
 
   // ---------- 说明 ----------
   document.getElementById("infoBtn").addEventListener("click", () => {
-    toast("拖移 · 戳身边 · 双击觅食 · 再点觅食可停止 · ?form=blob 调试换形");
+    toast("拖移 · 戳身边 · 双击觅食 · 躯体可多次写入累加 · ?form=clock / emoji_face_a / digit_0 / dragon");
   });
 })();
