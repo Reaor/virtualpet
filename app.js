@@ -20,21 +20,28 @@
     buildStamp.textContent = "build " + buildMeta.content;
   }
 
-  const pet = new Pet(canvas, { particleCount: 150 });
+  let formIdx = 0;
+  const pet = new Pet(canvas, {
+    particleCount: 150,
+    onFormChange(key) {
+      const i = FORM_ORDER.indexOf(key);
+      formIdx = i >= 0 ? i : 0;
+    },
+  });
   window._pet = pet; // 便于调试
 
-  let formIdx = 0;
   function setForm(key, announce = true) {
     pet.setForm(key);
+    formIdx = FORM_ORDER.indexOf(key);
+    if (formIdx < 0) formIdx = 0;
     formLabel.textContent = FORMS[key].label;
-    if (announce) toast("化形 · " + FORMS[key].label);
+    if (announce) toast("换形 · " + FORMS[key].label);
   }
   // 支持 URL ?form=cat 直接显示某形态（用于预览/调试）
   const initialForm = new URL(location.href).searchParams.get("form");
   document.title = "字灵 · " + (initialForm || "blob");
   if (initialForm && FORMS[initialForm]) {
     setForm(initialForm, false);
-    formIdx = FORM_ORDER.indexOf(initialForm);
   } else {
     setForm("blob", false);
   }
@@ -84,9 +91,7 @@
     if (pet.dragging) pet.endDrag();
 
     if (!moved && dt < 260) {
-      // 单击：判断双击
       if (now - lastTap < 320) {
-        // 双击：进入/退出觅食
         triggerFeeding();
         lastTap = 0;
       } else {
@@ -97,12 +102,20 @@
     moved = false;
   }
 
+  function onCancel(e) {
+    if (pet.dragging) pet.endDrag();
+    downPos = null;
+    moved = false;
+  }
+
   stage.addEventListener("touchstart", onDown, { passive: false });
   stage.addEventListener("touchmove", onMove, { passive: false });
   stage.addEventListener("touchend", onUp, { passive: false });
+  stage.addEventListener("touchcancel", onCancel, { passive: false });
   stage.addEventListener("mousedown", onDown);
   window.addEventListener("mousemove", onMove);
   window.addEventListener("mouseup", onUp);
+  window.addEventListener("blur", onCancel);
 
   // ---------- 隐藏提示 ----------
   let hintHidden = false;
@@ -127,6 +140,7 @@
     btn.addEventListener("click", () => {
       const action = btn.dataset.action;
       if (action === "morph") {
+        pet.abortFeeding();
         formIdx = (formIdx + 1) % FORM_ORDER.length;
         const key = FORM_ORDER[formIdx];
         setForm(key);
@@ -173,6 +187,7 @@
           const span = document.createElement("span");
           span.className = "glyph";
           span.textContent = ch;
+          span.dataset.orig = ch;
           frag.appendChild(span);
           feedableNodes.push(span);
         }
@@ -212,9 +227,12 @@
   // （注意：字灵活动范围在画布内，所以觅食的可视路径也在画布内；
   //  我们另外把下方面板上的真字在 pet 回到 idle 后依次"吸"进来作为收尾）
   function triggerFeeding() {
-    if (pet.mode === "feeding") return;
+    if (pet.mode === "feeding") {
+      pet.abortFeeding();
+      toast("已停止觅食");
+      return;
+    }
 
-    // 生成 6-8 个蜿蜒路径点，在画布内形成一条 S 形路线
     const W = canvas.clientWidth;
     const H = canvas.clientHeight;
     const count = 7;
@@ -243,14 +261,13 @@
         pet.pulse(reached.x, reached.y);
       },
       () => {
-        // 回 idle 后，从下方面板上真的"吃"几个字过来
-        eatSomeFromPanel(3 + Math.floor(Math.random() * 3));
-        toast("收获 · 字池 +" + (3 + Math.floor(Math.random() * 3)));
-        // 清理未吃完的诱饵
+        const ateCount = eatSomeFromPanel(3 + Math.floor(Math.random() * 3));
+        if (ateCount > 0) toast("觅食结束 · 字池 +" + ateCount);
+        else toast("觅食结束");
         bait.forEach((b) => b.el.remove());
       }
     );
-    toast("觅食 · 栅格巡游");
+    toast("觅食中 · 沿路径巡游");
   }
 
   function spawnBaits(path) {
@@ -267,10 +284,10 @@
         left:${p.x}px;
         top:${p.y}px;
         transform: translate(-50%, -50%);
-        font-family: var(--font-serif);
+        font-family: ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
         font-size: ${14 + Math.random() * 6}px;
-        color: rgba(200, 220, 255, 0.45);
-        text-shadow: 0 0 12px rgba(140, 180, 255, 0.35);
+        color: rgba(0, 122, 255, 0.35);
+        text-shadow: none;
         pointer-events: none;
         z-index: 3;
         transition: opacity 0.4s ease, transform 0.4s ease;
@@ -296,13 +313,26 @@
     return best;
   }
 
+  function resetFeedableGlyphs() {
+    for (const el of feedableNodes) {
+      if (el.dataset.orig) el.textContent = el.dataset.orig;
+      el.classList.remove("eaten");
+    }
+  }
+
   function eatSomeFromPanel(n) {
     const available = feedableNodes.filter((el) => !el.classList.contains("eaten"));
-    shuffle(available);
-    const picked = available.slice(0, n);
+    if (!available.length) {
+      resetFeedableGlyphs();
+    }
+    const pool = feedableNodes.filter((el) => !el.classList.contains("eaten"));
+    shuffle(pool);
+    const picked = pool.slice(0, n);
+    const ateCount = picked.length;
     picked.forEach((el, i) => {
       setTimeout(() => eatGlyphElement(el), i * 180);
     });
+    return ateCount;
   }
 
   function shuffle(arr) {
@@ -378,6 +408,6 @@
 
   // ---------- 说明 ----------
   document.getElementById("infoBtn").addEventListener("click", () => {
-    toast("拖 · 戳身边 · 双击觅食 · Ctrl+Enter 解析 AI 区");
+    toast("拖移 · 戳身边 · 双击觅食 · 再点觅食可停止 · ?form=blob 调试换形");
   });
 })();

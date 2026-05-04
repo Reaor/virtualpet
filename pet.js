@@ -641,7 +641,10 @@
       /** 换形后短促「落格」：弹簧略紧，字像落到格点上 */
       this._layoutSettle = 0;
 
-      this._resize = this._resize.bind(this);
+      /** 浅色画布（与 App 式浅 UI 搭配） */
+      this.lightCanvas = opts.lightCanvas !== false;
+
+      this.onFormChange = typeof opts.onFormChange === "function" ? opts.onFormChange : null;
       this._resize();
       window.addEventListener("resize", this._resize);
 
@@ -755,6 +758,11 @@
           g.vx = 0;
           g.vy = 0;
         }
+      }
+      if (typeof this.onFormChange === "function") {
+        try {
+          this.onFormChange(this.form);
+        } catch (_) {}
       }
     }
 
@@ -1233,9 +1241,11 @@
 
     // 觅食路径：传入一组世界坐标目标点（按顺序访问），每到一个触发 callback
     startFeeding(targets, onReach, onDone) {
+      if (this.dragging) this.endDrag();
       this.mode = "feeding";
       this._formBeforeFeed = this.form && FORMS[this.form] ? this.form : "blob";
       this.feedQueue = targets.slice();
+      this.feedTargetWorld = null;
       this.onFeedReach = onReach;
       this.onFeedDone = onDone;
       this.setExpression("surprised");
@@ -1244,6 +1254,7 @@
     stopFeeding() {
       this.mode = "idle";
       this.feedQueue = [];
+      this.feedTargetWorld = null;
       const restore = this._formBeforeFeed && FORMS[this._formBeforeFeed] ? this._formBeforeFeed : "blob";
       this._formBeforeFeed = null;
       this.setForm(restore);
@@ -1253,8 +1264,23 @@
       }, 1200);
     }
 
+    /** 中断觅食（不触发 onFeedDone），用于再次点击或调试 */
+    abortFeeding() {
+      if (this.mode !== "feeding") return;
+      this.feedQueue = [];
+      this.feedTargetWorld = null;
+      this.onFeedReach = null;
+      this.onFeedDone = null;
+      this.mode = "idle";
+      const restore = this._formBeforeFeed && FORMS[this._formBeforeFeed] ? this._formBeforeFeed : "blob";
+      this._formBeforeFeed = null;
+      this.setForm(restore);
+      this.setExpression("normal");
+    }
+
     sleep(on) {
       if (on) {
+        if (this.mode === "feeding") this.abortFeeding();
         this.mode = "sleep";
         this.setExpression("sleep");
       } else {
@@ -1264,6 +1290,7 @@
     }
 
     shake() {
+      if (this.mode === "feeding") this.abortFeeding();
       this._rumbleAmp = Math.min(0.55, (this._rumbleAmp || 0) + 0.45);
       this._glyphFlash = Math.min(0.55, (this._glyphFlash || 0) + 0.42);
       this.setExpression("surprised");
@@ -1303,8 +1330,33 @@
       const t = now / 1000;
       this.breath = Math.sin(t * 1.3) * 0.06 + 1;
 
-      // 自由漂移 —— 非拖拽且非觅食时
-      if (!this.dragging) {
+      // 觅食路径必须与拖拽解耦：否则手指在画布外松开时 dragging 一直为 true，会永久卡住
+      if (this.mode === "feeding") {
+        if (this.feedTargetWorld) {
+          this.anchor.x = this.feedTargetWorld.x;
+          this.anchor.y = this.feedTargetWorld.y;
+        } else if (this.feedQueue.length) {
+          this.feedTargetWorld = this.feedQueue.shift();
+        } else {
+          this.feedTargetWorld = null;
+          const doneCb = this.onFeedDone;
+          this.onFeedDone = null;
+          this.onFeedReach = null;
+          this.stopFeeding();
+          if (doneCb) doneCb();
+        }
+
+        if (this.feedTargetWorld) {
+          const dx = this.feedTargetWorld.x - this.pos.x;
+          const dy = this.feedTargetWorld.y - this.pos.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < 26) {
+            const reached = this.feedTargetWorld;
+            this.feedTargetWorld = null;
+            if (this.onFeedReach) this.onFeedReach(reached);
+          }
+        }
+      } else if (!this.dragging) {
         if (this.mode === "idle") {
           this.idleAngle += dt * 0.35;
           const ax =
@@ -1320,33 +1372,6 @@
         } else if (this.mode === "sleep") {
           this.anchor.x = lerp(this.anchor.x, this.center.x, 0.05);
           this.anchor.y = lerp(this.anchor.y, this.center.y + this.height * 0.05, 0.05);
-        } else if (this.mode === "feeding") {
-          if (this.feedTargetWorld) {
-            this.anchor.x = this.feedTargetWorld.x;
-            this.anchor.y = this.feedTargetWorld.y;
-          } else if (this.feedQueue.length) {
-            this.feedTargetWorld = this.feedQueue.shift();
-          } else {
-            // 完成，回家
-            this.feedTargetWorld = null;
-            const doneCb = this.onFeedDone;
-            this.onFeedDone = null;
-            this.onFeedReach = null;
-            this.stopFeeding();
-            if (doneCb) doneCb();
-          }
-
-          if (this.feedTargetWorld) {
-            const dx = this.feedTargetWorld.x - this.pos.x;
-            const dy = this.feedTargetWorld.y - this.pos.y;
-            const dist = Math.hypot(dx, dy);
-            if (dist < 26) {
-              // 到达：触发回调，继续下一个
-              const reached = this.feedTargetWorld;
-              this.feedTargetWorld = null;
-              if (this.onFeedReach) this.onFeedReach(reached);
-            }
-          }
         }
       }
 
@@ -1601,29 +1626,53 @@
       const t = now / 1000;
       ctx.clearRect(0, 0, W, H);
 
-      // 底：偏数码夜空的柔渐变（非宣纸）
-      const sky = ctx.createLinearGradient(0, 0, W, H);
-      sky.addColorStop(0, "#0f1220");
-      sky.addColorStop(0.45, "#15182e");
-      sky.addColorStop(1, "#1a1030");
-      ctx.fillStyle = sky;
-      ctx.fillRect(0, 0, W, H);
+      const light = this.lightCanvas;
+      if (light) {
+        const sky = ctx.createLinearGradient(0, 0, W, H);
+        sky.addColorStop(0, "#f2f2f7");
+        sky.addColorStop(0.5, "#fafafa");
+        sky.addColorStop(1, "#ebebf0");
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, W, H);
+        ctx.save();
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.04)";
+        ctx.lineWidth = 1;
+        const gstep = 32;
+        for (let x = 0; x <= W; x += gstep) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, H);
+          ctx.stroke();
+        }
+        for (let y = 0; y <= H; y += gstep) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(W, y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      } else {
+        const sky = ctx.createLinearGradient(0, 0, W, H);
+        sky.addColorStop(0, "#0f1220");
+        sky.addColorStop(0.45, "#15182e");
+        sky.addColorStop(1, "#1a1030");
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, W, H);
 
-      // 极淡的斜向栅格（伪 UI 感）
-      ctx.save();
-      ctx.strokeStyle = "rgba(160, 190, 255, 0.04)";
-      ctx.lineWidth = 1;
-      const step = 28;
-      const off = (t * 12) % step;
-      for (let x = -H; x < W + H; x += step) {
-        ctx.beginPath();
-        ctx.moveTo(x + off, 0);
-        ctx.lineTo(x + off - H * 0.6, H);
-        ctx.stroke();
+        ctx.save();
+        ctx.strokeStyle = "rgba(160, 190, 255, 0.04)";
+        ctx.lineWidth = 1;
+        const step = 28;
+        const off = (t * 12) % step;
+        for (let x = -H; x < W + H; x += step) {
+          ctx.beginPath();
+          ctx.moveTo(x + off, 0);
+          ctx.lineTo(x + off - H * 0.6, H);
+          ctx.stroke();
+        }
+        ctx.restore();
       }
-      ctx.restore();
 
-      // 身体下的柔光晕
       const shadowR = this.size * 0.28;
       const grd = ctx.createRadialGradient(
         this.pos.x,
@@ -1633,17 +1682,24 @@
         this.pos.y + 4,
         shadowR
       );
-      grd.addColorStop(0, "rgba(120, 100, 255, 0.14)");
-      grd.addColorStop(0.55, "rgba(80, 140, 220, 0.06)");
-      grd.addColorStop(1, "rgba(0, 0, 0, 0)");
+      if (light) {
+        grd.addColorStop(0, "rgba(0, 122, 255, 0.06)");
+        grd.addColorStop(0.5, "rgba(0, 0, 0, 0.02)");
+        grd.addColorStop(1, "rgba(0, 0, 0, 0)");
+      } else {
+        grd.addColorStop(0, "rgba(120, 100, 255, 0.14)");
+        grd.addColorStop(0.55, "rgba(80, 140, 220, 0.06)");
+        grd.addColorStop(1, "rgba(0, 0, 0, 0)");
+      }
       ctx.fillStyle = grd;
       ctx.fillRect(0, 0, W, H);
 
-      // 涟漪
       ctx.save();
       ctx.lineWidth = 1.2;
       for (const r of this.ripples) {
-        ctx.strokeStyle = `rgba(180, 210, 255, ${r.alpha * 0.45})`;
+        ctx.strokeStyle = light
+          ? `rgba(0, 122, 255, ${r.alpha * 0.35})`
+          : `rgba(180, 210, 255, ${r.alpha * 0.45})`;
         ctx.beginPath();
         ctx.arc(r.x, r.y, r.r, 0, TAU);
         ctx.stroke();
@@ -1690,10 +1746,17 @@
             ctx.fillStyle = c;
           }
         } else {
-          const inkR = Math.round(lerp(240, 110, edge));
-          const inkG = Math.round(lerp(248, 160, edge));
-          const inkB = Math.round(lerp(255, 210, edge));
-          ctx.fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
+          if (light) {
+            const inkR = Math.round(lerp(28, 100, edge));
+            const inkG = Math.round(lerp(28, 110, edge));
+            const inkB = Math.round(lerp(34, 120, edge));
+            ctx.fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
+          } else {
+            const inkR = Math.round(lerp(240, 110, edge));
+            const inkG = Math.round(lerp(248, 160, edge));
+            const inkB = Math.round(lerp(255, 210, edge));
+            ctx.fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
+          }
         }
         ctx.save();
         ctx.translate(rx, ry);
@@ -1720,8 +1783,10 @@
           if (!g || g.faceRole) continue;
           drawGlyph(g, {
             sizeMul: 1.12,
-            color: `rgba(255, 160, 190, ${0.72 * g.alpha})`,
-            shadow: "rgba(255, 120, 180, 0.35)",
+            color: light
+              ? `rgba(0, 122, 255, ${0.55 * g.alpha})`
+              : `rgba(255, 160, 190, ${0.72 * g.alpha})`,
+            shadow: light ? "rgba(0, 122, 255, 0.2)" : "rgba(255, 120, 180, 0.35)",
             shadowBlur: 8,
             flashWeight: 0.4,
           });
@@ -1730,14 +1795,14 @@
 
       // 眉眼字层（表情由字符与微位移承担）
       const expr = EXPRESSIONS[this.expression] || EXPRESSIONS.normal;
-      const eyeHex = expr.color || "#e8f0ff";
+      const eyeHex = light ? expr.color || "#1c1c1e" : expr.color || "#e8f0ff";
       for (const g of this.glyphs) {
         if (!g.faceRole) continue;
         const mul = g.faceRole === "brow" ? 0.92 : 1.18;
         drawGlyph(g, {
           sizeMul: mul,
           color: eyeHex,
-          shadow: "rgba(100, 160, 255, 0.45)",
+          shadow: light ? "rgba(0, 0, 0, 0.12)" : "rgba(100, 160, 255, 0.45)",
           shadowBlur: 10,
           flashWeight: 0.22,
         });
@@ -1747,8 +1812,13 @@
       for (const f of this.flyingGlyphs) {
         const a = clamp(1 - f.t / (f.life + 0.1), 0, 1);
         ctx.font = `${f.size.toFixed(1)}px "LXGW WenKai", serif`;
-        ctx.fillStyle = `rgba(255, 180, 220, ${a * 0.9})`;
-        ctx.shadowColor = "rgba(255, 140, 200, 0.4)";
+        if (light) {
+          ctx.fillStyle = `rgba(0, 122, 255, ${a * 0.85})`;
+          ctx.shadowColor = "rgba(0, 122, 255, 0.25)";
+        } else {
+          ctx.fillStyle = `rgba(255, 180, 220, ${a * 0.9})`;
+          ctx.shadowColor = "rgba(255, 140, 200, 0.4)";
+        }
         ctx.shadowBlur = 8;
         const fx = this.gridUnity ? Math.round(f.x) : f.x;
         const fy = this.gridUnity ? Math.round(f.y) : f.y;
