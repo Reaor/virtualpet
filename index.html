@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#efe6d2" />
+  <meta name="theme-color" content="#121528" />
   <title>字灵 · Zì Líng</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
@@ -28,7 +28,7 @@
 
       <div class="form-label" id="formLabel">软团</div>
 
-      <div class="hint" id="hint">戳一戳 · 拖一拖 · 双击让它觅食</div>
+      <div class="hint" id="hint">拖一拖 · 戳身边多戳会闹 · 双击觅食</div>
     </section>
 
     <nav class="toolbar" role="toolbar" aria-label="互动">
@@ -49,6 +49,18 @@
         <span class="tool-label">抖擞</span>
       </button>
     </nav>
+
+    <section class="import-row" aria-label="躯体字导入">
+      <input
+        type="text"
+        id="bodyImport"
+        class="import-input"
+        maxlength="24"
+        placeholder="贴到躯体上的字（如日程标题）"
+        autocomplete="off"
+      />
+      <button type="button" class="import-btn" id="bodyImportBtn">写入</button>
+    </section>
 
     <section class="feed-panel" aria-label="可被吞食的诗笺">
       <div class="panel-title">
@@ -82,7 +94,7 @@
       </article>
 
       <div class="panel-footnote">
-        点击诗笺中的任意字可喂给字灵 · 双击字灵可让它自行觅食
+        点击诗笺中的任意字可喂给字灵 · 双击字灵可让它自行觅食 · 上方输入可贴字到躯体（为日后日程预留）
       </div>
     </section>
 

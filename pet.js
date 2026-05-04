@@ -14,6 +14,17 @@
   const DEFAULT_POOL =
     "云月风雨雪露霜霞星辰烟岚山川溪涧花草木叶竹梅兰菊兽羽灵喵呜呀兮曦墨砚诗书笔宣素笺~·°✦".split("");
 
+  /** 情绪词：会短暂替换部分躯体内的字，与表情同步 */
+  const MOOD_POOLS = {
+    normal: "静安守默观息",
+    happy: "悦朗笑暖晴",
+    annoyed: "躁烦扰急",
+    sleep: "眠梦幽沉",
+    wink: "俏灵闪",
+    shy: "羞敛藏",
+    surprised: "讶愕醒",
+  };
+
   // ---------- 工具 ---------- //
   const TAU = Math.PI * 2;
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -261,6 +272,8 @@
         const head = outline[outline.length - 1];
         return {
           targets,
+          /** 静态基准，供每帧叠加游动相位 */
+          snakeBase: targets.map((p) => ({ x: p.x, y: p.y })),
           eyes: [
             { x: head.x - S * 0.015, y: head.y - S * 0.02 },
             { x: head.x + S * 0.015, y: head.y - S * 0.02 },
@@ -268,6 +281,99 @@
           eyeSize: 1.3,
           // 蛇形：目标点是"按顺序排列"的，这样粒子会形成有顺序的链
           ordered: true,
+        };
+      },
+    },
+
+    /** 云团：比软团更有体积层次 */
+    cloud: {
+      label: "云",
+      build(n, S) {
+        const targets = sampleSilhouette((ctx, s) => {
+          ctx.fillStyle = "#000";
+          const cx = s / 2;
+          const cy = s / 2;
+          for (let k = 0; k < 5; k++) {
+            const ox = (Math.sin(k * 1.7) * 0.22 + (k - 2) * 0.08) * s;
+            const oy = (Math.cos(k * 1.3) * 0.08) * s;
+            ctx.beginPath();
+            ctx.ellipse(cx + ox, cy + oy, s * (0.22 + k * 0.02), s * (0.14 + k * 0.015), k * 0.15, 0, TAU);
+            ctx.fill();
+          }
+        }, S, n);
+        const R = S * 0.28;
+        return {
+          targets,
+          eyes: [
+            { x: -R * 0.15, y: -R * 0.12 },
+            { x: R * 0.15, y: -R * 0.12 },
+          ],
+          eyeSize: 1.35,
+        };
+      },
+    },
+
+    /** 鹤：剪影 + 颈弧线 */
+    crane: {
+      label: "鹤",
+      build(n, S) {
+        const targets = sampleSilhouette((ctx, s) => {
+          ctx.fillStyle = "#000";
+          const cx = s / 2;
+          const cy = s / 2 + s * 0.06;
+          // 身
+          ctx.beginPath();
+          ctx.ellipse(cx + s * 0.08, cy, s * 0.18, s * 0.1, -0.25, 0, TAU);
+          ctx.fill();
+          // 颈与头
+          ctx.beginPath();
+          ctx.moveTo(cx - s * 0.02, cy - s * 0.02);
+          ctx.quadraticCurveTo(cx - s * 0.06, cy - s * 0.28, cx - s * 0.02, cy - s * 0.42);
+          ctx.quadraticCurveTo(cx + s * 0.04, cy - s * 0.38, cx + s * 0.02, cy - s * 0.22);
+          ctx.quadraticCurveTo(cx + s * 0.02, cy - s * 0.08, cx + s * 0.06, cy);
+          ctx.closePath();
+          ctx.fill();
+          // 翅
+          ctx.beginPath();
+          ctx.moveTo(cx + s * 0.02, cy - s * 0.04);
+          ctx.quadraticCurveTo(cx + s * 0.32, cy - s * 0.18, cx + s * 0.28, cy + s * 0.06);
+          ctx.lineTo(cx + s * 0.06, cy + s * 0.04);
+          ctx.closePath();
+          ctx.fill();
+        }, S, n);
+        const R = S * 0.22;
+        return {
+          targets,
+          eyes: [
+            { x: -R * 0.35, y: -R * 0.85 },
+            { x: -R * 0.22, y: -R * 0.82 },
+          ],
+          eyeSize: 1.25,
+        };
+      },
+    },
+
+    /** 星芒：几何放射，偏装饰性 */
+    star: {
+      label: "星",
+      build(n, S) {
+        const outline = [];
+        const rays = 5;
+        for (let r = 0; r < rays; r++) {
+          const a = (r / rays) * TAU - Math.PI / 2;
+          for (let t = 0; t < 1; t += 0.06) {
+            const br = t * S * 0.38;
+            outline.push({ x: Math.cos(a) * br, y: Math.sin(a) * br });
+          }
+        }
+        const targets = fillFromOutline(outline, n, S * 0.04);
+        return {
+          targets,
+          eyes: [
+            { x: -S * 0.02, y: -S * 0.06 },
+            { x: S * 0.02, y: -S * 0.06 },
+          ],
+          eyeSize: 1.2,
         };
       },
     },
@@ -409,25 +515,30 @@
 
   const FORM_ORDER = [
     "blob",
+    "cloud",
     "cat",
     "fox",
     "rabbit",
+    "crane",
     "koi",
     "butterfly",
     "flower",
     "heart",
     "moon",
+    "star",
     "dragon",
+    "snake",
   ];
 
-  // ---------- 表情 ---------- //
+  // ---------- 表情（眼区由躯体内的「字层」呈现；此处供旧逻辑/色值参考） ---------- //
   const EXPRESSIONS = {
-    normal: { left: "◉", right: "◉", color: "#1d1a15" },
-    happy: { left: "^", right: "^", color: "#7d2c21" },
-    wink: { left: "^", right: "◉", color: "#1d1a15" },
-    sleep: { left: "ー", right: "ー", color: "#6f6555" },
-    shy: { left: ">", right: "<", color: "#9c3a2d" },
-    surprised: { left: "O", right: "O", color: "#1d1a15" },
+    normal: { color: "#1d1a15", eyeLeft: "·", eyeRight: "·", brow: "一" },
+    happy: { color: "#7d2c21", eyeLeft: "⌒", eyeRight: "⌒", brow: "︶" },
+    wink: { color: "#1d1a15", eyeLeft: "～", eyeRight: "·", brow: "一" },
+    sleep: { color: "#6f6555", eyeLeft: "一", eyeRight: "一", brow: "～" },
+    shy: { color: "#9c3a2d", eyeLeft: "﹀", eyeRight: "﹀", brow: "﹏" },
+    surprised: { color: "#1d1a15", eyeLeft: "○", eyeRight: "○", brow: "！" },
+    annoyed: { color: "#8b2a22", eyeLeft: "×", eyeRight: "×", brow: "﹏" },
   };
 
   // ---------- Pet 主类 ---------- //
@@ -451,10 +562,15 @@
         { x: 0, y: 0, tx: 0, ty: 0, size: 22, char: "◉" },
       ];
       this.expression = "normal";
+      /** 五官由字粒子承担，不再画 canvas 墨点眼 */
+      this.faceLayerMode = opts.faceLayerMode !== false;
 
       this.form = "blob";
       this.formData = null;
       this.formStartTime = 0;
+      /** 连续戳点累积，高时躯体躁动、表情烦躁 */
+      this.annoyance = 0;
+      this._savedFormBeforeAnnoyed = null;
 
       // 宠物整体位置（世界坐标），正常时漂浮在画布中心附近
       this.pos = { x: 0, y: 0 };
@@ -486,6 +602,11 @@
       this.feedQueue = [];
       this.feedTargetWorld = null;
       this.onFeedDone = null;
+      this._formBeforeFeed = null;
+
+      /** 情绪字：部分粒子临时显示 MOOD_POOLS 中的字 */
+      this._moodSwap = []; // { i, saved }
+      this._moodUntil = 0;
 
       this._resize = this._resize.bind(this);
       this._resize();
@@ -535,6 +656,8 @@
           vy: 0,
           tx: 0,
           ty: 0,
+          baseTx: 0,
+          baseTy: 0,
           size: rand(10, 18),
           alpha: rand(0.65, 1),
           rot: rand(-0.3, 0.3),
@@ -542,6 +665,8 @@
           // 外圈字略模糊：给粒子一个"深度"参数
           depth: Math.random(),
           edge: 0.5,
+          /** 字层：null | "eyeL" | "eyeR" | "brow" */
+          faceRole: null,
         });
       }
     }
@@ -571,22 +696,206 @@
         const t = order[i] || order[i % order.length];
         this.glyphs[i].tx = t.x;
         this.glyphs[i].ty = t.y;
+        this.glyphs[i].baseTx = t.x;
+        this.glyphs[i].baseTy = t.y;
         this.glyphs[i].targetRot = rand(-0.18, 0.18);
         // 边缘字更小更淡，中心字更大更实（水墨"浓淡干湿"）
         const d = Math.hypot(t.x - cx, t.y - cy) / maxD; // 0..1
         this.glyphs[i].edge = d;
+        this.glyphs[i].faceRole = null;
       }
       data.leftEyeSize = this.size * 0.05 * (data.eyeSize || 1.4);
       this.formData = data;
       this._cinnabarIdx = null; // 换形 → 重新挑朱砂字
+      if (this.faceLayerMode) this._assignFaceGlyphs();
+    }
+
+    /** 在距眼窝最近的粒子中指定「眉眼」字层 */
+    _assignFaceGlyphs() {
+      if (!this.formData || !this.formData.eyes || this.formData.eyes.length < 2) return;
+      const [eL, eR] = this.formData.eyes;
+      const dist = (g, ex, ey) => Math.hypot(g.tx - ex, g.ty - ey);
+      const pickNear = (ex, ey, exclude) => {
+        let best = -1;
+        let bestD = Infinity;
+        for (let k = 0; k < this.glyphs.length; k++) {
+          if (exclude.has(k)) continue;
+          const d = dist(this.glyphs[k], ex, ey);
+          if (d < bestD) {
+            bestD = d;
+            best = k;
+          }
+        }
+        return best;
+      };
+      const used = new Set();
+      const iL = pickNear(eL.x, eL.y, used);
+      if (iL >= 0) {
+        used.add(iL);
+        this.glyphs[iL].faceRole = "eyeL";
+      }
+      const iR = pickNear(eR.x, eR.y, used);
+      if (iR >= 0) {
+        used.add(iR);
+        this.glyphs[iR].faceRole = "eyeR";
+      }
+      const mx = (eL.x + eR.x) * 0.5;
+      const my = (eL.y + eR.y) * 0.5 - this.size * 0.035;
+      const iB = pickNear(mx, my, used);
+      if (iB >= 0) {
+        this.glyphs[iB].faceRole = "brow";
+      }
+    }
+
+    _faceGlyphLocalOffsets(tSec) {
+      const w = Math.sin(tSec * 6) * 0.003 * this.size * this.annoyance;
+      const blink = this.expression === "sleep" ? 1 : Math.sin(tSec * 2.1) > 0.92 ? 0.35 : 1;
+      const jitter = Math.sin(tSec * 11.7) * this.annoyance * this.size * 0.004;
+      return {
+        eyeL: { dx: -this.size * 0.012 + w + jitter, dy: -this.size * 0.008 * blink },
+        eyeR: { dx: this.size * 0.012 - w - jitter, dy: -this.size * 0.008 * blink },
+        brow: { dx: jitter * 0.5, dy: -this.size * 0.028 + Math.sin(tSec * 1.7) * this.size * 0.006 },
+      };
+    }
+
+    _syncFaceGlyphTargets(tSec) {
+      if (!this.faceLayerMode || !this.formData || !this.formData.eyes) return;
+      const expr = EXPRESSIONS[this.expression] || EXPRESSIONS.normal;
+      const off = this._faceGlyphLocalOffsets(tSec);
+      const eyes = this.formData.eyes;
+      for (const g of this.glyphs) {
+        if (!g.faceRole) continue;
+        let ex;
+        let ey;
+        let o;
+        if (g.faceRole === "eyeL") {
+          ex = eyes[0].x;
+          ey = eyes[0].y;
+          o = off.eyeL;
+          g.char = expr.eyeLeft || "·";
+        } else if (g.faceRole === "eyeR") {
+          ex = eyes[1].x;
+          ey = eyes[1].y;
+          o = off.eyeR;
+          g.char = expr.eyeRight || "·";
+        } else if (g.faceRole === "brow") {
+          ex = (eyes[0].x + eyes[1].x) * 0.5;
+          ey = (eyes[0].y + eyes[1].y) * 0.5 - this.size * 0.02;
+          o = off.brow;
+          g.char = expr.brow || "一";
+        } else continue;
+        g.baseTx = ex + o.dx;
+        g.baseTy = ey + o.dy;
+        g.tx = g.baseTx;
+        g.ty = g.baseTy;
+        g.targetRot = lerp(g.targetRot, Math.sin(tSec * 3 + g.depth * 5) * 0.12 * (0.2 + this.annoyance), 0.2);
+      }
+    }
+
+    /** 戳身：累积烦躁；过高时短暂换形并刷情绪字 */
+    nuisTap() {
+      this.annoyance = clamp(this.annoyance + 0.22, 0, 1.35);
+      if (this.mode === "idle" && !this.dragging) {
+        this.vel.x += rand(-120, 120);
+        this.vel.y += rand(-80, 80);
+      }
+      if (this.annoyance >= 0.95 && this.mode === "idle") {
+        if (!this._savedFormBeforeAnnoyed) this._savedFormBeforeAnnoyed = this.form;
+        this.setExpression("annoyed");
+        this._applyMoodChars("annoyed", 1.8);
+        const alt = ["cloud", "star", "heart", "butterfly"];
+        const pick = alt[Math.floor(Math.random() * alt.length)];
+        if (FORMS[pick]) this.setForm(pick, true);
+        this.annoyance = 0.45;
+        setTimeout(() => {
+          if (this.mode === "idle" && this._savedFormBeforeAnnoyed) {
+            this.setForm(this._savedFormBeforeAnnoyed, true);
+            this._savedFormBeforeAnnoyed = null;
+          }
+          this.setExpression("normal");
+        }, 2200);
+      } else if (this.annoyance >= 0.5) {
+        this.setExpression("annoyed");
+        this._applyMoodChars("annoyed", 1.2);
+      } else {
+        this.setExpression("surprised");
+        setTimeout(() => {
+          if (this.expression === "surprised") this.setExpression("normal");
+        }, 500);
+      }
+    }
+
+    _applyMoodChars(moodKey, durationSec) {
+      const pool = MOOD_POOLS[moodKey] || MOOD_POOLS.normal;
+      const chars = Array.from(pool);
+      if (!chars.length) return;
+      this._restoreMoodChars();
+      const n = Math.min(18, Math.floor(this.glyphs.length * (0.12 + this.annoyance * 0.08)));
+      const candidates = this.glyphs
+        .map((g, i) => ({ i, g }))
+        .filter((x) => !x.g.faceRole && x.g.edge > 0.25)
+        .sort(() => Math.random() - 0.5)
+        .slice(0, n);
+      this._moodSwap = candidates.map(({ i }) => {
+        const saved = this.glyphs[i].char;
+        this.glyphs[i].char = chars[Math.floor(Math.random() * chars.length)];
+        return { i, saved };
+      });
+      this._moodUntil = performance.now() / 1000 + durationSec;
+    }
+
+    _updateSnakeTargets(tSec) {
+      const d = this.formData;
+      if (this.form !== "snake" || !d || !d.snakeBase) return;
+      const S = this.size;
+      const n = this.glyphs.length;
+      const phase = tSec * 2.35 + this.pos.x * 0.0009 + this.vel.x * 0.00015;
+      const amp = S * (0.026 + 0.014 * Math.sin(tSec * 0.85));
+      for (let i = 0; i < n; i++) {
+        const base = d.snakeBase[i] || d.snakeBase[d.snakeBase.length - 1];
+        const u = i / Math.max(1, n - 1);
+        const w1 = Math.sin(u * Math.PI * 3 + phase);
+        const w2 = Math.sin(u * Math.PI * 5 + phase * 0.55) * 0.38;
+        const dx = Math.cos(u * Math.PI * 2 + phase * 0.42) * S * 0.016;
+        const dy = (w1 + w2) * amp;
+        const g = this.glyphs[i];
+        if (g.faceRole) continue;
+        g.baseTx = base.x + dx;
+        g.baseTy = base.y + dy;
+        g.tx = g.baseTx;
+        g.ty = g.baseTy;
+      }
+      const iHead = n - 1;
+      const hb = d.snakeBase[iHead];
+      const ug = iHead / Math.max(1, n - 1);
+      const w1h = Math.sin(ug * Math.PI * 3 + phase);
+      const w2h = Math.sin(ug * Math.PI * 5 + phase * 0.55) * 0.38;
+      const dxh = Math.cos(ug * Math.PI * 2 + phase * 0.42) * S * 0.016;
+      const dyh = (w1h + w2h) * amp;
+      const hx = hb.x + dxh;
+      const hy = hb.y + dyh;
+      d.eyes = [
+        { x: hx - S * 0.018, y: hy - S * 0.024 },
+        { x: hx + S * 0.018, y: hy - S * 0.02 },
+      ];
+    }
+
+    _restoreMoodChars() {
+      for (const m of this._moodSwap) {
+        if (this.glyphs[m.i]) this.glyphs[m.i].char = m.saved;
+      }
+      this._moodSwap = [];
     }
 
     _pickCinnabar() {
       // 挑 2~3 个距离身体中心较近、但不在眼睛位置的字
-      const items = this.glyphs.map((g, i) => ({
-        i,
-        d: Math.hypot(g.tx, g.ty),
-      }));
+      const items = this.glyphs
+        .map((g, i) => ({ i, g, d: Math.hypot(g.tx, g.ty) }))
+        .filter((x) => !x.g.faceRole);
+      if (items.length === 0) {
+        this._cinnabarIdx = [0, Math.min(1, this.glyphs.length - 1)].filter((i) => i >= 0);
+        return this._cinnabarIdx;
+      }
       items.sort((a, b) => a.d - b.d);
       // 避开质心正中（让朱砂分布不挤在一处）
       const picked = [];
@@ -609,7 +918,12 @@
     }
 
     setExpression(name) {
-      this.expression = EXPRESSIONS[name] ? name : "normal";
+      const next = EXPRESSIONS[name] ? name : "normal";
+      this.expression = next;
+      const t = performance.now() / 1000;
+      if (t >= this._moodUntil && (next === "happy" || next === "wink" || next === "shy")) {
+        this._applyMoodChars(next, 1.1);
+      }
     }
 
     addPoolChars(chars) {
@@ -624,6 +938,7 @@
         if (!indices.includes(i)) indices.push(i);
       }
       for (const i of indices) {
+        if (this.glyphs[i].faceRole) continue;
         this.glyphs[i].char = chars[Math.floor(Math.random() * chars.length)] || this.glyphs[i].char;
       }
     }
@@ -650,6 +965,7 @@
     // 觅食路径：传入一组世界坐标目标点（按顺序访问），每到一个触发 callback
     startFeeding(targets, onReach, onDone) {
       this.mode = "feeding";
+      this._formBeforeFeed = this.form === "snake" ? "blob" : this.form;
       this.feedQueue = targets.slice();
       this.onFeedReach = onReach;
       this.onFeedDone = onDone;
@@ -660,7 +976,9 @@
     stopFeeding() {
       this.mode = "idle";
       this.feedQueue = [];
-      this.setForm("blob");
+      const restore = this._formBeforeFeed && FORMS[this._formBeforeFeed] ? this._formBeforeFeed : "blob";
+      this._formBeforeFeed = null;
+      this.setForm(restore);
       this.setExpression("happy");
       setTimeout(() => {
         if (this.mode === "idle") this.setExpression("normal");
@@ -792,6 +1110,12 @@
       this.rotation = lerp(this.rotation, this.targetRotation, 0.1);
       this.scale = lerp(this.scale, this.targetScale * this.breath, 0.15);
 
+      this.annoyance = Math.max(0, this.annoyance - 0.22 * dt);
+      if (t >= this._moodUntil && this._moodSwap.length) this._restoreMoodChars();
+
+      if (this.form === "snake") this._updateSnakeTargets(t);
+      if (this.faceLayerMode) this._syncFaceGlyphTargets(t);
+
       // 每个字粒子：向 (宠物位置 + 目标相对偏移) 做弹簧运动
       const bx = this.pos.x;
       const by = this.pos.y;
@@ -802,18 +1126,21 @@
       const springK = this.mode === "feeding" ? 60 : 28;
       const damping = this.mode === "feeding" ? 7 : 5.2;
 
-      // 眼睛位置（世界坐标），用来给粒子让出空间
-      const eyeWorld = this.formData
-        ? this.formData.eyes.map((e) => {
-            const tx = e.x * flip;
-            const ty = e.y;
-            return {
-              x: bx + (tx * cos - ty * sin),
-              y: by + (tx * sin + ty * cos),
-            };
-          })
-        : null;
       const eyeClearR = this.size * 0.08;
+      const useEyeClear = !this.faceLayerMode;
+
+      // 眼睛位置（世界坐标）：字脸模式下不再推开周围字，避免与眉眼粒子冲突
+      const eyeWorld =
+        useEyeClear && this.formData
+          ? this.formData.eyes.map((e) => {
+              const tx = e.x * flip;
+              const ty = e.y;
+              return {
+                x: bx + (tx * cos - ty * sin),
+                y: by + (tx * sin + ty * cos),
+              };
+            })
+          : null;
 
       for (const g of this.glyphs) {
         // 目标点做旋转+翻转后平移到世界坐标
@@ -846,7 +1173,7 @@
         g.rot = lerp(g.rot, g.targetRot, 0.08);
       }
 
-      // 眼睛跟形态
+      // 眼睛跟形态（保留坐标供调试；字脸模式不在画布上绘制眼）
       if (this.formData) {
         for (let i = 0; i < 2; i++) {
           const e = this.formData.eyes[i];
@@ -882,9 +1209,12 @@
       // 合并吸入
       this.flyingGlyphs = this.flyingGlyphs.filter((f) => {
         if (Math.hypot(f.x - this.pos.x, f.y - this.pos.y) < 18) {
-          // 随机替换一个粒子
-          const g = this.glyphs[Math.floor(Math.random() * this.glyphs.length)];
-          g.char = f.char;
+          let g = this.glyphs[Math.floor(Math.random() * this.glyphs.length)];
+          let tries = 0;
+          while (g.faceRole && tries++ < 12) {
+            g = this.glyphs[Math.floor(Math.random() * this.glyphs.length)];
+          }
+          if (!g.faceRole) g.char = f.char;
           // 触发一个小涟漪
           this.pulse(this.pos.x, this.pos.y);
           return false;
@@ -897,180 +1227,178 @@
       const ctx = this.ctx;
       const W = this.width;
       const H = this.height;
+      const t = now / 1000;
       ctx.clearRect(0, 0, W, H);
 
-      // 背景墨晕（身体阴影）
-      const shadowR = this.size * 0.24;
+      // 底：偏数码夜空的柔渐变（非宣纸）
+      const sky = ctx.createLinearGradient(0, 0, W, H);
+      sky.addColorStop(0, "#0f1220");
+      sky.addColorStop(0.45, "#15182e");
+      sky.addColorStop(1, "#1a1030");
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, W, H);
+
+      // 极淡的斜向栅格（伪 UI 感）
+      ctx.save();
+      ctx.strokeStyle = "rgba(160, 190, 255, 0.04)";
+      ctx.lineWidth = 1;
+      const step = 28;
+      const off = (t * 12) % step;
+      for (let x = -H; x < W + H; x += step) {
+        ctx.beginPath();
+        ctx.moveTo(x + off, 0);
+        ctx.lineTo(x + off - H * 0.6, H);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // 身体下的柔光晕
+      const shadowR = this.size * 0.28;
       const grd = ctx.createRadialGradient(
         this.pos.x,
-        this.pos.y + 2,
-        shadowR * 0.1,
+        this.pos.y + 4,
+        shadowR * 0.08,
         this.pos.x,
-        this.pos.y + 2,
+        this.pos.y + 4,
         shadowR
       );
-      grd.addColorStop(0, "rgba(40, 28, 14, 0.22)");
-      grd.addColorStop(0.6, "rgba(40, 28, 14, 0.06)");
-      grd.addColorStop(1, "rgba(40, 28, 14, 0)");
+      grd.addColorStop(0, "rgba(120, 100, 255, 0.14)");
+      grd.addColorStop(0.55, "rgba(80, 140, 220, 0.06)");
+      grd.addColorStop(1, "rgba(0, 0, 0, 0)");
       ctx.fillStyle = grd;
       ctx.fillRect(0, 0, W, H);
 
       // 涟漪
       ctx.save();
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.2;
       for (const r of this.ripples) {
-        ctx.strokeStyle = `rgba(124, 40, 30, ${r.alpha * 0.5})`;
+        ctx.strokeStyle = `rgba(180, 210, 255, ${r.alpha * 0.45})`;
         ctx.beginPath();
         ctx.arc(r.x, r.y, r.r, 0, TAU);
         ctx.stroke();
       }
       ctx.restore();
 
-      // 字粒子
       ctx.save();
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
 
-      // —— 第一遍：晕染层（大而极淡，mix blend multiply 让纸本吃墨）——
+      const drawGlyph = (g, opts) => {
+        const edge = g.edge;
+        const roleMul =
+          g.faceRole === "brow"
+            ? lerp(1.05, 0.78, edge)
+            : g.faceRole
+              ? lerp(1.12, 0.88, edge)
+              : lerp(1.28, 0.72, edge);
+        const baseSize = g.size * this.scale * (opts.sizeMul || 1);
+        const size = baseSize * roleMul;
+        const alpha =
+          (opts.alphaMul != null ? opts.alphaMul : 1) * lerp(0.94, 0.42, edge) * g.alpha;
+        ctx.font = `${size.toFixed(1)}px "LXGW WenKai", serif`;
+        if (opts.color) {
+          const c = opts.color;
+          if (c.startsWith("#") && (c.length === 7 || c.length === 9)) {
+            const r = parseInt(c.slice(1, 3), 16);
+            const gg = parseInt(c.slice(3, 5), 16);
+            const b = parseInt(c.slice(5, 7), 16);
+            ctx.fillStyle = `rgba(${r},${gg},${b},${alpha})`;
+          } else {
+            ctx.fillStyle = c;
+          }
+        } else {
+          const inkR = Math.round(lerp(240, 110, edge));
+          const inkG = Math.round(lerp(248, 160, edge));
+          const inkB = Math.round(lerp(255, 210, edge));
+          ctx.fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
+        }
+        ctx.save();
+        ctx.translate(g.x, g.y);
+        ctx.rotate(g.rot);
+        if (opts.shadow) {
+          ctx.shadowColor = opts.shadow;
+          ctx.shadowBlur = opts.shadowBlur || 6;
+        }
+        ctx.fillText(g.char, 0, 0);
+        ctx.restore();
+      };
+
+      // 体积光晕层（内层略亮）
       ctx.save();
-      ctx.globalCompositeOperation = "multiply";
+      ctx.globalCompositeOperation = "screen";
       for (const g of this.glyphs) {
-        // 只给靠中心的字加晕染（水墨中心重），且随机 70% 才画（稀疏感）
-        if (g.edge > 0.55) continue;
-        if ((g.depth * 7) % 1 > 0.7) continue;
-        const size = g.size * 1.9 * this.scale;
-        ctx.fillStyle = `rgba(50, 38, 22, ${0.07 * (1 - g.edge)})`;
+        if (g.faceRole) continue;
+        if (g.edge > 0.52) continue;
+        if ((g.depth * 6.3) % 1 > 0.72) continue;
+        const size = g.size * 2.1 * this.scale;
+        ctx.fillStyle = `rgba(200, 220, 255, ${0.045 * (1 - g.edge)})`;
         ctx.font = `${size.toFixed(1)}px "LXGW WenKai", serif`;
         ctx.save();
         ctx.translate(g.x, g.y);
-        ctx.rotate(g.rot * 0.3);
+        ctx.rotate(g.rot * 0.25);
         ctx.fillText(g.char, 0, 0);
         ctx.restore();
       }
       ctx.restore();
 
-      // —— 第二遍：主层 —— 按"深度/边缘"决定大小和浓淡 ——
+      // 主躯体字
       for (const g of this.glyphs) {
-        // 边缘字小、淡、随机飘一点；中心字大、浓、稳
-        const edge = g.edge; // 0 中心, 1 边缘
-        const baseSize = g.size * this.scale;
-        const size = baseSize * lerp(1.35, 0.7, edge);
-        const alpha = lerp(0.95, 0.45, edge) * g.alpha;
-        // 颜色：中心用真墨色，边缘略带暖褐（飞白干枯感）
-        const inkR = Math.round(lerp(29, 70, edge));
-        const inkG = Math.round(lerp(26, 58, edge));
-        const inkB = Math.round(lerp(21, 40, edge));
-        ctx.fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
-        ctx.font = `${size.toFixed(1)}px "LXGW WenKai", serif`;
-        ctx.save();
-        ctx.translate(g.x, g.y);
-        ctx.rotate(g.rot);
-        ctx.fillText(g.char, 0, 0);
-        ctx.restore();
+        if (g.faceRole) continue;
+        drawGlyph(g, {});
       }
 
-      // —— 点睛：核心位置挑 3-4 个朱砂字（画龙点睛的审美小钩子）——
-      // 选择距中心最近的几个粒子
+      // 朱砂点缀（略偏电粉，仍克制）
       if (this.glyphs.length > 0) {
         const sorted = this._cinnabarIdx || this._pickCinnabar();
         for (let k = 0; k < sorted.length; k++) {
           const g = this.glyphs[sorted[k]];
-          if (!g) continue;
-          const size = g.size * this.scale * 1.15;
-          ctx.fillStyle = `rgba(124, 40, 30, ${0.8 * g.alpha})`;
-          ctx.font = `${size.toFixed(1)}px "LXGW WenKai", serif`;
-          ctx.save();
-          ctx.translate(g.x, g.y);
-          ctx.rotate(g.rot);
-          ctx.fillText(g.char, 0, 0);
-          ctx.restore();
+          if (!g || g.faceRole) continue;
+          drawGlyph(g, {
+            sizeMul: 1.12,
+            color: `rgba(255, 160, 190, ${0.72 * g.alpha})`,
+            shadow: "rgba(255, 120, 180, 0.35)",
+            shadowBlur: 8,
+          });
         }
       }
 
-      // 眼睛：作为两颗浓墨点，画得精巧而不张扬
-      const expr = EXPRESSIONS[this.expression];
-      const exprScale = this.expression === "surprised" ? 1.3 : 1;
-      for (let i = 0; i < 2; i++) {
-        const e = this.eyes[i];
-        const s = Math.max(8, e.size || this.size * 0.055) * exprScale;
-        ctx.save();
-        ctx.translate(e.x, e.y);
-        ctx.rotate(this.rotation);
-
-        if (expr.shape === "arc" || ["happy", "sleep", "wink", "shy"].includes(this.expression)) {
-          // 特殊表情用笔画画出来，而不是字符
-          ctx.strokeStyle = expr.color;
-          ctx.fillStyle = expr.color;
-          ctx.lineCap = "round";
-          ctx.lineWidth = Math.max(2, s * 0.18);
-          ctx.beginPath();
-          if (this.expression === "sleep") {
-            ctx.moveTo(-s * 0.5, 0);
-            ctx.lineTo(s * 0.5, 0);
-          } else if (this.expression === "happy") {
-            // ^
-            ctx.moveTo(-s * 0.45, s * 0.2);
-            ctx.lineTo(0, -s * 0.25);
-            ctx.lineTo(s * 0.45, s * 0.2);
-          } else if (this.expression === "wink") {
-            // 左眼弧，右眼圆点（由 i 区分）
-            if (i === 0) {
-              ctx.moveTo(-s * 0.45, s * 0.15);
-              ctx.lineTo(0, -s * 0.2);
-              ctx.lineTo(s * 0.45, s * 0.15);
-            } else {
-              ctx.arc(0, 0, s * 0.32, 0, TAU);
-              ctx.fill();
-              ctx.restore();
-              continue;
-            }
-          } else if (this.expression === "shy") {
-            // 眯起的眼睛：> <
-            if (i === 0) {
-              ctx.moveTo(-s * 0.35, -s * 0.2);
-              ctx.lineTo(s * 0.2, 0);
-              ctx.lineTo(-s * 0.35, s * 0.2);
-            } else {
-              ctx.moveTo(s * 0.35, -s * 0.2);
-              ctx.lineTo(-s * 0.2, 0);
-              ctx.lineTo(s * 0.35, s * 0.2);
-            }
-          }
-          ctx.stroke();
-        } else {
-          // 墨点眼 —— 两层渐变，内深外虚
-          const r = s * 0.38;
-          // 外层晕墨
-          const blot = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 1.8);
-          blot.addColorStop(0, "rgba(29,26,21,0.55)");
-          blot.addColorStop(0.5, "rgba(29,26,21,0.2)");
-          blot.addColorStop(1, "rgba(29,26,21,0)");
-          ctx.fillStyle = blot;
-          ctx.beginPath();
-          ctx.arc(0, 0, r * 1.8, 0, TAU);
-          ctx.fill();
-          // 内核
-          ctx.fillStyle = expr.color;
-          ctx.beginPath();
-          ctx.arc(0, 0, r, 0, TAU);
-          ctx.fill();
-          // 高光点（灵动）
-          ctx.fillStyle = "rgba(252,244,222,0.85)";
-          ctx.beginPath();
-          ctx.arc(-r * 0.3, -r * 0.3, r * 0.2, 0, TAU);
-          ctx.fill();
-        }
-        ctx.restore();
+      // 眉眼字层（表情由字符与微位移承担）
+      const expr = EXPRESSIONS[this.expression] || EXPRESSIONS.normal;
+      const eyeHex = expr.color || "#e8f0ff";
+      for (const g of this.glyphs) {
+        if (!g.faceRole) continue;
+        const mul = g.faceRole === "brow" ? 0.92 : 1.18;
+        drawGlyph(g, {
+          sizeMul: mul,
+          color: eyeHex,
+          shadow: "rgba(100, 160, 255, 0.45)",
+          shadowBlur: 10,
+        });
       }
 
       // 飞字
       for (const f of this.flyingGlyphs) {
         const a = clamp(1 - f.t / (f.life + 0.1), 0, 1);
         ctx.font = `${f.size.toFixed(1)}px "LXGW WenKai", serif`;
-        ctx.fillStyle = `rgba(124, 40, 30, ${a})`;
+        ctx.fillStyle = `rgba(255, 180, 220, ${a * 0.9})`;
+        ctx.shadowColor = "rgba(255, 140, 200, 0.4)";
+        ctx.shadowBlur = 8;
         ctx.fillText(f.char, f.x, f.y);
       }
       ctx.restore();
+    }
+
+    /** 将一段文字「贴」到躯体外圈粒子上（如日程标题），不占用眉眼位 */
+    attachBodyChars(text) {
+      const arr = Array.from(String(text || "")).filter((c) => c.trim());
+      if (!arr.length) return;
+      const pool = this.glyphs
+        .map((g, i) => ({ g, i }))
+        .filter((x) => !x.g.faceRole && x.g.edge > 0.32)
+        .sort(() => Math.random() - 0.5);
+      for (let j = 0; j < arr.length && j < pool.length; j++) {
+        pool[j].g.char = arr[j];
+      }
     }
 
     destroy() {

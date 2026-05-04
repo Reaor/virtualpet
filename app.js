@@ -12,6 +12,8 @@
   const hint = document.getElementById("hint");
   const toastEl = document.getElementById("toast");
   const pouchCount = document.getElementById("pouchCount");
+  const bodyImport = document.getElementById("bodyImport");
+  const bodyImportBtn = document.getElementById("bodyImportBtn");
 
   const pet = new Pet(canvas, { particleCount: 140 });
   window._pet = pet; // 便于调试
@@ -53,6 +55,9 @@
     // 按在宠物身上才算拖拽
     if (Math.hypot(p.x - pet.pos.x, p.y - pet.pos.y) < pet.size * 0.3) {
       pet.beginDrag(p.x, p.y);
+    } else if (Math.hypot(p.x - pet.pos.x, p.y - pet.pos.y) < pet.size * 0.48) {
+      pet.nuisTap();
+      pet.pulse(p.x, p.y);
     } else {
       pet.pulse(p.x, p.y);
     }
@@ -246,7 +251,7 @@
   function spawnBaits(path) {
     // 在 stage 上方放飘浮字作为"视觉零食"
     const baits = [];
-    const candidates = ["山", "水", "风", "月", "灵", "笺", "茶", "雨", "归", "慢"];
+    const candidates = ["山", "水", "风", "月", "灵", "笺", "茶", "雨", "归", "慢", "码", "流", "光"];
     for (let i = 0; i < path.length; i++) {
       const p = path[i];
       const el = document.createElement("div");
@@ -259,7 +264,8 @@
         transform: translate(-50%, -50%);
         font-family: var(--font-serif);
         font-size: ${14 + Math.random() * 6}px;
-        color: rgba(29,26,21,0.55);
+        color: rgba(200, 220, 255, 0.45);
+        text-shadow: 0 0 12px rgba(140, 180, 255, 0.35);
         pointer-events: none;
         z-index: 3;
         transition: opacity 0.4s ease, transform 0.4s ease;
@@ -304,14 +310,14 @@
   // ---------- 自动换形 / 偶发表情 ----------
   setInterval(() => {
     if (pet.mode !== "idle" || pet.dragging) return;
-    if (Math.random() < 0.35) {
+    if (Math.random() < 0.18) {
       formIdx = (formIdx + 1) % FORM_ORDER.length;
       setForm(FORM_ORDER[formIdx], false);
       // 不打招呼，静静地变
       formLabel.style.opacity = 0;
       setTimeout(() => (formLabel.style.opacity = 1), 400);
     }
-  }, 8000);
+  }, 11000);
 
   setInterval(() => {
     if (pet.mode !== "idle" || pet.dragging) return;
@@ -321,8 +327,24 @@
     else pet.setExpression("normal");
   }, 3000);
 
+  // ---------- 躯体字导入（日程等可先贴在外圈） ----------
+  function applyBodyImport() {
+    const raw = (bodyImport && bodyImport.value) || "";
+    pet.attachBodyChars(raw.trim().slice(0, 24));
+    toast("已写入躯体 · 外圈字");
+  }
+  if (bodyImportBtn) bodyImportBtn.addEventListener("click", applyBodyImport);
+  if (bodyImport) {
+    bodyImport.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        applyBodyImport();
+      }
+    });
+  }
+
   // ---------- 说明 ----------
   document.getElementById("infoBtn").addEventListener("click", () => {
-    toast("戳/拖/双击 · 点诗字喂它");
+    toast("拖 · 戳身边烦它 · 双击觅食 · 诗字投喂");
   });
 })();
