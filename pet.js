@@ -621,12 +621,9 @@
       this.gridSnapping = opts.gridSnapping !== false;
       /** 活字栅：统一字号、离散倾角、像素对齐 */
       this.gridUnity = opts.gridUnity !== false;
-      /** 字在**世界格**上逐格闪现移动（非弹簧飘移） */
-      this.gridDiscreteMode = opts.gridDiscreteMode !== false;
-      /** 每格一步的最短间隔（秒），越小越「急」 */
-      this.cellHopInterval = opts.cellHopInterval != null ? opts.cellHopInterval : 0.038;
-      this._cellHopAcc = 0;
-      this.gridCell = 12;
+      /** 液体感：波面扰动目标 + 邻域凝聚（强度低，保性能） */
+      this.fluidStrength = opts.fluidStrength != null ? opts.fluidStrength : 1;
+      this._fluidPhase = 0;
 
       /** 吞字后对形态的偏好（多字命中同一形会提高概率） */
       this.formDigestBias = {};
@@ -744,74 +741,6 @@
       if (this.gridSnapping) this._snapGlyphTargetsToGrid();
       this._resolveUniqueLocalGrid();
       this._applyGridTypography();
-      if (this.gridDiscreteMode && this.gridSnapping) this._teleportGlyphsToTargetGrid();
-    }
-
-    /** 换形瞬间：字直接落在目标格心（闪现就位），避免从旧形拖尾 */
-    _teleportGlyphsToTargetGrid() {
-      const bx = this.pos.x;
-      const by = this.pos.y;
-      const rot = this.rotation;
-      const flip = this.facingFlip;
-      const cos = Math.cos(rot);
-      const sin = Math.sin(rot);
-      const cell = this.gridCell;
-      for (const g of this.glyphs) {
-        const txl = g.tx * flip;
-        const tyl = g.ty;
-        const wx = bx + (txl * cos - tyl * sin);
-        const wy = by + (txl * sin + tyl * cos);
-        const gx = Math.round(wx / cell);
-        const gy = Math.round(wy / cell);
-        g.wgx = gx;
-        g.wgy = gy;
-        g.x = gx * cell;
-        g.y = gy * cell;
-        g.vx = 0;
-        g.vy = 0;
-      }
-      this._resolveWorldCellCollisions();
-    }
-
-    /** 世界格上一格最多一字（离散步进后去重） */
-    _resolveWorldCellCollisions() {
-      if (!this.gridDiscreteMode || !this.gridSnapping) return;
-      const cell = this.gridCell;
-      const key = (a, b) => `${a},${b}`;
-      const taken = new Set();
-      const spiral = (gx, gy) => {
-        for (let r = 1; r < 26; r++) {
-          for (let dx = -r; dx <= r; dx++) {
-            for (let dy = -r; dy <= r; dy++) {
-              if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-              const nx = gx + dx;
-              const ny = gy + dy;
-              const k = key(nx, ny);
-              if (!taken.has(k)) return { nx, ny, k };
-            }
-          }
-        }
-        return null;
-      };
-      for (let i = 0; i < this.glyphs.length; i++) {
-        const g = this.glyphs[i];
-        if (g.wgx == null) {
-          g.wgx = Math.round(g.x / cell);
-          g.wgy = Math.round(g.y / cell);
-        }
-        let k = key(g.wgx, g.wgy);
-        if (taken.has(k)) {
-          const sp = spiral(g.wgx, g.wgy);
-          if (sp) {
-            g.wgx = sp.nx;
-            g.wgy = sp.ny;
-            k = sp.k;
-          }
-        }
-        taken.add(k);
-        g.x = g.wgx * cell;
-        g.y = g.wgy * cell;
-      }
     }
 
     /**
@@ -1466,112 +1395,95 @@
             })
           : null;
 
-      if (this.gridDiscreteMode && this.gridSnapping) {
-        this._cellHopAcc += dt;
-        let budget = Math.floor(this._cellHopAcc / this.cellHopInterval);
-        if (budget > 6) budget = 6;
-        if (budget > 0) this._cellHopAcc -= budget * this.cellHopInterval;
-        const cell = this.gridCell;
-        const rumble = (this._rumbleAmp || 0) * cell * 0.12;
+      const cell = this.gridCell;
+      const fMul = (this.fluidStrength || 0) * 0.001 + 1;
+      const springK =
+        (this.mode === "feeding" ? 52 : 24) *
+        fMul *
+        (1 + (this._layoutSettle || 0) * 0.45);
+      const damping =
+        (this.mode === "feeding" ? 6.2 : 4.8) *
+        (1 + (this._layoutSettle || 0) * 0.3);
+      const rumble = (this._rumbleAmp || 0) * cell * 0.1;
+      const waveAmp = (this.fluidStrength || 0) * cell * 0.11;
 
-        const worldFromCell = (gx, gy) => ({
-          x: gx * cell,
-          y: gy * cell,
-        });
-        const worldTarget = (g) => {
-          const txl = g.tx * flip;
-          const tyl = g.ty;
-          const wx = bx + (txl * cos - tyl * sin);
-          const wy = by + (txl * sin + tyl * cos);
-          const rx = rumble ? Math.sin(t * 31 + g.depth * 17) * rumble : 0;
-          const ry = rumble ? Math.cos(t * 29 + g.depth * 13) * rumble : 0;
-          return { x: wx + rx, y: wy + ry };
-        };
+      this._fluidPhase += dt * 1.05;
 
-        for (let step = 0; step < budget; step++) {
-          for (const g of this.glyphs) {
-            if (g.wgx == null) {
-              g.wgx = Math.round(g.x / cell);
-              g.wgy = Math.round(g.y / cell);
-            }
-            const wt = worldTarget(g);
-            const tgtGx = Math.round(wt.x / cell);
-            const tgtGy = Math.round(wt.y / cell);
-            let ngx = g.wgx;
-            let ngy = g.wgy;
-            const dx = tgtGx - g.wgx;
-            const dy = tgtGy - g.wgy;
-            if (dx !== 0 && Math.abs(dx) >= Math.abs(dy)) ngx += dx > 0 ? 1 : -1;
-            else if (dy !== 0) ngy += dy > 0 ? 1 : -1;
-            g.wgx = ngx;
-            g.wgy = ngy;
-            const p = worldFromCell(ngx, ngy);
-            g.x = p.x;
-            g.y = p.y;
-            g.vx = 0;
-            g.vy = 0;
+      const buckets = new Map();
+      const BH = 44;
+      if ((this.fluidStrength || 0) > 0.01) {
+        for (const g of this.glyphs) {
+          const ix = (g.x / BH) | 0;
+          const iy = (g.y / BH) | 0;
+          const k = ix + "," + iy;
+          let b = buckets.get(k);
+          if (!b) {
+            b = { sx: 0, sy: 0, n: 0 };
+            buckets.set(k, b);
           }
-          this._resolveWorldCellCollisions();
+          b.sx += g.x;
+          b.sy += g.y;
+          b.n++;
         }
+      }
 
+      for (const g of this.glyphs) {
+        const txl = g.tx * flip;
+        const tyl = g.ty;
+        let wx = bx + (txl * cos - tyl * sin);
+        let wy = by + (txl * sin + tyl * cos);
+        if (this.gridSnapping && !g.faceRole) {
+          wx = Math.round(wx / cell) * cell;
+          wy = Math.round(wy / cell) * cell;
+        }
+        if (waveAmp > 0.001) {
+          const nx = wx * 0.019 + this._fluidPhase;
+          const ny = wy * 0.017 - this._fluidPhase * 0.82;
+          wx += Math.sin(nx + g.depth * 2.2) * waveAmp * 0.62;
+          wy += Math.cos(ny + g.depth * 1.6) * waveAmp * 0.52;
+          wx += Math.sin(nx * 2.1 + wy * 0.007) * waveAmp * 0.22;
+        }
+        const rx = rumble ? Math.sin(t * 28 + g.depth * 16) * rumble : 0;
+        const ry = rumble ? Math.cos(t * 26 + g.depth * 14) * rumble : 0;
+        let ax = (wx + rx - g.x) * springK - g.vx * damping;
+        let ay = (wy + ry - g.y) * springK - g.vy * damping;
+        if (!g.faceRole) {
+          ax += Math.sin(t * 2 + g.depth * 6) * (this.gridSnapping ? 0.28 : 1.0);
+        }
         if (eyeWorld) {
-          for (const g of this.glyphs) {
-            if (g.faceRole) continue;
-            for (const e of eyeWorld) {
-              const ddx = g.x - e.x;
-              const ddy = g.y - e.y;
-              const d = Math.hypot(ddx, ddy);
-              if (d < eyeClearR && d > 0.01) {
-                const push = ((eyeClearR - d) / eyeClearR) * cell;
-                g.x += (ddx / d) * push;
-                g.y += (ddy / d) * push;
-                g.wgx = Math.round(g.x / cell);
-                g.wgy = Math.round(g.y / cell);
-                g.x = g.wgx * cell;
-                g.y = g.wgy * cell;
-              }
+          for (const e of eyeWorld) {
+            const dx = g.x - e.x;
+            const dy = g.y - e.y;
+            const d = Math.hypot(dx, dy);
+            if (d < eyeClearR && d > 0.01) {
+              const push = ((eyeClearR - d) / eyeClearR) * 420;
+              ax += (dx / d) * push;
+              ay += (dy / d) * push;
             }
           }
         }
-
-        for (const g of this.glyphs) {
-          g.rot = lerp(g.rot, g.targetRot, this.gridUnity ? 0.2 : 0.08);
-        }
-      } else {
-        const springK =
-          (this.mode === "feeding" ? 60 : 28) * (1 + (this._layoutSettle || 0) * 0.55);
-        const damping =
-          (this.mode === "feeding" ? 7 : 5.2) * (1 + (this._layoutSettle || 0) * 0.35);
-        const rumble = (this._rumbleAmp || 0) * this.gridCell * 0.22;
-
-        for (const g of this.glyphs) {
-          const tx = g.tx * flip;
-          const ty = g.ty;
-          const wx = bx + (tx * cos - ty * sin);
-          const wy = by + (tx * sin + ty * cos);
-          const bw = Math.sin(t * 2 + g.depth * 6) * (this.gridSnapping ? 0.35 : 1.2);
-          const rx = rumble ? (Math.sin(t * 31 + g.depth * 17) * rumble) : 0;
-          const ry = rumble ? (Math.cos(t * 29 + g.depth * 13) * rumble) : 0;
-          let ax = (wx + rx - g.x) * springK - g.vx * damping + bw;
-          let ay = (wy + ry - g.y) * springK - g.vy * damping;
-          if (eyeWorld) {
-            for (const e of eyeWorld) {
-              const dx = g.x - e.x;
-              const dy = g.y - e.y;
-              const d = Math.hypot(dx, dy);
-              if (d < eyeClearR && d > 0.01) {
-                const push = ((eyeClearR - d) / eyeClearR) * 500;
-                ax += (dx / d) * push;
-                ay += (dy / d) * push;
-              }
+        if ((this.fluidStrength || 0) > 0.01 && !g.faceRole) {
+          const ix = (g.x / BH) | 0;
+          const iy = (g.y / BH) | 0;
+          const b = buckets.get(ix + "," + iy);
+          if (b && b.n > 1) {
+            const cx = b.sx / b.n;
+            const cy = b.sy / b.n;
+            const dx = cx - g.x;
+            const dy = cy - g.y;
+            const d = Math.hypot(dx, dy);
+            if (d > 0.02) {
+              const coh = 18 * (this.fluidStrength || 0);
+              ax += (dx / d) * coh;
+              ay += (dy / d) * coh;
             }
           }
-          g.vx += ax * dt;
-          g.vy += ay * dt;
-          g.x += g.vx * dt;
-          g.y += g.vy * dt;
-          g.rot = lerp(g.rot, g.targetRot, this.gridUnity ? 0.14 : 0.08);
         }
+        g.vx += ax * dt;
+        g.vy += ay * dt;
+        g.x += g.vx * dt;
+        g.y += g.vy * dt;
+        g.rot = lerp(g.rot, g.targetRot, this.gridUnity ? 0.16 : 0.08);
       }
 
       // 眼睛跟形态（保留坐标供调试；字脸模式不在画布上绘制眼）
@@ -1616,13 +1528,6 @@
             g = this.glyphs[Math.floor(Math.random() * this.glyphs.length)];
           }
           if (!g.faceRole) g.char = f.char;
-          if (this.gridDiscreteMode && this.gridSnapping && !g.faceRole) {
-            const c = this.gridCell;
-            g.wgx = Math.round(g.x / c);
-            g.wgy = Math.round(g.y / c);
-            g.x = g.wgx * c;
-            g.y = g.wgy * c;
-          }
           this.pulse(this.pos.x, this.pos.y);
           return false;
         }
@@ -1742,27 +1647,7 @@
         ctx.restore();
       };
 
-      // 体积光晕层（内层略亮）
-      ctx.save();
-      ctx.globalCompositeOperation = "screen";
-      for (const g of this.glyphs) {
-        if (g.faceRole) continue;
-        if (g.edge > 0.52) continue;
-        if ((g.depth * 6.3) % 1 > 0.72) continue;
-        const size = g.size * 2.1 * this.scale;
-        ctx.fillStyle = `rgba(200, 220, 255, ${0.045 * (1 - g.edge)})`;
-        ctx.font = `${size.toFixed(1)}px "LXGW WenKai", serif`;
-        ctx.save();
-        const hx = this.gridUnity ? Math.round(g.x) : g.x;
-        const hy = this.gridUnity ? Math.round(g.y) : g.y;
-        ctx.translate(hx, hy);
-        ctx.rotate(g.rot * 0.25);
-        ctx.fillText(g.char, 0, 0);
-        ctx.restore();
-      }
-      ctx.restore();
-
-      // 主躯体字
+      // 主躯体字（单层绘制，减轻卡顿）
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
         drawGlyph(g, { flashWeight: 0.55 });

@@ -72,17 +72,16 @@
 | 规则 + 单字 hint | **已完成** | `digestText` / `DIGEST_RULES` |
 | 多词计分 | **已完成** | 避免「已完成」里单字误判 |
 
-### 1.8 栅格字：逐格闪现、不堆叠、字号与闪 bounded
+### 1.8 栅格字：平滑落格 + 轻量液体感（性能优先）
 
 | 子需求 | 状态 | 说明 |
 |--------|------|------|
 | 局部一格一字 | **已完成** | `_resolveUniqueLocalGrid` |
-| 世界格逐格移动 | **已完成** | `gridDiscreteMode`：`wgx/wgy` 每步 ±1 格趋向目标；`_resolveWorldCellCollisions` |
-| 换形闪现就位 | **已完成** | `_teleportGlyphsToTargetGrid` |
-| 剪影采样更密 | **已完成** | `sampleSilhouette` jitter 减弱 |
-| 字号上下限贴格 | **已完成** | `emMin/emMax` + 绘制 `cap` |
-| 闪烁不炸格 | **已完成** | `flash` / `rumble` 上限 + alpha 增益封顶 |
-| 抖擞不飘移 | **已完成** | `shake` 不再给 `vx/vy` 乱冲 |
+| 目标吸附格心 + **平滑**弹簧 | **已完成** | 关闭逐格闪现；`gridSnapping` 下目标 round 到格心 |
+| 波面起伏 | **已完成** | `fluidStrength` + `_fluidPhase` 正弦叠加在目标位 |
+| 邻域凝聚 | **已完成** | 空间哈希桶质心弱吸引（非全对全 SPH） |
+| 卡顿优化 | **已完成** | 去掉体积光晕二次绘制；粒子 150；弹簧略软 |
+| ~~世界格逐格闪现~~ | **已弃用** | 伤眼、与液体感冲突 |
 
 ---
 

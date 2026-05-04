@@ -131,7 +131,7 @@ webView.loadUrl("file:///android_asset/pet/index.html");
 | 想改什么 | 去哪改 |
 |---|---|
 | 底色/纸本/印章颜色 | `styles.css` 顶部的 CSS 变量 |
-| 粒子数量（性能/密度） | `app.js` 里 `new Pet(canvas, { particleCount: 200 })` |
+| 粒子数量（性能/密度） | `app.js` 里 `new Pet(canvas, { particleCount: 150 })` |
 | 默认字池 | `pet.js` 里的 `DEFAULT_POOL` |
 | 换形时间间隔 | `app.js` 最后 `setInterval(..., 8000)` |
 | 新增形态 | `pet.js` 的 `FORMS` |
@@ -140,7 +140,7 @@ webView.loadUrl("file:///android_asset/pet/index.html");
 
 ## 性能
 
-- 默认 200 粒子（栅格更密），Canvas 2D，在中低端安卓机 WebView 里也能稳 60fps
+- 默认 150 粒子，Canvas 2D；字灵带轻量「波面 + 邻域凝聚」液体感，中低端机若吃力可调低 `particleCount` 或 `fluidStrength`
 - 若想更繁盛：`particleCount: 240`
 - 若机型羸弱：`particleCount: 80`
 

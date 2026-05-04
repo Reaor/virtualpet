@@ -20,7 +20,7 @@
     buildStamp.textContent = "build " + buildMeta.content;
   }
 
-  const pet = new Pet(canvas, { particleCount: 200 });
+  const pet = new Pet(canvas, { particleCount: 150 });
   window._pet = pet; // 便于调试
 
   let formIdx = 0;
