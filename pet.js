@@ -107,7 +107,7 @@
     const step = Math.max(1, Math.floor(total / count));
     const points = [];
     for (let i = 0; i < total && points.length < count; i += step) {
-      const jitter = () => (Math.random() - 0.5) * 1.5;
+      const jitter = () => (Math.random() - 0.5) * 0.45;
       points.push({ x: px[i * 2] - S / 2 + jitter(), y: px[i * 2 + 1] - S / 2 + jitter() });
     }
     // 若不足，用已有点复制补齐
@@ -291,35 +291,6 @@
             { x: headP.x + S * 0.03, y: headP.y - S * 0.02 },
           ],
           eyeSize: 1.5,
-        };
-      },
-    },
-
-    snake: {
-      label: "寻字",
-      build(n, S) {
-        // 长蛇体：沿正弦铺单层，用于觅食模式；头部位置后续由外部控制
-        const outline = [];
-        const steps = Math.max(40, n);
-        for (let i = 0; i < steps; i++) {
-          const t = i / (steps - 1);
-          const x = (t - 0.5) * S * 0.9;
-          const y = Math.sin(t * Math.PI * 3) * S * 0.12;
-          outline.push({ x, y });
-        }
-        const targets = outline.slice(0, n);
-        const head = outline[outline.length - 1];
-        return {
-          targets,
-          /** 静态基准，供每帧叠加游动相位 */
-          snakeBase: targets.map((p) => ({ x: p.x, y: p.y })),
-          eyes: [
-            { x: head.x - S * 0.015, y: head.y - S * 0.02 },
-            { x: head.x + S * 0.015, y: head.y - S * 0.02 },
-          ],
-          eyeSize: 1.3,
-          // 蛇形：目标点是"按顺序排列"的，这样粒子会形成有顺序的链
-          ordered: true,
         };
       },
     },
@@ -566,7 +537,6 @@
     "moon",
     "star",
     "dragon",
-    "snake",
   ];
 
   // ---------- 表情（眼区由躯体内的「字层」呈现；此处供旧逻辑/色值参考） ---------- //
@@ -647,10 +617,15 @@
       this._moodSwap = []; // { i, saved }
       this._moodUntil = 0;
 
-      /** 隐形格：目标吸附到格点，字粒位移更齐整 */
+      /** 隐形格：目标吸附到格点 */
       this.gridSnapping = opts.gridSnapping !== false;
-      /** 活字栅：统一字号阶梯、离散倾角、渲染像素对齐（偏排版艺术） */
+      /** 活字栅：统一字号、离散倾角、像素对齐 */
       this.gridUnity = opts.gridUnity !== false;
+      /** 字在**世界格**上逐格闪现移动（非弹簧飘移） */
+      this.gridDiscreteMode = opts.gridDiscreteMode !== false;
+      /** 每格一步的最短间隔（秒），越小越「急」 */
+      this.cellHopInterval = opts.cellHopInterval != null ? opts.cellHopInterval : 0.038;
+      this._cellHopAcc = 0;
       this.gridCell = 12;
 
       /** 吞字后对形态的偏好（多字命中同一形会提高概率） */
@@ -686,7 +661,7 @@
       this.center = { x: this.width / 2, y: this.height / 2 };
       // 身体参考尺寸：按短边
       this.size = Math.min(this.width, this.height) * 0.9;
-      this.gridCell = clamp(Math.round(this.size * 0.034), 10, 16);
+      this.gridCell = clamp(Math.round(this.size * 0.03), 8, 13);
       this.anchor = { x: this.center.x, y: this.center.y };
       if (this.pos.x === 0 && this.pos.y === 0) {
         this.pos.x = this.center.x;
@@ -767,7 +742,139 @@
       this._cinnabarIdx = null; // 换形 → 重新挑朱砂字
       if (this.faceLayerMode) this._assignFaceGlyphs();
       if (this.gridSnapping) this._snapGlyphTargetsToGrid();
+      this._resolveUniqueLocalGrid();
       this._applyGridTypography();
+      if (this.gridDiscreteMode && this.gridSnapping) this._teleportGlyphsToTargetGrid();
+    }
+
+    /** 换形瞬间：字直接落在目标格心（闪现就位），避免从旧形拖尾 */
+    _teleportGlyphsToTargetGrid() {
+      const bx = this.pos.x;
+      const by = this.pos.y;
+      const rot = this.rotation;
+      const flip = this.facingFlip;
+      const cos = Math.cos(rot);
+      const sin = Math.sin(rot);
+      const cell = this.gridCell;
+      for (const g of this.glyphs) {
+        const txl = g.tx * flip;
+        const tyl = g.ty;
+        const wx = bx + (txl * cos - tyl * sin);
+        const wy = by + (txl * sin + tyl * cos);
+        const gx = Math.round(wx / cell);
+        const gy = Math.round(wy / cell);
+        g.wgx = gx;
+        g.wgy = gy;
+        g.x = gx * cell;
+        g.y = gy * cell;
+        g.vx = 0;
+        g.vy = 0;
+      }
+      this._resolveWorldCellCollisions();
+    }
+
+    /** 世界格上一格最多一字（离散步进后去重） */
+    _resolveWorldCellCollisions() {
+      if (!this.gridDiscreteMode || !this.gridSnapping) return;
+      const cell = this.gridCell;
+      const key = (a, b) => `${a},${b}`;
+      const taken = new Set();
+      const spiral = (gx, gy) => {
+        for (let r = 1; r < 26; r++) {
+          for (let dx = -r; dx <= r; dx++) {
+            for (let dy = -r; dy <= r; dy++) {
+              if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+              const nx = gx + dx;
+              const ny = gy + dy;
+              const k = key(nx, ny);
+              if (!taken.has(k)) return { nx, ny, k };
+            }
+          }
+        }
+        return null;
+      };
+      for (let i = 0; i < this.glyphs.length; i++) {
+        const g = this.glyphs[i];
+        if (g.wgx == null) {
+          g.wgx = Math.round(g.x / cell);
+          g.wgy = Math.round(g.y / cell);
+        }
+        let k = key(g.wgx, g.wgy);
+        if (taken.has(k)) {
+          const sp = spiral(g.wgx, g.wgy);
+          if (sp) {
+            g.wgx = sp.nx;
+            g.wgy = sp.ny;
+            k = sp.k;
+          }
+        }
+        taken.add(k);
+        g.x = g.wgx * cell;
+        g.y = g.wgy * cell;
+      }
+    }
+
+    /**
+     * 局部目标吸附到格后，保证**一格一字**（避免堆叠），向邻格螺旋找空位。
+     * 仅处理非眉眼粒子，眉眼保持眼窝附近。
+     */
+    _resolveUniqueLocalGrid() {
+      if (!this.gridSnapping) return;
+      const step = this.gridCell;
+      const occupied = new Set();
+
+      const keyOf = (gx, gy) => `${gx},${gy}`;
+      const toCell = (x, y) => ({
+        gx: Math.round(x / step),
+        gy: Math.round(y / step),
+      });
+      const toLocal = (gx, gy) => ({ x: gx * step, y: gy * step });
+
+      for (const g of this.glyphs) {
+        if (!g.faceRole) continue;
+        const { gx, gy } = toCell(g.tx, g.ty);
+        occupied.add(keyOf(gx, gy));
+      }
+
+      const spiral = (gx, gy) => {
+        if (!occupied.has(keyOf(gx, gy))) return { nx: gx, ny: gy, k: keyOf(gx, gy) };
+        for (let r = 1; r < 28; r++) {
+          for (let dx = -r; dx <= r; dx++) {
+            for (let dy = -r; dy <= r; dy++) {
+              if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+              const nx = gx + dx;
+              const ny = gy + dy;
+              const k = keyOf(nx, ny);
+              if (!occupied.has(k)) return { nx, ny, k };
+            }
+          }
+        }
+        return null;
+      };
+
+      for (const g of this.glyphs) {
+        if (g.faceRole) continue;
+        let { gx, gy } = toCell(g.tx, g.ty);
+        let k = keyOf(gx, gy);
+        if (!occupied.has(k)) {
+          occupied.add(k);
+          const p = toLocal(gx, gy);
+          g.tx = p.x;
+          g.ty = p.y;
+          g.baseTx = p.x;
+          g.baseTy = p.y;
+          continue;
+        }
+        const sp = spiral(gx, gy);
+        if (sp) {
+          occupied.add(sp.k);
+          const p = toLocal(sp.nx, sp.ny);
+          g.tx = p.x;
+          g.ty = p.y;
+          g.baseTx = p.x;
+          g.baseTy = p.y;
+        }
+      }
     }
 
     /** 离散倾角（约 4° 一档）+ 统一字号阶梯，接近活字排版 */
@@ -783,7 +890,9 @@
         }
         return;
       }
-      const em = clamp(this.gridCell * 0.82, 11.5, 14.5);
+      const emMin = this.gridCell * 0.66;
+      const emMax = this.gridCell * 0.84;
+      const em = clamp(this.gridCell * 0.76, emMin, emMax);
       for (const g of this.glyphs) {
         if (g.faceRole === "brow") {
           g.targetRot = this._quantizeTargetRot(rand(-0.06, 0.06));
@@ -918,7 +1027,7 @@
         this.setExpression("annoyed");
         this._applyMoodChars("annoyed", 1.8);
         this._rumbleAmp = Math.max(this._rumbleAmp || 0, 0.85);
-        this._glyphFlash = Math.max(this._glyphFlash || 0, 0.6);
+        this._glyphFlash = Math.min(0.55, Math.max(this._glyphFlash || 0, 0.5));
         const alt = ["cloud", "star", "heart", "butterfly", "moon", "flower"];
         const pick = alt[Math.floor(Math.random() * alt.length)];
         if (FORMS[pick]) this.setForm(pick, true);
@@ -961,52 +1070,6 @@
       this._moodUntil = performance.now() / 1000 + durationSec;
     }
 
-    _updateSnakeTargets(tSec) {
-      const d = this.formData;
-      if (this.form !== "snake" || !d || !d.snakeBase) return;
-      const S = this.size;
-      const n = this.glyphs.length;
-      const phase = tSec * 2.35 + this.pos.x * 0.0009 + this.vel.x * 0.00015;
-      const travel = Math.sin(tSec * 2.8 - this.pos.y * 0.002);
-      const amp = S * (0.03 + 0.022 * Math.sin(tSec * 0.85) + 0.012 * travel);
-      for (let i = 0; i < n; i++) {
-        const base = d.snakeBase[i] || d.snakeBase[d.snakeBase.length - 1];
-        const u = i / Math.max(1, n - 1);
-        const w1 = Math.sin(u * Math.PI * 3 + phase);
-        const w2 = Math.sin(u * Math.PI * 5 + phase * 0.55) * 0.38;
-        const w3 = Math.sin(u * Math.PI * 8 + tSec * 3.1) * 0.22 * travel;
-        const dx =
-          Math.cos(u * Math.PI * 2 + phase * 0.42) * S * 0.02 +
-          Math.sin(u * Math.PI * 6 + phase * 0.9) * S * 0.008;
-        const dy = (w1 + w2 + w3) * amp;
-        const g = this.glyphs[i];
-        if (g.faceRole) continue;
-        const snapped = this._snapLocal(base.x + dx, base.y + dy);
-        g.baseTx = snapped.x;
-        g.baseTy = snapped.y;
-        g.tx = snapped.x;
-        g.ty = snapped.y;
-      }
-      const iHead = n - 1;
-      const hb = d.snakeBase[iHead];
-      const ug = iHead / Math.max(1, n - 1);
-      const w1h = Math.sin(ug * Math.PI * 3 + phase);
-      const w2h = Math.sin(ug * Math.PI * 5 + phase * 0.55) * 0.38;
-      const w3h = Math.sin(ug * Math.PI * 8 + tSec * 3.1) * 0.22 * travel;
-      const dxh =
-        Math.cos(ug * Math.PI * 2 + phase * 0.42) * S * 0.02 +
-        Math.sin(ug * Math.PI * 6 + phase * 0.9) * S * 0.008;
-      const dyh = (w1h + w2h + w3h) * amp;
-      const hx = hb.x + dxh;
-      const hy = hb.y + dyh;
-      const eL = this._snapLocal(hx - S * 0.018, hy - S * 0.024);
-      const eR = this._snapLocal(hx + S * 0.018, hy - S * 0.02);
-      d.eyes = [
-        { x: eL.x, y: eL.y },
-        { x: eR.x, y: eR.y },
-      ];
-    }
-
     _restoreMoodChars() {
       for (const m of this._moodSwap) {
         if (this.glyphs[m.i]) this.glyphs[m.i].char = m.saved;
@@ -1038,8 +1101,8 @@
         this._unifiedSwap.push({ i, saved: g.char });
         g.char = c;
       }
-      this._rumbleAmp = Math.max(this._rumbleAmp || 0, 1);
-      this._glyphFlash = 1;
+      this._rumbleAmp = Math.min(0.42, (this._rumbleAmp || 0) + 0.35);
+      this._glyphFlash = Math.min(0.45, (this._glyphFlash || 0) + 0.38);
       this.pulse(this.pos.x, this.pos.y);
     }
 
@@ -1105,13 +1168,13 @@
         setTimeout(() => {
           this.targetScale = 1;
         }, 500);
-        this._rumbleAmp = Math.max(this._rumbleAmp || 0, 0.45);
-        this._glyphFlash = 1;
+        this._rumbleAmp = Math.min(0.5, Math.max(this._rumbleAmp || 0, 0.45));
+        this._glyphFlash = Math.min(0.48, Math.max(this._glyphFlash || 0, 0.42));
       } else if (kind === "delay") {
         this.setExpression("annoyed");
         this._applyMoodChars("annoyed", 2.2);
-        this._rumbleAmp = Math.max(this._rumbleAmp || 0, 1);
-        this._glyphFlash = 1;
+        this._rumbleAmp = Math.min(0.55, Math.max(this._rumbleAmp || 0, 0.48));
+        this._glyphFlash = Math.min(0.52, Math.max(this._glyphFlash || 0, 0.45));
       } else if (kind === "todo") {
         this.setExpression("surprised");
         this._hintEdgeChars("待办", 1.6, 14);
@@ -1227,11 +1290,10 @@
     // 觅食路径：传入一组世界坐标目标点（按顺序访问），每到一个触发 callback
     startFeeding(targets, onReach, onDone) {
       this.mode = "feeding";
-      this._formBeforeFeed = this.form === "snake" ? "blob" : this.form;
+      this._formBeforeFeed = this.form && FORMS[this.form] ? this.form : "blob";
       this.feedQueue = targets.slice();
       this.onFeedReach = onReach;
       this.onFeedDone = onDone;
-      this.setForm("snake");
       this.setExpression("surprised");
     }
 
@@ -1258,15 +1320,8 @@
     }
 
     shake() {
-      // 抖擞：瞬时速度扰动 + 全体粒子获得随机冲量
-      this.vel.x += rand(-200, 200);
-      this.vel.y += rand(-100, 100);
-      this._rumbleAmp = Math.max(this._rumbleAmp || 0, 1.15);
-      this._glyphFlash = 1;
-      for (const g of this.glyphs) {
-        g.vx += rand(-600, 600);
-        g.vy += rand(-600, 600);
-      }
+      this._rumbleAmp = Math.min(0.55, (this._rumbleAmp || 0) + 0.45);
+      this._glyphFlash = Math.min(0.55, (this._glyphFlash || 0) + 0.42);
       this.setExpression("surprised");
       setTimeout(() => this.setExpression("normal"), 800);
     }
@@ -1386,22 +1441,14 @@
       this._glyphFlash = Math.max(0, (this._glyphFlash || 0) - 2.2 * dt);
       this._layoutSettle = Math.max(0, (this._layoutSettle || 0) - dt * 1.1);
 
-      if (this.form === "snake") this._updateSnakeTargets(t);
       if (this.faceLayerMode) this._syncFaceGlyphTargets(t);
 
-      // 每个字粒子：向 (宠物位置 + 目标相对偏移) 做弹簧运动
       const bx = this.pos.x;
       const by = this.pos.y;
       const rot = this.rotation;
       const flip = this.facingFlip;
       const cos = Math.cos(rot);
       const sin = Math.sin(rot);
-      const springK =
-        (this.mode === "feeding" ? 60 : 28) * (1 + (this._layoutSettle || 0) * 0.55);
-      const damping =
-        (this.mode === "feeding" ? 7 : 5.2) * (1 + (this._layoutSettle || 0) * 0.35);
-      const rumble = (this._rumbleAmp || 0) * this.gridCell * 0.22;
-      const flash = this._glyphFlash || 0;
 
       const eyeClearR = this.size * 0.08;
       const useEyeClear = !this.faceLayerMode;
@@ -1419,37 +1466,112 @@
             })
           : null;
 
-      for (const g of this.glyphs) {
-        // 目标点做旋转+翻转后平移到世界坐标
-        const tx = g.tx * flip;
-        const ty = g.ty;
-        const wx = bx + (tx * cos - ty * sin);
-        const wy = by + (tx * sin + ty * cos);
-        // 轻微呼吸扰动（按深度参数差异化）；规整格下减弱
-        const bw = Math.sin(t * 2 + g.depth * 6) * (this.gridSnapping ? 0.35 : 1.2);
-        const rx = rumble ? (Math.sin(t * 31 + g.depth * 17) * rumble) : 0;
-        const ry = rumble ? (Math.cos(t * 29 + g.depth * 13) * rumble) : 0;
-        let ax = (wx + rx - g.x) * springK - g.vx * damping + bw;
-        let ay = (wy + ry - g.y) * springK - g.vy * damping;
-        // 眼睛"清场"：离眼太近的字会被温柔推开
+      if (this.gridDiscreteMode && this.gridSnapping) {
+        this._cellHopAcc += dt;
+        let budget = Math.floor(this._cellHopAcc / this.cellHopInterval);
+        if (budget > 6) budget = 6;
+        if (budget > 0) this._cellHopAcc -= budget * this.cellHopInterval;
+        const cell = this.gridCell;
+        const rumble = (this._rumbleAmp || 0) * cell * 0.12;
+
+        const worldFromCell = (gx, gy) => ({
+          x: gx * cell,
+          y: gy * cell,
+        });
+        const worldTarget = (g) => {
+          const txl = g.tx * flip;
+          const tyl = g.ty;
+          const wx = bx + (txl * cos - tyl * sin);
+          const wy = by + (txl * sin + tyl * cos);
+          const rx = rumble ? Math.sin(t * 31 + g.depth * 17) * rumble : 0;
+          const ry = rumble ? Math.cos(t * 29 + g.depth * 13) * rumble : 0;
+          return { x: wx + rx, y: wy + ry };
+        };
+
+        for (let step = 0; step < budget; step++) {
+          for (const g of this.glyphs) {
+            if (g.wgx == null) {
+              g.wgx = Math.round(g.x / cell);
+              g.wgy = Math.round(g.y / cell);
+            }
+            const wt = worldTarget(g);
+            const tgtGx = Math.round(wt.x / cell);
+            const tgtGy = Math.round(wt.y / cell);
+            let ngx = g.wgx;
+            let ngy = g.wgy;
+            const dx = tgtGx - g.wgx;
+            const dy = tgtGy - g.wgy;
+            if (dx !== 0 && Math.abs(dx) >= Math.abs(dy)) ngx += dx > 0 ? 1 : -1;
+            else if (dy !== 0) ngy += dy > 0 ? 1 : -1;
+            g.wgx = ngx;
+            g.wgy = ngy;
+            const p = worldFromCell(ngx, ngy);
+            g.x = p.x;
+            g.y = p.y;
+            g.vx = 0;
+            g.vy = 0;
+          }
+          this._resolveWorldCellCollisions();
+        }
+
         if (eyeWorld) {
-          for (const e of eyeWorld) {
-            const dx = g.x - e.x;
-            const dy = g.y - e.y;
-            const d = Math.hypot(dx, dy);
-            if (d < eyeClearR && d > 0.01) {
-              const push = ((eyeClearR - d) / eyeClearR) * 500;
-              ax += (dx / d) * push;
-              ay += (dy / d) * push;
+          for (const g of this.glyphs) {
+            if (g.faceRole) continue;
+            for (const e of eyeWorld) {
+              const ddx = g.x - e.x;
+              const ddy = g.y - e.y;
+              const d = Math.hypot(ddx, ddy);
+              if (d < eyeClearR && d > 0.01) {
+                const push = ((eyeClearR - d) / eyeClearR) * cell;
+                g.x += (ddx / d) * push;
+                g.y += (ddy / d) * push;
+                g.wgx = Math.round(g.x / cell);
+                g.wgy = Math.round(g.y / cell);
+                g.x = g.wgx * cell;
+                g.y = g.wgy * cell;
+              }
             }
           }
         }
-        g.vx += ax * dt;
-        g.vy += ay * dt;
-        g.x += g.vx * dt;
-        g.y += g.vy * dt;
-        // 旋转轻微回归
-        g.rot = lerp(g.rot, g.targetRot, this.gridUnity ? 0.14 : 0.08);
+
+        for (const g of this.glyphs) {
+          g.rot = lerp(g.rot, g.targetRot, this.gridUnity ? 0.2 : 0.08);
+        }
+      } else {
+        const springK =
+          (this.mode === "feeding" ? 60 : 28) * (1 + (this._layoutSettle || 0) * 0.55);
+        const damping =
+          (this.mode === "feeding" ? 7 : 5.2) * (1 + (this._layoutSettle || 0) * 0.35);
+        const rumble = (this._rumbleAmp || 0) * this.gridCell * 0.22;
+
+        for (const g of this.glyphs) {
+          const tx = g.tx * flip;
+          const ty = g.ty;
+          const wx = bx + (tx * cos - ty * sin);
+          const wy = by + (tx * sin + ty * cos);
+          const bw = Math.sin(t * 2 + g.depth * 6) * (this.gridSnapping ? 0.35 : 1.2);
+          const rx = rumble ? (Math.sin(t * 31 + g.depth * 17) * rumble) : 0;
+          const ry = rumble ? (Math.cos(t * 29 + g.depth * 13) * rumble) : 0;
+          let ax = (wx + rx - g.x) * springK - g.vx * damping + bw;
+          let ay = (wy + ry - g.y) * springK - g.vy * damping;
+          if (eyeWorld) {
+            for (const e of eyeWorld) {
+              const dx = g.x - e.x;
+              const dy = g.y - e.y;
+              const d = Math.hypot(dx, dy);
+              if (d < eyeClearR && d > 0.01) {
+                const push = ((eyeClearR - d) / eyeClearR) * 500;
+                ax += (dx / d) * push;
+                ay += (dy / d) * push;
+              }
+            }
+          }
+          g.vx += ax * dt;
+          g.vy += ay * dt;
+          g.x += g.vx * dt;
+          g.y += g.vy * dt;
+          g.rot = lerp(g.rot, g.targetRot, this.gridUnity ? 0.14 : 0.08);
+        }
       }
 
       // 眼睛跟形态（保留坐标供调试；字脸模式不在画布上绘制眼）
@@ -1494,7 +1616,13 @@
             g = this.glyphs[Math.floor(Math.random() * this.glyphs.length)];
           }
           if (!g.faceRole) g.char = f.char;
-          // 触发一个小涟漪
+          if (this.gridDiscreteMode && this.gridSnapping && !g.faceRole) {
+            const c = this.gridCell;
+            g.wgx = Math.round(g.x / c);
+            g.wgy = Math.round(g.y / c);
+            g.x = g.wgx * c;
+            g.y = g.wgy * c;
+          }
           this.pulse(this.pos.x, this.pos.y);
           return false;
         }
@@ -1574,10 +1702,16 @@
               ? lerp(1.12, 0.88, edge)
               : lerp(1.28, 0.72, edge);
         const baseSize = g.size * this.scale * (opts.sizeMul || 1);
-        const size = baseSize * roleMul;
+        let size = baseSize * roleMul;
+        if (this.gridUnity && this.gridCell) {
+          const cap = this.gridCell * 0.88 * this.scale;
+          if (size > cap) size = cap;
+        }
+        const flashW = opts.flashWeight != null ? opts.flashWeight : 0.5;
+        const flashBoost = 1 + Math.min(flash, 0.52) * flashW * 0.42;
         const alpha =
           (opts.alphaMul != null ? opts.alphaMul : 1) *
-          (1 + flash * (opts.flashWeight != null ? opts.flashWeight : 0.5)) *
+          flashBoost *
           lerp(0.94, 0.42, edge) *
           g.alpha;
         ctx.font = `${size.toFixed(1)}px "LXGW WenKai", serif`;

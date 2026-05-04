@@ -20,7 +20,7 @@
     buildStamp.textContent = "build " + buildMeta.content;
   }
 
-  const pet = new Pet(canvas, { particleCount: 140 });
+  const pet = new Pet(canvas, { particleCount: 200 });
   window._pet = pet; // 便于调试
 
   let formIdx = 0;
@@ -250,7 +250,7 @@
         bait.forEach((b) => b.el.remove());
       }
     );
-    toast("觅食 · 字灵化蛇");
+    toast("觅食 · 栅格巡游");
   }
 
   function spawnBaits(path) {

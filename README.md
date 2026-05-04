@@ -52,7 +52,7 @@
 |---|---|
 | 戳一戳 | 画面涟漪，字灵会害羞或惊讶 |
 | 拖拽 | 按住字灵可以把它拖到任意位置 |
-| 双击 | 字灵"化蛇"进入**觅食模式**，在画布里蜿蜒游走吞食"字" |
+| 双击 | 进入**觅食模式**，沿路径巡游并吞食诱饵字（保持当前形态，**栅格字**逐格移动） |
 | 点击下方诗笺里的任意字 | 该字飞入字灵身体，并且**持久保留**在它的"字池"里 |
 | "变"按钮 | 手动切换形态 |
 | "觅"按钮 | 触发觅食 |
@@ -131,7 +131,7 @@ webView.loadUrl("file:///android_asset/pet/index.html");
 | 想改什么 | 去哪改 |
 |---|---|
 | 底色/纸本/印章颜色 | `styles.css` 顶部的 CSS 变量 |
-| 粒子数量（性能/密度） | `app.js` 里 `new Pet(canvas, { particleCount: 140 })` |
+| 粒子数量（性能/密度） | `app.js` 里 `new Pet(canvas, { particleCount: 200 })` |
 | 默认字池 | `pet.js` 里的 `DEFAULT_POOL` |
 | 换形时间间隔 | `app.js` 最后 `setInterval(..., 8000)` |
 | 新增形态 | `pet.js` 的 `FORMS` |
@@ -140,7 +140,7 @@ webView.loadUrl("file:///android_asset/pet/index.html");
 
 ## 性能
 
-- 默认 140 粒子，Canvas 2D，在中低端安卓机 WebView 里也能稳 60fps
+- 默认 200 粒子（栅格更密），Canvas 2D，在中低端安卓机 WebView 里也能稳 60fps
 - 若想更繁盛：`particleCount: 240`
 - 若机型羸弱：`particleCount: 80`
 
