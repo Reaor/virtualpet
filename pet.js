@@ -25,6 +25,45 @@
     surprised: "讶愕醒",
   };
 
+  /** 单字 → 日程语义（与多字词规则互补） */
+  const CHAR_DIGEST_HINT = {
+    拖: "delay",
+    怠: "delay",
+    欠: "todo",
+    缺: "todo",
+    缓: "delay",
+    成: "done",
+    毕: "done",
+    结: "done",
+    捷: "done",
+    迟: "delay",
+    误: "delay",
+  };
+
+  /** 吞噬文本中的子串 → 反馈（含情绪粒子比例：默认少量，冲击模式单独处理） */
+  const DIGEST_RULES = [
+    { keys: ["未完成", "没做完", "待办", "待完成"], kind: "todo" },
+    { keys: ["已完成", "完成了", "做完", "搞定", "完成"], kind: "done" },
+    { keys: ["拖延", "耽搁", "推迟", "延后"], kind: "delay" },
+  ];
+
+  /** 字池中出现某字时给形态的「饮食偏好」累积 */
+  const CHAR_FORM_BIAS = {
+    鱼: "koi",
+    鲤: "koi",
+    月: "moon",
+    花: "flower",
+    蝶: "butterfly",
+    龙: "dragon",
+    云: "cloud",
+    心: "heart",
+    猫: "cat",
+    鹤: "crane",
+    星: "star",
+    兔: "rabbit",
+    狐: "fox",
+  };
+
   // ---------- 工具 ---------- //
   const TAU = Math.PI * 2;
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -608,6 +647,20 @@
       this._moodSwap = []; // { i, saved }
       this._moodUntil = 0;
 
+      /** 隐形格：目标吸附到格点，字粒位移更齐整 */
+      this.gridSnapping = opts.gridSnapping !== false;
+      this.gridCell = 12;
+
+      /** 吞字后对形态的偏好（多字命中同一形会提高概率） */
+      this.formDigestBias = {};
+      this.formDigestBiasDecay = 0.12; // per second
+      /** 全字冲击：全体非眉眼字暂时变成同一字 */
+      this._unifiedSwap = [];
+      this._unifiedUntil = 0;
+      /** 格点抖动 / 闪烁强度 0..1 */
+      this._rumbleAmp = 0;
+      this._glyphFlash = 0;
+
       this._resize = this._resize.bind(this);
       this._resize();
       window.addEventListener("resize", this._resize);
@@ -629,6 +682,7 @@
       this.center = { x: this.width / 2, y: this.height / 2 };
       // 身体参考尺寸：按短边
       this.size = Math.min(this.width, this.height) * 0.9;
+      this.gridCell = clamp(Math.round(this.size * 0.034), 10, 16);
       this.anchor = { x: this.center.x, y: this.center.y };
       if (this.pos.x === 0 && this.pos.y === 0) {
         this.pos.x = this.center.x;
@@ -708,6 +762,26 @@
       this.formData = data;
       this._cinnabarIdx = null; // 换形 → 重新挑朱砂字
       if (this.faceLayerMode) this._assignFaceGlyphs();
+      if (this.gridSnapping) this._snapGlyphTargetsToGrid();
+    }
+
+    /** 将局部目标 (tx,ty) 吸附到隐形格，躯体更齐 */
+    _snapGlyphTargetsToGrid() {
+      const step = this.gridCell;
+      const snap = (v) => Math.round(v / step) * step;
+      for (const g of this.glyphs) {
+        if (g.faceRole) continue;
+        g.tx = snap(g.tx);
+        g.ty = snap(g.ty);
+        g.baseTx = snap(g.baseTx);
+        g.baseTy = snap(g.baseTy);
+      }
+    }
+
+    _snapLocal(x, y) {
+      const step = this.gridCell;
+      const snap = (v) => Math.round(v / step) * step;
+      return { x: snap(x), y: snap(y) };
     }
 
     /** 在距眼窝最近的粒子中指定「眉眼」字层 */
@@ -786,6 +860,11 @@
         } else continue;
         g.baseTx = ex + o.dx;
         g.baseTy = ey + o.dy;
+        if (this.gridSnapping) {
+          const s = this._snapLocal(g.baseTx, g.baseTy);
+          g.baseTx = s.x;
+          g.baseTy = s.y;
+        }
         g.tx = g.baseTx;
         g.ty = g.baseTy;
         g.targetRot = lerp(g.targetRot, Math.sin(tSec * 3 + g.depth * 5) * 0.12 * (0.2 + this.annoyance), 0.2);
@@ -795,6 +874,7 @@
     /** 戳身：累积烦躁；过高时短暂换形并刷情绪字 */
     nuisTap() {
       this.annoyance = clamp(this.annoyance + 0.22, 0, 1.35);
+      this._rumbleAmp = Math.max(this._rumbleAmp || 0, 0.25);
       if (this.mode === "idle" && !this.dragging) {
         this.vel.x += rand(-120, 120);
         this.vel.y += rand(-80, 80);
@@ -803,7 +883,8 @@
         if (!this._savedFormBeforeAnnoyed) this._savedFormBeforeAnnoyed = this.form;
         this.setExpression("annoyed");
         this._applyMoodChars("annoyed", 1.8);
-        const alt = ["cloud", "star", "heart", "butterfly"];
+        this._rumbleAmp = Math.max(this._rumbleAmp || 0, 0.85);
+        this._glyphFlash = Math.max(this._glyphFlash || 0, 0.6);
         const pick = alt[Math.floor(Math.random() * alt.length)];
         if (FORMS[pick]) this.setForm(pick, true);
         this.annoyance = 0.45;
@@ -826,6 +907,7 @@
     }
 
     _applyMoodChars(moodKey, durationSec) {
+      if (performance.now() / 1000 < this._unifiedUntil) return;
       const pool = MOOD_POOLS[moodKey] || MOOD_POOLS.normal;
       const chars = Array.from(pool);
       if (!chars.length) return;
@@ -860,10 +942,11 @@
         const dy = (w1 + w2) * amp;
         const g = this.glyphs[i];
         if (g.faceRole) continue;
-        g.baseTx = base.x + dx;
-        g.baseTy = base.y + dy;
-        g.tx = g.baseTx;
-        g.ty = g.baseTy;
+        const snapped = this._snapLocal(base.x + dx, base.y + dy);
+        g.baseTx = snapped.x;
+        g.baseTy = snapped.y;
+        g.tx = snapped.x;
+        g.ty = snapped.y;
       }
       const iHead = n - 1;
       const hb = d.snakeBase[iHead];
@@ -874,9 +957,11 @@
       const dyh = (w1h + w2h) * amp;
       const hx = hb.x + dxh;
       const hy = hb.y + dyh;
+      const eL = this._snapLocal(hx - S * 0.018, hy - S * 0.024);
+      const eR = this._snapLocal(hx + S * 0.018, hy - S * 0.02);
       d.eyes = [
-        { x: hx - S * 0.018, y: hy - S * 0.024 },
-        { x: hx + S * 0.018, y: hy - S * 0.02 },
+        { x: eL.x, y: eL.y },
+        { x: eR.x, y: eR.y },
       ];
     }
 
@@ -885,6 +970,131 @@
         if (this.glyphs[m.i]) this.glyphs[m.i].char = m.saved;
       }
       this._moodSwap = [];
+    }
+
+    _restoreUnifiedChars() {
+      for (const m of this._unifiedSwap) {
+        if (this.glyphs[m.i]) this.glyphs[m.i].char = m.saved;
+      }
+      this._unifiedSwap = [];
+    }
+
+    /**
+     * 全体字冲击：除眉眼外全部暂时显示同一字（用于重要提示）
+     * @param {string} ch 单字
+     * @param {number} durationSec
+     */
+    flashUnifiedChar(ch, durationSec) {
+      const c = (ch && String(ch).trim()[0]) || "注";
+      this._restoreUnifiedChars();
+      this._restoreMoodChars();
+      const until = performance.now() / 1000 + (durationSec || 1.6);
+      this._unifiedUntil = until;
+      for (let i = 0; i < this.glyphs.length; i++) {
+        const g = this.glyphs[i];
+        if (g.faceRole) continue;
+        this._unifiedSwap.push({ i, saved: g.char });
+        g.char = c;
+      }
+      this._rumbleAmp = Math.max(this._rumbleAmp || 0, 1);
+      this._glyphFlash = 1;
+      this.pulse(this.pos.x, this.pos.y);
+    }
+
+    /** 少量外圈字换成提示字（非全体冲击） */
+    _hintEdgeChars(text, durationSec, maxReplace) {
+      const arr = Array.from(String(text || "").replace(/\s/g, "")).filter(Boolean);
+      if (!arr.length) return;
+      this._restoreMoodChars();
+      const n = Math.min(maxReplace || 12, this.glyphs.length);
+      const pool = this.glyphs
+        .map((g, i) => ({ i, g }))
+        .filter((x) => !x.g.faceRole && x.g.edge > 0.38)
+        .sort(() => Math.random() - 0.5)
+        .slice(0, n);
+      this._moodSwap = pool.map(({ i }, j) => {
+        const saved = this.glyphs[i].char;
+        this.glyphs[i].char = arr[j % arr.length];
+        return { i, saved };
+      });
+      this._moodUntil = performance.now() / 1000 + (durationSec || 1.4);
+    }
+
+    /** 解析吞噬的字符串：日程关键词 + 单字 + 形态偏好 */
+    digestText(text) {
+      const s = String(text || "");
+      if (!s.trim()) return null;
+      let hitKind = null;
+      const scores = { todo: 0, done: 0, delay: 0 };
+      for (const rule of DIGEST_RULES) {
+        for (const k of rule.keys) {
+          if (s.includes(k)) scores[rule.kind] += 2;
+        }
+      }
+      for (const ch of Array.from(s)) {
+        const k = CHAR_DIGEST_HINT[ch];
+        if (k) scores[k] += 1;
+      }
+      let best = 0;
+      for (const kind of ["todo", "done", "delay"]) {
+        if (scores[kind] > best) {
+          best = scores[kind];
+          hitKind = kind;
+        }
+      }
+      if (best === 0) hitKind = null;
+
+      if (hitKind) this._onDigestKind(hitKind);
+
+      for (const ch of Array.from(s)) {
+        const formKey = CHAR_FORM_BIAS[ch];
+        if (formKey && FORMS[formKey]) {
+          this.formDigestBias[formKey] = (this.formDigestBias[formKey] || 0) + 0.55;
+        }
+      }
+      return hitKind;
+    }
+
+    _onDigestKind(kind) {
+      if (kind === "done") {
+        this.setExpression("happy");
+        this._applyMoodChars("happy", 2);
+        this.targetScale = 1.06;
+        setTimeout(() => {
+          this.targetScale = 1;
+        }, 500);
+        this._rumbleAmp = Math.max(this._rumbleAmp || 0, 0.45);
+        this._glyphFlash = 1;
+      } else if (kind === "delay") {
+        this.setExpression("annoyed");
+        this._applyMoodChars("annoyed", 2.2);
+        this._rumbleAmp = Math.max(this._rumbleAmp || 0, 1);
+        this._glyphFlash = 1;
+      } else if (kind === "todo") {
+        this.setExpression("surprised");
+        this._hintEdgeChars("待办", 1.6, 14);
+        this._rumbleAmp = Math.max(this._rumbleAmp || 0, 0.35);
+      }
+      this.pulse(this.pos.x, this.pos.y);
+    }
+
+    /** 根据饮食偏好随机取一形（idle 自动换形或外部调用） */
+    pickBiasedForm(excludeKey) {
+      const keys = FORM_ORDER.filter((k) => k !== excludeKey && FORMS[k]);
+      if (!keys.length) return FORM_ORDER[0];
+      let w = [];
+      let sum = 0;
+      for (const k of keys) {
+        const wi = 1 + (this.formDigestBias[k] || 0) * 1.8;
+        w.push({ k, wi });
+        sum += wi;
+      }
+      let r = Math.random() * sum;
+      for (const { k, wi } of w) {
+        r -= wi;
+        if (r <= 0) return k;
+      }
+      return keys[Math.floor(Math.random() * keys.length)];
     }
 
     _pickCinnabar() {
@@ -921,15 +1131,25 @@
       const next = EXPRESSIONS[name] ? name : "normal";
       this.expression = next;
       const t = performance.now() / 1000;
-      if (t >= this._moodUntil && (next === "happy" || next === "wink" || next === "shy")) {
+      if (
+        t >= this._moodUntil &&
+        t >= this._unifiedUntil &&
+        (next === "happy" || next === "wink" || next === "shy")
+      ) {
         this._applyMoodChars(next, 1.1);
       }
     }
 
     addPoolChars(chars) {
+      const list = [];
       for (const c of chars) {
-        if (c && c.trim() && c !== "\n") this.eatenChars.push(c);
+        if (c && c.trim() && c !== "\n") {
+          this.eatenChars.push(c);
+          list.push(c);
+        }
       }
+      const joined = list.join("");
+      if (joined) this.digestText(joined);
       // 随机把一部分现有粒子换成新字，让"吃进去"看得见
       const replace = Math.min(this.glyphs.length, chars.length * 2);
       const indices = [];
@@ -999,6 +1219,8 @@
       // 抖擞：瞬时速度扰动 + 全体粒子获得随机冲量
       this.vel.x += rand(-200, 200);
       this.vel.y += rand(-100, 100);
+      this._rumbleAmp = Math.max(this._rumbleAmp || 0, 1.15);
+      this._glyphFlash = 1;
       for (const g of this.glyphs) {
         g.vx += rand(-600, 600);
         g.vy += rand(-600, 600);
@@ -1112,6 +1334,14 @@
 
       this.annoyance = Math.max(0, this.annoyance - 0.22 * dt);
       if (t >= this._moodUntil && this._moodSwap.length) this._restoreMoodChars();
+      if (t >= this._unifiedUntil && this._unifiedSwap.length) this._restoreUnifiedChars();
+
+      for (const k of Object.keys(this.formDigestBias)) {
+        this.formDigestBias[k] -= this.formDigestBiasDecay * dt;
+        if (this.formDigestBias[k] <= 0.02) delete this.formDigestBias[k];
+      }
+      this._rumbleAmp = Math.max(0, (this._rumbleAmp || 0) - 1.8 * dt);
+      this._glyphFlash = Math.max(0, (this._glyphFlash || 0) - 2.2 * dt);
 
       if (this.form === "snake") this._updateSnakeTargets(t);
       if (this.faceLayerMode) this._syncFaceGlyphTargets(t);
@@ -1125,6 +1355,8 @@
       const sin = Math.sin(rot);
       const springK = this.mode === "feeding" ? 60 : 28;
       const damping = this.mode === "feeding" ? 7 : 5.2;
+      const rumble = (this._rumbleAmp || 0) * this.gridCell * 0.22;
+      const flash = this._glyphFlash || 0;
 
       const eyeClearR = this.size * 0.08;
       const useEyeClear = !this.faceLayerMode;
@@ -1148,10 +1380,12 @@
         const ty = g.ty;
         const wx = bx + (tx * cos - ty * sin);
         const wy = by + (tx * sin + ty * cos);
-        // 轻微呼吸扰动（按深度参数差异化）
-        const bw = Math.sin(t * 2 + g.depth * 6) * 1.2;
-        let ax = (wx - g.x) * springK - g.vx * damping + bw;
-        let ay = (wy - g.y) * springK - g.vy * damping;
+        // 轻微呼吸扰动（按深度参数差异化）；规整格下减弱
+        const bw = Math.sin(t * 2 + g.depth * 6) * (this.gridSnapping ? 0.35 : 1.2);
+        const rx = rumble ? (Math.sin(t * 31 + g.depth * 17) * rumble) : 0;
+        const ry = rumble ? (Math.cos(t * 29 + g.depth * 13) * rumble) : 0;
+        let ax = (wx + rx - g.x) * springK - g.vx * damping + bw;
+        let ay = (wy + ry - g.y) * springK - g.vy * damping;
         // 眼睛"清场"：离眼太近的字会被温柔推开
         if (eyeWorld) {
           for (const e of eyeWorld) {
@@ -1282,6 +1516,7 @@
       ctx.save();
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
+      const flash = this._glyphFlash || 0;
 
       const drawGlyph = (g, opts) => {
         const edge = g.edge;
@@ -1294,7 +1529,10 @@
         const baseSize = g.size * this.scale * (opts.sizeMul || 1);
         const size = baseSize * roleMul;
         const alpha =
-          (opts.alphaMul != null ? opts.alphaMul : 1) * lerp(0.94, 0.42, edge) * g.alpha;
+          (opts.alphaMul != null ? opts.alphaMul : 1) *
+          (1 + flash * (opts.flashWeight != null ? opts.flashWeight : 0.5)) *
+          lerp(0.94, 0.42, edge) *
+          g.alpha;
         ctx.font = `${size.toFixed(1)}px "LXGW WenKai", serif`;
         if (opts.color) {
           const c = opts.color;
@@ -1344,7 +1582,7 @@
       // 主躯体字
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
-        drawGlyph(g, {});
+        drawGlyph(g, { flashWeight: 0.55 });
       }
 
       // 朱砂点缀（略偏电粉，仍克制）
@@ -1358,6 +1596,7 @@
             color: `rgba(255, 160, 190, ${0.72 * g.alpha})`,
             shadow: "rgba(255, 120, 180, 0.35)",
             shadowBlur: 8,
+            flashWeight: 0.4,
           });
         }
       }
@@ -1373,6 +1612,7 @@
           color: eyeHex,
           shadow: "rgba(100, 160, 255, 0.45)",
           shadowBlur: 10,
+          flashWeight: 0.22,
         });
       }
 
@@ -1401,6 +1641,36 @@
       }
     }
 
+    /**
+     * 接入 AI / 日程建议的规整文本块（约定格式，便于日后接 API）
+     * 躯体:一行字 → 贴外圈；冲击:X → 全字冲击；整段仍参与 digest
+     */
+    ingestAiSuggestionBlock(raw) {
+      const lines = String(raw || "")
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+      let bodyLine = "";
+      for (const line of lines) {
+        const u = line.match(/^(冲击|全字|FLASH)[:：]\s*(.)$/i);
+        if (u && u[2]) {
+          this.flashUnifiedChar(u[2], 1.8);
+          continue;
+        }
+        const b = line.match(/^(躯体|BODY)[:：]\s*(.+)$/i);
+        if (b && b[2]) {
+          this.attachBodyChars(b[2].trim().slice(0, 28));
+          bodyLine = b[2];
+          continue;
+        }
+        if (!bodyLine && line.length <= 32 && !/[:：]/.test(line)) {
+          this.attachBodyChars(line.slice(0, 28));
+          bodyLine = line;
+        }
+      }
+      this.digestText(lines.join(""));
+    }
+
     destroy() {
       cancelAnimationFrame(this._raf);
       window.removeEventListener("resize", this._resize);
@@ -1413,5 +1683,8 @@
     FORMS,
     FORM_ORDER,
     DEFAULT_POOL,
+    DIGEST_RULES,
+    CHAR_DIGEST_HINT,
+    CHAR_FORM_BIAS,
   };
 })();

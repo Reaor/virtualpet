@@ -62,6 +62,35 @@
       <button type="button" class="import-btn" id="bodyImportBtn">写入</button>
     </section>
 
+    <section class="ai-panel" aria-label="AI 建议接入">
+      <div class="panel-title">
+        <span class="dot"></span>
+        <span>AI 建议 · 规整文本</span>
+      </div>
+      <p class="ai-hint">
+        每行一条；可用 <code>躯体：</code> 或 <code>BODY:</code> 指定贴到躯体的字，<code>冲击：</code> 单字全屏冲击。整段含「未完成」「完成」「拖延」等会触发反馈。Ctrl+Enter 应用。
+      </p>
+      <textarea
+        id="aiSuggest"
+        class="ai-textarea"
+        rows="5"
+        maxlength="800"
+        spellcheck="false"
+        placeholder="躯体：晨会 9:00&#10;今日有一件事未完成，建议先处理。&#10;冲击：急"
+      ></textarea>
+      <div class="ai-row">
+        <input
+          type="text"
+          id="aiFlashChar"
+          class="import-input ai-flash-input"
+          maxlength="1"
+          placeholder="快捷冲击字（单字）"
+          aria-label="快捷冲击字"
+        />
+        <button type="button" class="import-btn" id="aiApplyBtn">应用</button>
+      </div>
+    </section>
+
     <section class="feed-panel" aria-label="可被吞食的诗笺">
       <div class="panel-title">
         <span class="dot"></span>
@@ -93,8 +122,18 @@
         </div>
       </article>
 
+      <article class="card tags" data-feedable>
+        <div class="card-meta">日程试字 · 可喂食</div>
+        <div class="tag-wrap">
+          <span class="tag">未完成</span>
+          <span class="tag">已完成</span>
+          <span class="tag">拖延</span>
+          <span class="tag">待办</span>
+        </div>
+      </article>
+
       <div class="panel-footnote">
-        点击诗笺中的任意字可喂给字灵 · 双击字灵可让它自行觅食 · 上方输入可贴字到躯体（为日后日程预留）
+        点击诗笺中的任意字可喂给字灵 · 双击字灵可让它自行觅食 · 躯体输入与 AI 区见上
       </div>
     </section>
 

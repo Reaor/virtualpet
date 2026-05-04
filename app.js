@@ -193,7 +193,7 @@
     el.classList.add("eaten");
     // 从画布内 (fromX,fromY) 飞一个字进去；如果字来源不在画布内，flyingGlyphs 用画布坐标系，所以即便在画布上方也能被绘制
     pet.flyInChar(ch, fromX, fromY);
-    pet.addPoolChars([ch]);
+    pet.addPoolChars(Array.from(ch));
     bumpPouch();
   }
 
@@ -311,8 +311,11 @@
   setInterval(() => {
     if (pet.mode !== "idle" || pet.dragging) return;
     if (Math.random() < 0.18) {
-      formIdx = (formIdx + 1) % FORM_ORDER.length;
-      setForm(FORM_ORDER[formIdx], false);
+      const cur = FORM_ORDER[formIdx];
+      const nextKey = pet.pickBiasedForm(cur);
+      formIdx = FORM_ORDER.indexOf(nextKey);
+      if (formIdx < 0) formIdx = 0;
+      setForm(nextKey, false);
       // 不打招呼，静静地变
       formLabel.style.opacity = 0;
       setTimeout(() => (formLabel.style.opacity = 1), 400);
@@ -327,10 +330,35 @@
     else pet.setExpression("normal");
   }, 3000);
 
+  const aiSuggest = document.getElementById("aiSuggest");
+  const aiApplyBtn = document.getElementById("aiApplyBtn");
+  const aiFlashChar = document.getElementById("aiFlashChar");
+
+  function applyAiBlock() {
+    const raw = (aiSuggest && aiSuggest.value) || "";
+    pet.ingestAiSuggestionBlock(raw);
+    const ch = (aiFlashChar && aiFlashChar.value && aiFlashChar.value.trim()[0]) || "";
+    if (ch) {
+      pet.flashUnifiedChar(ch, 1.7);
+      aiFlashChar.value = "";
+    }
+    toast("已解析建议 · 躯体/冲击/日程词");
+  }
+  if (aiApplyBtn) aiApplyBtn.addEventListener("click", applyAiBlock);
+  if (aiSuggest) {
+    aiSuggest.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        applyAiBlock();
+      }
+    });
+  }
+
   // ---------- 躯体字导入（日程等可先贴在外圈） ----------
   function applyBodyImport() {
     const raw = (bodyImport && bodyImport.value) || "";
     pet.attachBodyChars(raw.trim().slice(0, 24));
+    pet.digestText(raw.trim());
     toast("已写入躯体 · 外圈字");
   }
   if (bodyImportBtn) bodyImportBtn.addEventListener("click", applyBodyImport);
@@ -345,6 +373,6 @@
 
   // ---------- 说明 ----------
   document.getElementById("infoBtn").addEventListener("click", () => {
-    toast("拖 · 戳身边烦它 · 双击觅食 · 诗字投喂");
+    toast("拖 · 戳身边 · 双击觅食 · Ctrl+Enter 解析 AI 区");
   });
 })();
