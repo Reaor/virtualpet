@@ -20,22 +20,26 @@
     buildStamp.textContent = "build " + buildMeta.content;
   }
 
-  let formIdx = 0;
   const pet = new Pet(canvas, {
     particleCount: 150,
-    onFormChange(key) {
-      const i = FORM_ORDER.indexOf(key);
-      formIdx = i >= 0 ? i : 0;
-    },
+    onFormChange() {},
   });
   window._pet = pet; // 便于调试
 
   function setForm(key, announce = true) {
     pet.setForm(key);
-    formIdx = FORM_ORDER.indexOf(key);
-    if (formIdx < 0) formIdx = 0;
     formLabel.textContent = FORMS[key].label;
     if (announce) toast("换形 · " + FORMS[key].label);
+  }
+
+  function morphToForm(key, announce = true) {
+    if (!FORMS[key]) return;
+    if (pet.gridMarch && pet.gridSnapping && pet.startMorphTo(key)) {
+      formLabel.textContent = FORMS[key].label;
+      if (announce) toast("换形中 · " + FORMS[key].label);
+      return;
+    }
+    setForm(key, announce);
   }
   // 支持 URL ?form=cat 直接显示某形态（用于预览/调试）
   const initialForm = new URL(location.href).searchParams.get("form");
@@ -141,9 +145,11 @@
       const action = btn.dataset.action;
       if (action === "morph") {
         pet.abortFeeding();
-        formIdx = (formIdx + 1) % FORM_ORDER.length;
-        const key = FORM_ORDER[formIdx];
-        setForm(key);
+        const cur = pet.form;
+        const idx = FORM_ORDER.indexOf(cur);
+        const nextIdx = ((idx >= 0 ? idx : 0) + 1) % FORM_ORDER.length;
+        const key = FORM_ORDER[nextIdx];
+        morphToForm(key);
       } else if (action === "feed") {
         triggerFeeding();
       } else if (action === "sleep") {
@@ -344,14 +350,15 @@
 
   // ---------- 自动换形 / 偶发表情 ----------
   setInterval(() => {
-    if (pet.mode !== "idle" || pet.dragging) return;
+    if (pet.mode !== "idle" || pet.dragging || pet.morphGlyphToTarget) return;
     if (Math.random() < 0.18) {
-      const cur = FORM_ORDER[formIdx];
+      const cur = pet.form;
       const nextKey = pet.pickBiasedForm(cur);
-      formIdx = FORM_ORDER.indexOf(nextKey);
-      if (formIdx < 0) formIdx = 0;
-      setForm(nextKey, false);
-      // 不打招呼，静静地变
+      if (pet.gridMarch && pet.gridSnapping && pet.startMorphTo(nextKey)) {
+        formLabel.textContent = FORMS[nextKey].label;
+      } else {
+        setForm(nextKey, false);
+      }
       formLabel.style.opacity = 0;
       setTimeout(() => (formLabel.style.opacity = 1), 400);
     }

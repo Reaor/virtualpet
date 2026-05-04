@@ -641,6 +641,19 @@
       /** 换形后短促「落格」：弹簧略紧，字像落到格点上 */
       this._layoutSettle = 0;
 
+      /** 每字独立「巡逻」相位：体内相对位置持续缓慢变化 */
+      this.internalMotion = opts.internalMotion !== false;
+      this._patrolAmp = opts.patrolAmp != null ? opts.patrolAmp : 1;
+
+      /** 渐进换形：逐字走向新形态目标，速度与日常格移同量级 */
+      this.morphToKey = null;
+      this.morphFinalMeta = null;
+      this.morphGlyphToTarget = null;
+      this.morphApplyQueue = null;
+      this.morphApplyIdx = 0;
+      this.morphStepAcc = 0;
+      this._morphQueued = null;
+
       /** 浅色画布（与 App 式浅 UI 搭配） */
       this.lightCanvas = opts.lightCanvas !== false;
 
@@ -672,7 +685,10 @@
         this.pos.y = this.center.y;
       }
       // 重建当前形态（尺寸变了）
-      if (this.formData) this.setForm(this.form, true);
+      if (this.formData) {
+        if (this.morphGlyphToTarget) this._cancelMorph(false);
+        this.setForm(this.form, true);
+      }
     }
 
     _randomChar() {
@@ -702,14 +718,16 @@
           // 外圈字略模糊：给粒子一个"深度"参数
           depth: Math.random(),
           edge: 0.5,
-          /** 字层：null | "eyeL" | "eyeR" | "brow" */
-          faceRole: null,
+          /** 巡逻相位（每字不同） */
+          patrolSeed: Math.random() * TAU,
+          patrolAmpMul: 0.85 + Math.random() * 0.3,
         });
       }
     }
 
-    setForm(name, silent) {
+    setForm(name, silent, noEmitOnFormChange) {
       if (!FORMS[name]) return;
+      if (this.morphGlyphToTarget) this._cancelMorph(false);
       this.form = name;
       this.formStartTime = performance.now();
       const S = this.size;
@@ -759,6 +777,235 @@
           g.vy = 0;
         }
       }
+      if (typeof this.onFormChange === "function" && !noEmitOnFormChange) {
+        try {
+          this.onFormChange(this.form);
+        } catch (_) {}
+      }
+    }
+
+    /**
+     * 与 _resolveUniqueLocalGrid 相同逻辑，作用在传入的「伪 glyph」数组上（用于换形目标格计算）。
+     */
+    _resolveUniqueLocalGridFor(list) {
+      if (!this.gridSnapping || !list || !list.length) return;
+      const step = this.gridCell;
+      const occupied = new Set();
+      const keyOf = (gx, gy) => `${gx},${gy}`;
+      const toCell = (x, y) => ({
+        gx: Math.round(x / step),
+        gy: Math.round(y / step),
+      });
+      const toLocal = (gx, gy) => ({ x: gx * step, y: gy * step });
+
+      for (const g of list) {
+        if (!g.faceRole) continue;
+        const { gx, gy } = toCell(g.tx, g.ty);
+        occupied.add(keyOf(gx, gy));
+      }
+
+      const spiral = (gx, gy) => {
+        if (!occupied.has(keyOf(gx, gy))) return { nx: gx, ny: gy, k: keyOf(gx, gy) };
+        for (let r = 1; r < 28; r++) {
+          for (let dx = -r; dx <= r; dx++) {
+            for (let dy = -r; dy <= r; dy++) {
+              if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+              const nx = gx + dx;
+              const ny = gy + dy;
+              const k = keyOf(nx, ny);
+              if (!occupied.has(k)) return { nx, ny, k };
+            }
+          }
+        }
+        return null;
+      };
+
+      for (const g of list) {
+        if (g.faceRole) continue;
+        let { gx, gy } = toCell(g.tx, g.ty);
+        let k = keyOf(gx, gy);
+        if (!occupied.has(k)) {
+          occupied.add(k);
+          const p = toLocal(gx, gy);
+          g.tx = p.x;
+          g.ty = p.y;
+          g.baseTx = p.x;
+          g.baseTy = p.y;
+          continue;
+        }
+        const sp = spiral(gx, gy);
+        if (sp) {
+          occupied.add(sp.k);
+          const p = toLocal(sp.nx, sp.ny);
+          g.tx = p.x;
+          g.ty = p.y;
+          g.baseTx = p.x;
+          g.baseTy = p.y;
+        }
+      }
+    }
+
+    /** 计算某形态下每字应落到的格坐标（不改变当前躯体） */
+    _computeMorphGridTargets(name) {
+      if (!FORMS[name]) return null;
+      const S = this.size;
+      const data = FORMS[name].build(this.particleCount, S);
+      const order = data.ordered
+        ? data.targets
+        : hashShuffle(data.targets, name.charCodeAt(0) + this.particleCount);
+
+      let cx = 0, cy = 0;
+      for (const t of order) { cx += t.x; cy += t.y; }
+      cx /= order.length;
+      cy /= order.length;
+      let maxD = 1;
+      for (const t of order) {
+        const d = Math.hypot(t.x - cx, t.y - cy);
+        if (d > maxD) maxD = d;
+      }
+
+      const step = this.gridCell;
+      const snap = (v) => Math.round(v / step) * step;
+      const list = [];
+      for (let i = 0; i < this.glyphs.length; i++) {
+        const t = order[i] || order[i % order.length];
+        const d = Math.hypot(t.x - cx, t.y - cy) / maxD;
+        list.push({
+          tx: snap(t.x),
+          ty: snap(t.y),
+          baseTx: snap(t.x),
+          baseTy: snap(t.y),
+          faceRole: null,
+          edge: d,
+        });
+      }
+
+      if (this.faceLayerMode && data.eyes && data.eyes.length >= 2) {
+        const [eL, eR] = data.eyes;
+        const dist = (g, ex, ey) => Math.hypot(g.tx - ex, g.ty - ey);
+        const pickNear = (ex, ey, exclude) => {
+          let best = -1;
+          let bestD = Infinity;
+          for (let k = 0; k < list.length; k++) {
+            if (exclude.has(k)) continue;
+            const d = dist(list[k], ex, ey);
+            if (d < bestD) {
+              bestD = d;
+              best = k;
+            }
+          }
+          return best;
+        };
+        const used = new Set();
+        const iL = pickNear(eL.x, eL.y, used);
+        if (iL >= 0) {
+          used.add(iL);
+          list[iL].faceRole = "eyeL";
+        }
+        const iR = pickNear(eR.x, eR.y, used);
+        if (iR >= 0) {
+          used.add(iR);
+          list[iR].faceRole = "eyeR";
+        }
+        const mx = (eL.x + eR.x) * 0.5;
+        const my = (eL.y + eR.y) * 0.5 - S * 0.035;
+        const iB = pickNear(mx, my, used);
+        if (iB >= 0) list[iB].faceRole = "brow";
+        for (const g of list) {
+          if (!g.faceRole) continue;
+          const ex = g.faceRole === "eyeL" ? eL.x : g.faceRole === "eyeR" ? eR.x : mx;
+          const ey = g.faceRole === "eyeL" ? eL.y : g.faceRole === "eyeR" ? eR.y : my;
+          g.tx = snap(ex);
+          g.ty = snap(ey);
+          g.baseTx = g.tx;
+          g.baseTy = g.ty;
+        }
+      }
+
+      this._resolveUniqueLocalGridFor(list);
+
+      return {
+        key: name,
+        data,
+        targets: list.map((g) => ({
+          gx: Math.round(g.tx / step),
+          gy: Math.round(g.ty / step),
+          edge: g.edge,
+          faceRole: g.faceRole,
+        })),
+      };
+    }
+
+    _cancelMorph(emit) {
+      this.morphToKey = null;
+      this.morphFinalMeta = null;
+      this.morphGlyphToTarget = null;
+      this.morphApplyQueue = null;
+      this.morphApplyIdx = 0;
+      this.morphStepAcc = 0;
+      this._morphQueued = null;
+      if (emit && typeof this.onFormChange === "function") {
+        try {
+          this.onFormChange(this.form);
+        } catch (_) {}
+      }
+    }
+
+    /**
+     * 渐进换形：每字沿格走向新目标，速度与 idle 巡逻一致；结束后再应用形态元数据。
+     */
+    startMorphTo(name) {
+      if (!FORMS[name] || name === this.form) return false;
+      if (this.mode === "feeding") this.abortFeeding();
+      if (this.morphGlyphToTarget) this._cancelMorph(false);
+      const pack = this._computeMorphGridTargets(name);
+      if (!pack) return false;
+      this.morphToKey = name;
+      this.morphFinalMeta = { data: pack.data, key: name };
+      this.morphGlyphToTarget = pack.targets;
+      this.morphApplyQueue = null;
+      this.morphApplyIdx = 0;
+      this.morphStepAcc = 0;
+      return true;
+    }
+
+    _finishMorph() {
+      const meta = this.morphFinalMeta;
+      const key = meta && meta.key;
+      const data = meta && meta.data;
+      const targets = this.morphGlyphToTarget;
+      if (!key || !FORMS[key] || !data || !targets) {
+        this._cancelMorph(true);
+        return;
+      }
+
+      const step = this.gridCell;
+      this.form = key;
+      this.formStartTime = performance.now();
+      data.leftEyeSize = this.size * 0.05 * (data.eyeSize || 1.4);
+      this.formData = data;
+      this._cinnabarIdx = null;
+      this._layoutSettle = 0.35;
+
+      for (let i = 0; i < this.glyphs.length && i < targets.length; i++) {
+        const g = this.glyphs[i];
+        const t = targets[i];
+        g.tx = t.gx * step;
+        g.ty = t.gy * step;
+        g.baseTx = g.tx;
+        g.baseTy = g.ty;
+        g.edge = t.edge;
+        g.faceRole = t.faceRole || null;
+      }
+
+      this.morphGlyphToTarget = null;
+      this.morphToKey = null;
+      this.morphFinalMeta = null;
+      this.morphApplyQueue = null;
+      this.morphApplyIdx = 0;
+      this.morphStepAcc = 0;
+
+      this._applyGridTypography();
       if (typeof this.onFormChange === "function") {
         try {
           this.onFormChange(this.form);
@@ -1306,8 +1553,11 @@
     }
     dragTo(x, y) {
       if (!this.dragging) return;
-      this.pos.x = x + this.dragOffset.x;
-      this.pos.y = y + this.dragOffset.y;
+      const pad = this.size * 0.42;
+      const nx = clamp(x + this.dragOffset.x, pad, this.width - pad);
+      const ny = clamp(y + this.dragOffset.y, pad, this.height - pad);
+      this.pos.x = nx;
+      this.pos.y = ny;
     }
     endDrag() {
       this.dragging = false;
@@ -1389,6 +1639,11 @@
       }
       this.pos.x += this.vel.x * dt;
       this.pos.y += this.vel.y * dt;
+      if (!this.dragging) {
+        const pad = this.size * 0.38;
+        this.pos.x = clamp(this.pos.x, pad, this.width - pad);
+        this.pos.y = clamp(this.pos.y, pad, this.height - pad);
+      }
 
       // 朝向：速度方向决定左右翻面 & 小角度倾斜
       if (Math.abs(this.vel.x) > 40) {
@@ -1443,7 +1698,8 @@
       if (this.gridMarch && this.gridSnapping) {
         const stepBudget = Math.max(1, Math.min(6, Math.round((this.gridMarchSpeed || 3) * dt * 14)));
 
-        for (const g of this.glyphs) {
+        for (let gi = 0; gi < this.glyphs.length; gi++) {
+          const g = this.glyphs[gi];
           if (g.mgx == null || g.mgy == null) {
             g.mgx = Math.round(g.x / cell);
             g.mgy = Math.round(g.y / cell);
@@ -1456,6 +1712,23 @@
           const tyl = g.ty;
           let wx = bx + (txl * cos - tyl * sin);
           let wy = by + (txl * sin + tyl * cos);
+
+          if (this.internalMotion && !g.faceRole) {
+            const pAmp =
+              cell *
+              0.13 *
+              (this._patrolAmp || 1) *
+              (g.patrolAmpMul || 1) *
+              (this.dragging ? 1.45 : 1);
+            const ph = g.patrolSeed || 0;
+            wx +=
+              Math.sin(t * 0.52 + ph * 2.1) * pAmp * 0.62 +
+              Math.sin(t * 0.29 + ph * 5.4) * pAmp * 0.38;
+            wy +=
+              Math.cos(t * 0.47 + ph * 3.7) * pAmp * 0.58 +
+              Math.cos(t * 0.33 + ph * 6.2) * pAmp * 0.35;
+          }
+
           if (waveAmp > 0.001) {
             const nx = wx * 0.017 + this._fluidPhase;
             const ny = wy * 0.015 - this._fluidPhase * 0.75;
@@ -1467,8 +1740,16 @@
           wx += rx;
           wy += ry;
 
-          const tgx = Math.round(wx / cell);
-          const tgy = Math.round(wy / cell);
+          let tgx;
+          let tgy;
+          const mT = this.morphGlyphToTarget && this.morphGlyphToTarget[gi];
+          if (mT) {
+            tgx = mT.gx;
+            tgy = mT.gy;
+          } else {
+            tgx = Math.round(wx / cell);
+            tgy = Math.round(wy / cell);
+          }
 
           let s = stepBudget;
           while (s-- > 0 && (g.mgx !== tgx || g.mgy !== tgy)) {
@@ -1494,24 +1775,21 @@
           g.vx = 0;
           g.vy = 0;
 
-          if (eyeWorld && !g.faceRole) {
-            for (const e of eyeWorld) {
-              const ddx = g.x - e.x;
-              const ddy = g.y - e.y;
-              const d = Math.hypot(ddx, ddy);
-              if (d < eyeClearR && d > 0.01) {
-                if (Math.abs(ddx) >= Math.abs(ddy)) {
-                  g.mgx += ddx > 0 ? 1 : -1;
-                } else {
-                  g.mgy += ddy > 0 ? 1 : -1;
-                }
-                g.x = g.mgx * cell;
-                g.y = g.mgy * cell;
-              }
+          g.rot = lerp(g.rot, g.targetRot, this.gridUnity ? 0.18 : 0.08);
+        }
+
+        if (this.morphGlyphToTarget) {
+          let all = true;
+          const mt = this.morphGlyphToTarget;
+          for (let i = 0; i < this.glyphs.length && i < mt.length; i++) {
+            const g = this.glyphs[i];
+            const tt = mt[i];
+            if (g.mgx !== tt.gx || g.mgy !== tt.gy) {
+              all = false;
+              break;
             }
           }
-
-          g.rot = lerp(g.rot, g.targetRot, this.gridUnity ? 0.18 : 0.08);
+          if (all) this._finishMorph();
         }
       } else {
         const fMul = (this.fluidStrength || 0) * 0.001 + 1;
