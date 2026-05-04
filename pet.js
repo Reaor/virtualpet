@@ -649,6 +649,8 @@
 
       /** 隐形格：目标吸附到格点，字粒位移更齐整 */
       this.gridSnapping = opts.gridSnapping !== false;
+      /** 活字栅：统一字号阶梯、离散倾角、渲染像素对齐（偏排版艺术） */
+      this.gridUnity = opts.gridUnity !== false;
       this.gridCell = 12;
 
       /** 吞字后对形态的偏好（多字命中同一形会提高概率） */
@@ -660,6 +662,8 @@
       /** 格点抖动 / 闪烁强度 0..1 */
       this._rumbleAmp = 0;
       this._glyphFlash = 0;
+      /** 换形后短促「落格」：弹簧略紧，字像落到格点上 */
+      this._layoutSettle = 0;
 
       this._resize = this._resize.bind(this);
       this._resize();
@@ -752,17 +756,47 @@
         this.glyphs[i].ty = t.y;
         this.glyphs[i].baseTx = t.x;
         this.glyphs[i].baseTy = t.y;
-        this.glyphs[i].targetRot = rand(-0.18, 0.18);
         // 边缘字更小更淡，中心字更大更实（水墨"浓淡干湿"）
         const d = Math.hypot(t.x - cx, t.y - cy) / maxD; // 0..1
         this.glyphs[i].edge = d;
         this.glyphs[i].faceRole = null;
       }
+      this._layoutSettle = 0.42;
       data.leftEyeSize = this.size * 0.05 * (data.eyeSize || 1.4);
       this.formData = data;
       this._cinnabarIdx = null; // 换形 → 重新挑朱砂字
       if (this.faceLayerMode) this._assignFaceGlyphs();
       if (this.gridSnapping) this._snapGlyphTargetsToGrid();
+      this._applyGridTypography();
+    }
+
+    /** 离散倾角（约 4° 一档）+ 统一字号阶梯，接近活字排版 */
+    _quantizeTargetRot(rad) {
+      const step = (4 * Math.PI) / 180;
+      return Math.round(rad / step) * step;
+    }
+
+    _applyGridTypography() {
+      if (!this.gridUnity) {
+        for (let i = 0; i < this.glyphs.length; i++) {
+          this.glyphs[i].targetRot = rand(-0.18, 0.18);
+        }
+        return;
+      }
+      const em = clamp(this.gridCell * 0.82, 11.5, 14.5);
+      for (const g of this.glyphs) {
+        if (g.faceRole === "brow") {
+          g.targetRot = this._quantizeTargetRot(rand(-0.06, 0.06));
+          g.size = em * 0.94;
+        } else if (g.faceRole === "eyeL" || g.faceRole === "eyeR") {
+          g.targetRot = this._quantizeTargetRot(rand(-0.04, 0.04));
+          g.size = em * 1.06;
+        } else {
+          const spread = lerp(0.02, 0.1, g.edge);
+          g.targetRot = this._quantizeTargetRot(rand(-spread, spread));
+          g.size = em * lerp(1.06, 0.9, g.edge);
+        }
+      }
     }
 
     /** 将局部目标 (tx,ty) 吸附到隐形格，躯体更齐 */
@@ -1342,6 +1376,7 @@
       }
       this._rumbleAmp = Math.max(0, (this._rumbleAmp || 0) - 1.8 * dt);
       this._glyphFlash = Math.max(0, (this._glyphFlash || 0) - 2.2 * dt);
+      this._layoutSettle = Math.max(0, (this._layoutSettle || 0) - dt * 1.1);
 
       if (this.form === "snake") this._updateSnakeTargets(t);
       if (this.faceLayerMode) this._syncFaceGlyphTargets(t);
@@ -1353,8 +1388,10 @@
       const flip = this.facingFlip;
       const cos = Math.cos(rot);
       const sin = Math.sin(rot);
-      const springK = this.mode === "feeding" ? 60 : 28;
-      const damping = this.mode === "feeding" ? 7 : 5.2;
+      const springK =
+        (this.mode === "feeding" ? 60 : 28) * (1 + (this._layoutSettle || 0) * 0.55);
+      const damping =
+        (this.mode === "feeding" ? 7 : 5.2) * (1 + (this._layoutSettle || 0) * 0.35);
       const rumble = (this._rumbleAmp || 0) * this.gridCell * 0.22;
       const flash = this._glyphFlash || 0;
 
@@ -1404,7 +1441,7 @@
         g.x += g.vx * dt;
         g.y += g.vy * dt;
         // 旋转轻微回归
-        g.rot = lerp(g.rot, g.targetRot, 0.08);
+        g.rot = lerp(g.rot, g.targetRot, this.gridUnity ? 0.14 : 0.08);
       }
 
       // 眼睛跟形态（保留坐标供调试；字脸模式不在画布上绘制眼）
@@ -1520,6 +1557,8 @@
 
       const drawGlyph = (g, opts) => {
         const edge = g.edge;
+        const rx = this.gridUnity ? Math.round(g.x) : g.x;
+        const ry = this.gridUnity ? Math.round(g.y) : g.y;
         const roleMul =
           g.faceRole === "brow"
             ? lerp(1.05, 0.78, edge)
@@ -1551,7 +1590,7 @@
           ctx.fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
         }
         ctx.save();
-        ctx.translate(g.x, g.y);
+        ctx.translate(rx, ry);
         ctx.rotate(g.rot);
         if (opts.shadow) {
           ctx.shadowColor = opts.shadow;
@@ -1572,7 +1611,9 @@
         ctx.fillStyle = `rgba(200, 220, 255, ${0.045 * (1 - g.edge)})`;
         ctx.font = `${size.toFixed(1)}px "LXGW WenKai", serif`;
         ctx.save();
-        ctx.translate(g.x, g.y);
+        const hx = this.gridUnity ? Math.round(g.x) : g.x;
+        const hy = this.gridUnity ? Math.round(g.y) : g.y;
+        ctx.translate(hx, hy);
         ctx.rotate(g.rot * 0.25);
         ctx.fillText(g.char, 0, 0);
         ctx.restore();
@@ -1623,7 +1664,9 @@
         ctx.fillStyle = `rgba(255, 180, 220, ${a * 0.9})`;
         ctx.shadowColor = "rgba(255, 140, 200, 0.4)";
         ctx.shadowBlur = 8;
-        ctx.fillText(f.char, f.x, f.y);
+        const fx = this.gridUnity ? Math.round(f.x) : f.x;
+        const fy = this.gridUnity ? Math.round(f.y) : f.y;
+        ctx.fillText(f.char, fx, fy);
       }
       ctx.restore();
     }

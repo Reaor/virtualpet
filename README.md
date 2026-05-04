@@ -1,13 +1,22 @@
 # 字灵 · Zì Líng
 
-> 一只由"字"组成的小生灵。
-> 水墨宣纸风，会呼吸、会变形、会吞字、会越来越像你。
+> 一只由「字」排成栅格、会呼吸变形的小生灵；日程词与 AI 建议可融入躯体。
 
 一个移动端友好的电子宠物模块。纯前端实现（HTML + CSS + JS，零依赖、零打包），
 可以通过 **WebView** 直接嵌入任何安卓 App（原生、Flutter、React Native、uni-app、Hybrid 皆可），
 也可以独立部署为网页。
 
 ## 如何查看效果
+
+### 在线演示（GitHub Pages）
+
+若仓库已启用 **GitHub Pages** 且 **Source** 选为 **GitHub Actions**（本仓库提供 `.github/workflows/pages.yml`，在 `main` 推送后自动部署），站点一般为：
+
+**https://reaor.github.io/virtualpet/**
+
+若打不开或仍是旧版：在 GitHub 打开 **Settings → Pages**，确认 **Build and deployment** 的 **Source** 为 **GitHub Actions**，并确认 **最新改动已合并到 `main`**（合并后等待 Actions 绿勾再刷新）。
+
+### 本地
 
 **最简单：**
 1. 用浏览器打开 `index.html` 即可（双击文件，或拖进 Chrome/Edge/Safari）
@@ -20,11 +29,17 @@
    ```
 2. 在电脑/手机浏览器打开 `http://<你的局域网 IP>:8765/index.html`
 
+### 活字栅（规整排版）
+
+字灵目标点吸附在隐形格上；`gridUnity` 开启时（默认）为 **统一字号阶梯 + 约 4° 一档的离散倾角 + 绘制像素对齐**，整体位移仍由弹簧完成，换形瞬间有短促「落格」收紧弹簧。可在 `new Pet(canvas, { gridUnity: false })` 关闭对比。
+
+排版气质上接近 **等宽字阵 / 活字盘**（与 FIGlet、cool-retro-term、各类 terminal ASCII art 的「格对齐」思路同向）；本项目仍是自研 Canvas 弹簧，未捆绑某一第三方排版库。
+
 ## 文件结构
 
 ```
 ├─ index.html     页面结构（可按需裁剪）
-├─ styles.css     宣纸、卡片、工具栏等样式
+├─ styles.css     夜雾界面、卡片、工具栏等样式
 ├─ pet.js         字灵本体（粒子物理、形态、渲染引擎）
 └─ app.js         应用层（交互、喂食、UI 集成）
 ```
