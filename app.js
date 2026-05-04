@@ -14,6 +14,11 @@
   const pouchCount = document.getElementById("pouchCount");
   const bodyImport = document.getElementById("bodyImport");
   const bodyImportBtn = document.getElementById("bodyImportBtn");
+  const buildStamp = document.getElementById("buildStamp");
+  const buildMeta = document.querySelector('meta[name="ziling-build"]');
+  if (buildStamp && buildMeta && buildMeta.content) {
+    buildStamp.textContent = "build " + buildMeta.content;
+  }
 
   const pet = new Pet(canvas, { particleCount: 140 });
   window._pet = pet; // 便于调试

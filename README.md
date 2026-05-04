@@ -100,7 +100,7 @@
 // Android 原生 Java 示例
 WebView webView = findViewById(R.id.pet_web_view);
 webView.getSettings().setJavaScriptEnabled(true);
-webView.setBackgroundColor(Color.TRANSPARENT); // 让宣纸底与宿主背景融合
+webView.setBackgroundColor(Color.TRANSPARENT); // 与宿主背景融合
 webView.loadUrl("file:///android_asset/pet/index.html");
 ```
 

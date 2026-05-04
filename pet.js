@@ -919,6 +919,7 @@
         this._applyMoodChars("annoyed", 1.8);
         this._rumbleAmp = Math.max(this._rumbleAmp || 0, 0.85);
         this._glyphFlash = Math.max(this._glyphFlash || 0, 0.6);
+        const alt = ["cloud", "star", "heart", "butterfly", "moon", "flower"];
         const pick = alt[Math.floor(Math.random() * alt.length)];
         if (FORMS[pick]) this.setForm(pick, true);
         this.annoyance = 0.45;
@@ -966,14 +967,18 @@
       const S = this.size;
       const n = this.glyphs.length;
       const phase = tSec * 2.35 + this.pos.x * 0.0009 + this.vel.x * 0.00015;
-      const amp = S * (0.026 + 0.014 * Math.sin(tSec * 0.85));
+      const travel = Math.sin(tSec * 2.8 - this.pos.y * 0.002);
+      const amp = S * (0.03 + 0.022 * Math.sin(tSec * 0.85) + 0.012 * travel);
       for (let i = 0; i < n; i++) {
         const base = d.snakeBase[i] || d.snakeBase[d.snakeBase.length - 1];
         const u = i / Math.max(1, n - 1);
         const w1 = Math.sin(u * Math.PI * 3 + phase);
         const w2 = Math.sin(u * Math.PI * 5 + phase * 0.55) * 0.38;
-        const dx = Math.cos(u * Math.PI * 2 + phase * 0.42) * S * 0.016;
-        const dy = (w1 + w2) * amp;
+        const w3 = Math.sin(u * Math.PI * 8 + tSec * 3.1) * 0.22 * travel;
+        const dx =
+          Math.cos(u * Math.PI * 2 + phase * 0.42) * S * 0.02 +
+          Math.sin(u * Math.PI * 6 + phase * 0.9) * S * 0.008;
+        const dy = (w1 + w2 + w3) * amp;
         const g = this.glyphs[i];
         if (g.faceRole) continue;
         const snapped = this._snapLocal(base.x + dx, base.y + dy);
@@ -987,8 +992,11 @@
       const ug = iHead / Math.max(1, n - 1);
       const w1h = Math.sin(ug * Math.PI * 3 + phase);
       const w2h = Math.sin(ug * Math.PI * 5 + phase * 0.55) * 0.38;
-      const dxh = Math.cos(ug * Math.PI * 2 + phase * 0.42) * S * 0.016;
-      const dyh = (w1h + w2h) * amp;
+      const w3h = Math.sin(ug * Math.PI * 8 + tSec * 3.1) * 0.22 * travel;
+      const dxh =
+        Math.cos(ug * Math.PI * 2 + phase * 0.42) * S * 0.02 +
+        Math.sin(ug * Math.PI * 6 + phase * 0.9) * S * 0.008;
+      const dyh = (w1h + w2h + w3h) * amp;
       const hx = hb.x + dxh;
       const hy = hb.y + dyh;
       const eL = this._snapLocal(hx - S * 0.018, hy - S * 0.024);
