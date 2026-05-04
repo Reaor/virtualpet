@@ -441,7 +441,7 @@
       this.center = { x: 0, y: 0 };
       this.size = 320; // 身体参考尺寸 S
 
-      this.particleCount = opts.particleCount || 140;
+      this.particleCount = opts.particleCount || 160;
       this.pool = (opts.pool || DEFAULT_POOL).slice();
       this.eatenChars = []; // 吞下的字，会混入 pool
 
@@ -541,6 +541,7 @@
           targetRot: 0,
           // 外圈字略模糊：给粒子一个"深度"参数
           depth: Math.random(),
+          edge: 0.5,
         });
       }
     }
@@ -551,18 +552,60 @@
       this.formStartTime = performance.now();
       const S = this.size;
       const data = FORMS[name].build(this.particleCount, S);
-      // 稳定分配：给粒子分配目标点（顺序洗一下以避免总是同号粒子去同位置）
+      // 稳定分配
       const order = data.ordered
-        ? data.targets // 顺序形态（蛇）不洗牌
+        ? data.targets
         : hashShuffle(data.targets, name.charCodeAt(0) + this.particleCount);
+
+      // 估算目标点质心与最大半径，用来计算每个目标点的"深度"（0=中心、1=边缘）
+      let cx = 0, cy = 0;
+      for (const t of order) { cx += t.x; cy += t.y; }
+      cx /= order.length; cy /= order.length;
+      let maxD = 1;
+      for (const t of order) {
+        const d = Math.hypot(t.x - cx, t.y - cy);
+        if (d > maxD) maxD = d;
+      }
+
       for (let i = 0; i < this.glyphs.length; i++) {
         const t = order[i] || order[i % order.length];
         this.glyphs[i].tx = t.x;
         this.glyphs[i].ty = t.y;
-        this.glyphs[i].targetRot = rand(-0.15, 0.15);
+        this.glyphs[i].targetRot = rand(-0.18, 0.18);
+        // 边缘字更小更淡，中心字更大更实（水墨"浓淡干湿"）
+        const d = Math.hypot(t.x - cx, t.y - cy) / maxD; // 0..1
+        this.glyphs[i].edge = d;
       }
-      data.leftEyeSize = this.size * 0.065 * (data.eyeSize || 1.4);
+      data.leftEyeSize = this.size * 0.05 * (data.eyeSize || 1.4);
       this.formData = data;
+      this._cinnabarIdx = null; // 换形 → 重新挑朱砂字
+    }
+
+    _pickCinnabar() {
+      // 挑 2~3 个距离身体中心较近、但不在眼睛位置的字
+      const items = this.glyphs.map((g, i) => ({
+        i,
+        d: Math.hypot(g.tx, g.ty),
+      }));
+      items.sort((a, b) => a.d - b.d);
+      // 避开质心正中（让朱砂分布不挤在一处）
+      const picked = [];
+      for (const it of items) {
+        if (picked.length >= 3) break;
+        // 与已选过的字保持距离
+        let ok = true;
+        for (const pi of picked) {
+          const gA = this.glyphs[pi];
+          const gB = this.glyphs[it.i];
+          if (Math.hypot(gA.tx - gB.tx, gA.ty - gB.ty) < this.size * 0.08) {
+            ok = false;
+            break;
+          }
+        }
+        if (ok) picked.push(it.i);
+      }
+      this._cinnabarIdx = picked;
+      return picked;
     }
 
     setExpression(name) {
@@ -759,6 +802,19 @@
       const springK = this.mode === "feeding" ? 60 : 28;
       const damping = this.mode === "feeding" ? 7 : 5.2;
 
+      // 眼睛位置（世界坐标），用来给粒子让出空间
+      const eyeWorld = this.formData
+        ? this.formData.eyes.map((e) => {
+            const tx = e.x * flip;
+            const ty = e.y;
+            return {
+              x: bx + (tx * cos - ty * sin),
+              y: by + (tx * sin + ty * cos),
+            };
+          })
+        : null;
+      const eyeClearR = this.size * 0.08;
+
       for (const g of this.glyphs) {
         // 目标点做旋转+翻转后平移到世界坐标
         const tx = g.tx * flip;
@@ -767,8 +823,21 @@
         const wy = by + (tx * sin + ty * cos);
         // 轻微呼吸扰动（按深度参数差异化）
         const bw = Math.sin(t * 2 + g.depth * 6) * 1.2;
-        const ax = (wx - g.x) * springK - g.vx * damping + bw;
-        const ay = (wy - g.y) * springK - g.vy * damping;
+        let ax = (wx - g.x) * springK - g.vx * damping + bw;
+        let ay = (wy - g.y) * springK - g.vy * damping;
+        // 眼睛"清场"：离眼太近的字会被温柔推开
+        if (eyeWorld) {
+          for (const e of eyeWorld) {
+            const dx = g.x - e.x;
+            const dy = g.y - e.y;
+            const d = Math.hypot(dx, dy);
+            if (d < eyeClearR && d > 0.01) {
+              const push = ((eyeClearR - d) / eyeClearR) * 500;
+              ax += (dx / d) * push;
+              ay += (dy / d) * push;
+            }
+          }
+        }
         g.vx += ax * dt;
         g.vy += ay * dt;
         g.x += g.vx * dt;
@@ -861,26 +930,37 @@
       ctx.save();
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      // 两遍：先画"淡墨"背层，再画"浓墨"前层，做层次
-      // —— 背层（大而淡）——
+
+      // —— 第一遍：晕染层（大而极淡，mix blend multiply 让纸本吃墨）——
+      ctx.save();
+      ctx.globalCompositeOperation = "multiply";
       for (const g of this.glyphs) {
-        const depth = g.depth;
-        if (depth > 0.5) continue;
-        const size = g.size * 1.6 * this.scale;
-        ctx.fillStyle = `rgba(29, 26, 21, ${0.08 * g.alpha})`;
+        // 只给靠中心的字加晕染（水墨中心重），且随机 70% 才画（稀疏感）
+        if (g.edge > 0.55) continue;
+        if ((g.depth * 7) % 1 > 0.7) continue;
+        const size = g.size * 1.9 * this.scale;
+        ctx.fillStyle = `rgba(50, 38, 22, ${0.07 * (1 - g.edge)})`;
         ctx.font = `${size.toFixed(1)}px "LXGW WenKai", serif`;
         ctx.save();
         ctx.translate(g.x, g.y);
-        ctx.rotate(g.rot);
+        ctx.rotate(g.rot * 0.3);
         ctx.fillText(g.char, 0, 0);
         ctx.restore();
       }
-      // —— 前层（清晰）——
+      ctx.restore();
+
+      // —— 第二遍：主层 —— 按"深度/边缘"决定大小和浓淡 ——
       for (const g of this.glyphs) {
-        const size = g.size * this.scale;
-        const depth = g.depth;
-        const alpha = (0.6 + 0.4 * (1 - depth)) * g.alpha;
-        ctx.fillStyle = `rgba(29, 26, 21, ${alpha})`;
+        // 边缘字小、淡、随机飘一点；中心字大、浓、稳
+        const edge = g.edge; // 0 中心, 1 边缘
+        const baseSize = g.size * this.scale;
+        const size = baseSize * lerp(1.35, 0.7, edge);
+        const alpha = lerp(0.95, 0.45, edge) * g.alpha;
+        // 颜色：中心用真墨色，边缘略带暖褐（飞白干枯感）
+        const inkR = Math.round(lerp(29, 70, edge));
+        const inkG = Math.round(lerp(26, 58, edge));
+        const inkB = Math.round(lerp(21, 40, edge));
+        ctx.fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
         ctx.font = `${size.toFixed(1)}px "LXGW WenKai", serif`;
         ctx.save();
         ctx.translate(g.x, g.y);
@@ -889,17 +969,97 @@
         ctx.restore();
       }
 
-      // 眼睛（在字群之上，最显眼）
+      // —— 点睛：核心位置挑 3-4 个朱砂字（画龙点睛的审美小钩子）——
+      // 选择距中心最近的几个粒子
+      if (this.glyphs.length > 0) {
+        const sorted = this._cinnabarIdx || this._pickCinnabar();
+        for (let k = 0; k < sorted.length; k++) {
+          const g = this.glyphs[sorted[k]];
+          if (!g) continue;
+          const size = g.size * this.scale * 1.15;
+          ctx.fillStyle = `rgba(124, 40, 30, ${0.8 * g.alpha})`;
+          ctx.font = `${size.toFixed(1)}px "LXGW WenKai", serif`;
+          ctx.save();
+          ctx.translate(g.x, g.y);
+          ctx.rotate(g.rot);
+          ctx.fillText(g.char, 0, 0);
+          ctx.restore();
+        }
+      }
+
+      // 眼睛：作为两颗浓墨点，画得精巧而不张扬
       const expr = EXPRESSIONS[this.expression];
+      const exprScale = this.expression === "surprised" ? 1.3 : 1;
       for (let i = 0; i < 2; i++) {
         const e = this.eyes[i];
-        const s = Math.max(10, e.size || this.size * 0.08);
-        ctx.font = `${s.toFixed(1)}px "LXGW WenKai", serif`;
-        ctx.fillStyle = expr.color;
+        const s = Math.max(8, e.size || this.size * 0.055) * exprScale;
         ctx.save();
         ctx.translate(e.x, e.y);
         ctx.rotate(this.rotation);
-        ctx.fillText(i === 0 ? expr.left : expr.right, 0, 0);
+
+        if (expr.shape === "arc" || ["happy", "sleep", "wink", "shy"].includes(this.expression)) {
+          // 特殊表情用笔画画出来，而不是字符
+          ctx.strokeStyle = expr.color;
+          ctx.fillStyle = expr.color;
+          ctx.lineCap = "round";
+          ctx.lineWidth = Math.max(2, s * 0.18);
+          ctx.beginPath();
+          if (this.expression === "sleep") {
+            ctx.moveTo(-s * 0.5, 0);
+            ctx.lineTo(s * 0.5, 0);
+          } else if (this.expression === "happy") {
+            // ^
+            ctx.moveTo(-s * 0.45, s * 0.2);
+            ctx.lineTo(0, -s * 0.25);
+            ctx.lineTo(s * 0.45, s * 0.2);
+          } else if (this.expression === "wink") {
+            // 左眼弧，右眼圆点（由 i 区分）
+            if (i === 0) {
+              ctx.moveTo(-s * 0.45, s * 0.15);
+              ctx.lineTo(0, -s * 0.2);
+              ctx.lineTo(s * 0.45, s * 0.15);
+            } else {
+              ctx.arc(0, 0, s * 0.32, 0, TAU);
+              ctx.fill();
+              ctx.restore();
+              continue;
+            }
+          } else if (this.expression === "shy") {
+            // 眯起的眼睛：> <
+            if (i === 0) {
+              ctx.moveTo(-s * 0.35, -s * 0.2);
+              ctx.lineTo(s * 0.2, 0);
+              ctx.lineTo(-s * 0.35, s * 0.2);
+            } else {
+              ctx.moveTo(s * 0.35, -s * 0.2);
+              ctx.lineTo(-s * 0.2, 0);
+              ctx.lineTo(s * 0.35, s * 0.2);
+            }
+          }
+          ctx.stroke();
+        } else {
+          // 墨点眼 —— 两层渐变，内深外虚
+          const r = s * 0.38;
+          // 外层晕墨
+          const blot = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 1.8);
+          blot.addColorStop(0, "rgba(29,26,21,0.55)");
+          blot.addColorStop(0.5, "rgba(29,26,21,0.2)");
+          blot.addColorStop(1, "rgba(29,26,21,0)");
+          ctx.fillStyle = blot;
+          ctx.beginPath();
+          ctx.arc(0, 0, r * 1.8, 0, TAU);
+          ctx.fill();
+          // 内核
+          ctx.fillStyle = expr.color;
+          ctx.beginPath();
+          ctx.arc(0, 0, r, 0, TAU);
+          ctx.fill();
+          // 高光点（灵动）
+          ctx.fillStyle = "rgba(252,244,222,0.85)";
+          ctx.beginPath();
+          ctx.arc(-r * 0.3, -r * 0.3, r * 0.2, 0, TAU);
+          ctx.fill();
+        }
         ctx.restore();
       }
 

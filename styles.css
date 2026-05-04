@@ -206,8 +206,8 @@ body {
 .toolbar {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  padding: 0 2px;
+  gap: 8px;
+  padding: 0;
 }
 
 .tool {
@@ -215,13 +215,14 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 10px 0 8px;
+  padding: 9px 0 7px;
   background: rgba(255, 252, 240, 0.7);
   border: 1px solid rgba(29, 26, 21, 0.1);
   border-radius: 12px;
   color: var(--ink);
   font-family: var(--font-serif);
   cursor: pointer;
+  min-width: 0;
   transition: transform 0.15s ease, background 0.2s ease;
 }
 .tool:active {
@@ -235,8 +236,9 @@ body {
 }
 .tool-label {
   font-size: 11px;
-  letter-spacing: 3px;
+  letter-spacing: 2px;
   color: var(--ink-faded);
+  padding-left: 2px;
 }
 
 /* ---------- Feed panel (fake UI for pet to eat) ---------- */

@@ -22,7 +22,15 @@
     formLabel.textContent = FORMS[key].label;
     if (announce) toast("化形 · " + FORMS[key].label);
   }
-  setForm("blob", false);
+  // 支持 URL ?form=cat 直接显示某形态（用于预览/调试）
+  const initialForm = new URL(location.href).searchParams.get("form");
+  document.title = "字灵 · " + (initialForm || "blob");
+  if (initialForm && FORMS[initialForm]) {
+    setForm(initialForm, false);
+    formIdx = FORM_ORDER.indexOf(initialForm);
+  } else {
+    setForm("blob", false);
+  }
 
   // ---------- 触摸/鼠标交互 ----------
   function getPos(evt) {
