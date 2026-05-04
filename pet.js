@@ -621,9 +621,13 @@
       this.gridSnapping = opts.gridSnapping !== false;
       /** 活字栅：统一字号、离散倾角、像素对齐 */
       this.gridUnity = opts.gridUnity !== false;
-      /** 液体感：波面扰动目标 + 邻域凝聚（强度低，保性能） */
-      this.fluidStrength = opts.fluidStrength != null ? opts.fluidStrength : 1;
+      /** 液体感：仅轻波面（不拉对角「凝聚」，以免破坏纵横走位） */
+      this.fluidStrength = opts.fluidStrength != null ? opts.fluidStrength : 0.75;
       this._fluidPhase = 0;
+      /** 沿格子纵横**各自**平滑走位（曼哈顿路径），队形变换感 */
+      this.gridMarch = opts.gridMarch !== false;
+      /** 沿格线移动速度（格/秒） */
+      this.gridMarchSpeed = opts.gridMarchSpeed != null ? opts.gridMarchSpeed : 3.1;
 
       /** 吞字后对形态的偏好（多字命中同一形会提高概率） */
       this.formDigestBias = {};
@@ -741,6 +745,17 @@
       if (this.gridSnapping) this._snapGlyphTargetsToGrid();
       this._resolveUniqueLocalGrid();
       this._applyGridTypography();
+      if (this.gridMarch && this.gridSnapping) {
+        const c = this.gridCell;
+        for (const g of this.glyphs) {
+          g.mgx = Math.round(g.x / c);
+          g.mgy = Math.round(g.y / c);
+          g.x = g.mgx * c;
+          g.y = g.mgy * c;
+          g.vx = 0;
+          g.vy = 0;
+        }
+      }
     }
 
     /**
@@ -1396,94 +1411,138 @@
           : null;
 
       const cell = this.gridCell;
-      const fMul = (this.fluidStrength || 0) * 0.001 + 1;
-      const springK =
-        (this.mode === "feeding" ? 52 : 24) *
-        fMul *
-        (1 + (this._layoutSettle || 0) * 0.45);
-      const damping =
-        (this.mode === "feeding" ? 6.2 : 4.8) *
-        (1 + (this._layoutSettle || 0) * 0.3);
-      const rumble = (this._rumbleAmp || 0) * cell * 0.1;
-      const waveAmp = (this.fluidStrength || 0) * cell * 0.11;
+      const rumble = (this._rumbleAmp || 0) * cell * 0.08;
+      const waveAmp = (this.fluidStrength || 0) * cell * 0.09;
+      this._fluidPhase += dt * 0.95;
 
-      this._fluidPhase += dt * 1.05;
+      if (this.gridMarch && this.gridSnapping) {
+        const stepBudget = Math.max(1, Math.min(6, Math.round((this.gridMarchSpeed || 3) * dt * 14)));
 
-      const buckets = new Map();
-      const BH = 44;
-      if ((this.fluidStrength || 0) > 0.01) {
         for (const g of this.glyphs) {
-          const ix = (g.x / BH) | 0;
-          const iy = (g.y / BH) | 0;
-          const k = ix + "," + iy;
-          let b = buckets.get(k);
-          if (!b) {
-            b = { sx: 0, sy: 0, n: 0 };
-            buckets.set(k, b);
+          if (g.mgx == null || g.mgy == null) {
+            g.mgx = Math.round(g.x / cell);
+            g.mgy = Math.round(g.y / cell);
           }
-          b.sx += g.x;
-          b.sy += g.y;
-          b.n++;
-        }
-      }
+          if (g.marchPref == null) {
+            g.marchPref = g.depth > 0.5 ? 1 : 0;
+          }
 
-      for (const g of this.glyphs) {
-        const txl = g.tx * flip;
-        const tyl = g.ty;
-        let wx = bx + (txl * cos - tyl * sin);
-        let wy = by + (txl * sin + tyl * cos);
-        if (this.gridSnapping && !g.faceRole) {
-          wx = Math.round(wx / cell) * cell;
-          wy = Math.round(wy / cell) * cell;
-        }
-        if (waveAmp > 0.001) {
-          const nx = wx * 0.019 + this._fluidPhase;
-          const ny = wy * 0.017 - this._fluidPhase * 0.82;
-          wx += Math.sin(nx + g.depth * 2.2) * waveAmp * 0.62;
-          wy += Math.cos(ny + g.depth * 1.6) * waveAmp * 0.52;
-          wx += Math.sin(nx * 2.1 + wy * 0.007) * waveAmp * 0.22;
-        }
-        const rx = rumble ? Math.sin(t * 28 + g.depth * 16) * rumble : 0;
-        const ry = rumble ? Math.cos(t * 26 + g.depth * 14) * rumble : 0;
-        let ax = (wx + rx - g.x) * springK - g.vx * damping;
-        let ay = (wy + ry - g.y) * springK - g.vy * damping;
-        if (!g.faceRole) {
-          ax += Math.sin(t * 2 + g.depth * 6) * (this.gridSnapping ? 0.28 : 1.0);
-        }
-        if (eyeWorld) {
-          for (const e of eyeWorld) {
-            const dx = g.x - e.x;
-            const dy = g.y - e.y;
-            const d = Math.hypot(dx, dy);
-            if (d < eyeClearR && d > 0.01) {
-              const push = ((eyeClearR - d) / eyeClearR) * 420;
-              ax += (dx / d) * push;
-              ay += (dy / d) * push;
+          const txl = g.tx * flip;
+          const tyl = g.ty;
+          let wx = bx + (txl * cos - tyl * sin);
+          let wy = by + (txl * sin + tyl * cos);
+          if (waveAmp > 0.001) {
+            const nx = wx * 0.017 + this._fluidPhase;
+            const ny = wy * 0.015 - this._fluidPhase * 0.75;
+            wx += Math.sin(nx + g.depth * 2.1) * waveAmp * 0.55;
+            wy += Math.cos(ny + g.depth * 1.5) * waveAmp * 0.48;
+          }
+          const rx = rumble ? Math.sin(t * 26 + g.depth * 15) * rumble : 0;
+          const ry = rumble ? Math.cos(t * 24 + g.depth * 13) * rumble : 0;
+          wx += rx;
+          wy += ry;
+
+          const tgx = Math.round(wx / cell);
+          const tgy = Math.round(wy / cell);
+
+          let s = stepBudget;
+          while (s-- > 0 && (g.mgx !== tgx || g.mgy !== tgy)) {
+            const dx = tgx - g.mgx;
+            const dy = tgy - g.mgy;
+            if (g.marchPref === 0) {
+              if (dx !== 0 && (Math.abs(dx) >= Math.abs(dy) || dy === 0)) {
+                g.mgx += dx > 0 ? 1 : -1;
+              } else if (dy !== 0) {
+                g.mgy += dy > 0 ? 1 : -1;
+              }
+            } else {
+              if (dy !== 0 && (Math.abs(dy) >= Math.abs(dx) || dx === 0)) {
+                g.mgy += dy > 0 ? 1 : -1;
+              } else if (dx !== 0) {
+                g.mgx += dx > 0 ? 1 : -1;
+              }
             }
           }
-        }
-        if ((this.fluidStrength || 0) > 0.01 && !g.faceRole) {
-          const ix = (g.x / BH) | 0;
-          const iy = (g.y / BH) | 0;
-          const b = buckets.get(ix + "," + iy);
-          if (b && b.n > 1) {
-            const cx = b.sx / b.n;
-            const cy = b.sy / b.n;
-            const dx = cx - g.x;
-            const dy = cy - g.y;
-            const d = Math.hypot(dx, dy);
-            if (d > 0.02) {
-              const coh = 18 * (this.fluidStrength || 0);
-              ax += (dx / d) * coh;
-              ay += (dy / d) * coh;
+
+          g.x = g.mgx * cell;
+          g.y = g.mgy * cell;
+          g.vx = 0;
+          g.vy = 0;
+
+          if (eyeWorld && !g.faceRole) {
+            for (const e of eyeWorld) {
+              const ddx = g.x - e.x;
+              const ddy = g.y - e.y;
+              const d = Math.hypot(ddx, ddy);
+              if (d < eyeClearR && d > 0.01) {
+                if (Math.abs(ddx) >= Math.abs(ddy)) {
+                  g.mgx += ddx > 0 ? 1 : -1;
+                } else {
+                  g.mgy += ddy > 0 ? 1 : -1;
+                }
+                g.x = g.mgx * cell;
+                g.y = g.mgy * cell;
+              }
             }
           }
+
+          g.rot = lerp(g.rot, g.targetRot, this.gridUnity ? 0.18 : 0.08);
         }
-        g.vx += ax * dt;
-        g.vy += ay * dt;
-        g.x += g.vx * dt;
-        g.y += g.vy * dt;
-        g.rot = lerp(g.rot, g.targetRot, this.gridUnity ? 0.16 : 0.08);
+      } else {
+        const fMul = (this.fluidStrength || 0) * 0.001 + 1;
+        const springK =
+          (this.mode === "feeding" ? 52 : 24) *
+          fMul *
+          (1 + (this._layoutSettle || 0) * 0.45);
+        const damping =
+          (this.mode === "feeding" ? 6.2 : 4.8) *
+          (1 + (this._layoutSettle || 0) * 0.3);
+        const rumble2 = (this._rumbleAmp || 0) * cell * 0.1;
+        const waveAmp2 = (this.fluidStrength || 0) * cell * 0.11;
+
+        this._fluidPhase += dt * 1.05;
+
+        for (const g of this.glyphs) {
+          const txl = g.tx * flip;
+          const tyl = g.ty;
+          let wx = bx + (txl * cos - tyl * sin);
+          let wy = by + (txl * sin + tyl * cos);
+          if (this.gridSnapping && !g.faceRole) {
+            wx = Math.round(wx / cell) * cell;
+            wy = Math.round(wy / cell) * cell;
+          }
+          if (waveAmp2 > 0.001) {
+            const nx = wx * 0.019 + this._fluidPhase;
+            const ny = wy * 0.017 - this._fluidPhase * 0.82;
+            wx += Math.sin(nx + g.depth * 2.2) * waveAmp2 * 0.62;
+            wy += Math.cos(ny + g.depth * 1.6) * waveAmp2 * 0.52;
+            wx += Math.sin(nx * 2.1 + wy * 0.007) * waveAmp2 * 0.22;
+          }
+          const rx = rumble2 ? Math.sin(t * 28 + g.depth * 16) * rumble2 : 0;
+          const ry = rumble2 ? Math.cos(t * 26 + g.depth * 14) * rumble2 : 0;
+          let ax = (wx + rx - g.x) * springK - g.vx * damping;
+          let ay = (wy + ry - g.y) * springK - g.vy * damping;
+          if (!g.faceRole) {
+            ax += Math.sin(t * 2 + g.depth * 6) * (this.gridSnapping ? 0.28 : 1.0);
+          }
+          if (eyeWorld) {
+            for (const e of eyeWorld) {
+              const dx = g.x - e.x;
+              const dy = g.y - e.y;
+              const d = Math.hypot(dx, dy);
+              if (d < eyeClearR && d > 0.01) {
+                const push = ((eyeClearR - d) / eyeClearR) * 420;
+                ax += (dx / d) * push;
+                ay += (dy / d) * push;
+              }
+            }
+          }
+          g.vx += ax * dt;
+          g.vy += ay * dt;
+          g.x += g.vx * dt;
+          g.y += g.vy * dt;
+          g.rot = lerp(g.rot, g.targetRot, this.gridUnity ? 0.16 : 0.08);
+        }
       }
 
       // 眼睛跟形态（保留坐标供调试；字脸模式不在画布上绘制眼）

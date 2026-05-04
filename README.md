@@ -133,14 +133,15 @@ webView.loadUrl("file:///android_asset/pet/index.html");
 | 底色/纸本/印章颜色 | `styles.css` 顶部的 CSS 变量 |
 | 粒子数量（性能/密度） | `app.js` 里 `new Pet(canvas, { particleCount: 150 })` |
 | 默认字池 | `pet.js` 里的 `DEFAULT_POOL` |
-| 换形时间间隔 | `app.js` 最后 `setInterval(..., 8000)` |
+| 换形时间间隔 | `app.js` 最后 `setInterval(..., 11000)` |
+| 纵横格走位 | `pet.js` 默认 `gridMarch`：每字沿曼哈顿路径（先横或先纵）逐格移向目标，类「舞蹈队形」；`gridMarchSpeed` 控制格/秒 |
 | 新增形态 | `pet.js` 的 `FORMS` |
 | 新增表情 | `pet.js` 的 `EXPRESSIONS` 及渲染分支 |
 | 觅食路径 | `app.js` 的 `triggerFeeding` |
 
 ## 性能
 
-- 默认 150 粒子，Canvas 2D；字灵带轻量「波面 + 邻域凝聚」液体感，中低端机若吃力可调低 `particleCount` 或 `fluidStrength`
+- 默认 150 粒子，Canvas 2D；**纵横走位**时每帧沿格线移动；轻波面叠加在目标格上。中低端机可调低 `particleCount` 或 `fluidStrength`
 - 若想更繁盛：`particleCount: 240`
 - 若机型羸弱：`particleCount: 80`
 
