@@ -374,31 +374,6 @@
     else pet.setExpression("normal");
   }, 3000);
 
-  const aiSuggest = document.getElementById("aiSuggest");
-  const aiApplyBtn = document.getElementById("aiApplyBtn");
-  const aiFlashChar = document.getElementById("aiFlashChar");
-
-  function applyAiBlock() {
-    const raw = (aiSuggest && aiSuggest.value) || "";
-    pet.ingestAiSuggestionBlock(raw);
-    const ch = (aiFlashChar && aiFlashChar.value && aiFlashChar.value.trim()[0]) || "";
-    if (ch) {
-      pet.flashUnifiedChar(ch, 1.7);
-      aiFlashChar.value = "";
-    }
-    toast("已解析建议 · 躯体/冲击/日程词");
-  }
-  if (aiApplyBtn) aiApplyBtn.addEventListener("click", applyAiBlock);
-  if (aiSuggest) {
-    aiSuggest.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        applyAiBlock();
-      }
-    });
-  }
-
-  // ---------- 躯体字导入（日程等可先贴在外圈） ----------
   function applyBodyImport() {
     const raw = (bodyImport && bodyImport.value) || "";
     pet.attachBodyChars(raw.trim().slice(0, 24));
@@ -417,6 +392,6 @@
 
   // ---------- 说明 ----------
   document.getElementById("infoBtn").addEventListener("click", () => {
-    toast("拖移 · 戳身边 · 双击觅食 · 躯体可多次写入累加 · ?form=clock / emoji_face_a / digit_0 / dragon");
+    toast("拖移 · 戳身边 · 双击觅食 · 躯体可多次写入 · ?form=clock / emoji_face_a / digit_0 / dragon");
   });
 })();

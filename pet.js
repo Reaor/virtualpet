@@ -923,22 +923,44 @@
         '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 
       this.onFormChange = typeof opts.onFormChange === "function" ? opts.onFormChange : null;
+      this._resize = this._resize.bind(this);
       this._resize();
       window.addEventListener("resize", this._resize);
+      if (typeof ResizeObserver !== "undefined") {
+        this._ro = new ResizeObserver(() => this._resize());
+        this._ro.observe(this.canvas);
+      } else {
+        this._ro = null;
+      }
 
       this._initGlyphs();
       this.setForm("blob");
 
       this._lastTime = performance.now();
       this._raf = requestAnimationFrame(this._loop.bind(this));
+      requestAnimationFrame(() => this._resize());
     }
 
     _resize() {
       const rect = this.canvas.getBoundingClientRect();
-      this.width = rect.width;
-      this.height = rect.height;
-      this.canvas.width = rect.width * this.DPR;
-      this.canvas.height = rect.height * this.DPR;
+      let w = rect.width || this.canvas.clientWidth || this.canvas.offsetWidth;
+      let h = rect.height || this.canvas.clientHeight || this.canvas.offsetHeight;
+      if (!w || !h) {
+        const stage = this.canvas.parentElement;
+        if (stage) {
+          const sr = stage.getBoundingClientRect();
+          w = w || sr.width || 320;
+          h = h || sr.height || 320;
+        }
+        w = w || 320;
+        h = h || 320;
+      }
+      w = Math.max(64, w);
+      h = Math.max(64, h);
+      this.width = w;
+      this.height = h;
+      this.canvas.width = w * this.DPR;
+      this.canvas.height = h * this.DPR;
       this.ctx.setTransform(this.DPR, 0, 0, this.DPR, 0, 0);
       this.center = { x: this.width / 2, y: this.height / 2 };
       // 身体参考尺寸：按短边
@@ -2322,7 +2344,8 @@
           flashBoost *
           lerp(0.94, 0.42, edge) *
           g.alpha;
-        const fontMain = '"LXGW WenKai", serif';
+        const fontMain =
+          '"LXGW WenKai","LXGW WenKai Screen","Noto Serif SC","Noto Sans SC",serif';
         ctx.font = emojiLike
           ? `${size.toFixed(1)}px ${this.emojiFontStack}, ${fontMain}`
           : `${size.toFixed(1)}px ${fontMain}`;
@@ -2402,7 +2425,7 @@
       // 飞字
       for (const f of this.flyingGlyphs) {
         const a = clamp(1 - f.t / (f.life + 0.1), 0, 1);
-        ctx.font = `${f.size.toFixed(1)}px "LXGW WenKai", serif`;
+        ctx.font = `${f.size.toFixed(1)}px "LXGW WenKai","Noto Sans SC",serif`;
         if (light) {
           ctx.fillStyle = `rgba(0, 122, 255, ${a * 0.85})`;
           ctx.shadowColor = "rgba(0, 122, 255, 0.25)";
@@ -2492,6 +2515,10 @@
     destroy() {
       cancelAnimationFrame(this._raf);
       window.removeEventListener("resize", this._resize);
+      if (this._ro) {
+        this._ro.disconnect();
+        this._ro = null;
+      }
     }
   }
 
