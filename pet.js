@@ -941,6 +941,62 @@
         };
       },
     },
+
+    /** 内旋轮线（圆内滚铅笔轨迹）：细曲线 + 粗轮廓便于约束游走 */
+    spiro: {
+      label: "旋迹",
+      build(n, S) {
+        const Rm = S * 0.22;
+        const r = S * 0.078;
+        const h = S * 0.095;
+        const targets = [];
+        for (let i = 0; i < n; i++) {
+          const t = (i / Math.max(n, 1)) * TAU * 3 + rand(-0.04, 0.04);
+          const x =
+            (Rm - r) * Math.cos(t) + h * Math.cos(((Rm - r) / r) * t);
+          const y =
+            (Rm - r) * Math.sin(t) - h * Math.sin(((Rm - r) / r) * t);
+          targets.push({
+            x: x + rand(-S * 0.03, S * 0.03),
+            y: y * 0.92 + rand(-S * 0.03, S * 0.03),
+          });
+        }
+        return {
+          targets,
+          eyes: [
+            { x: -S * 0.08, y: -S * 0.2 },
+            { x: S * 0.08, y: -S * 0.2 },
+          ],
+          eyeSize: 1.2,
+          maskDraw: (ctx, s) => {
+            ctx.strokeStyle = "#000";
+            ctx.lineWidth = s * 0.085;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            ctx.beginPath();
+            const cx = s * 0.5;
+            const cy = s * 0.52;
+            const Rk = s * 0.22;
+            const rk = s * 0.078;
+            const hk = s * 0.095;
+            for (let k = 0; k <= 720; k++) {
+              const t = (k / 720) * TAU * 3;
+              const x =
+                cx +
+                (Rk - rk) * Math.cos(t) +
+                hk * Math.cos(((Rk - rk) / rk) * t);
+              const y =
+                cy +
+                (Rk - rk) * Math.sin(t) -
+                hk * Math.sin(((Rk - rk) / rk) * t);
+              if (k === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+          },
+        };
+      },
+    },
   };
 
   for (let di = 0; di <= 9; di++) {
@@ -983,6 +1039,7 @@
     "digit_8",
     "clock",
     "lissajous",
+    "spiro",
   ];
 
   // ---------- 表情（眼区由躯体内的「字层」呈现；此处供旧逻辑/色值参考） ---------- //
@@ -995,6 +1052,50 @@
     surprised: { color: "#1d1a15", eyeLeft: "○", eyeRight: "○", brow: "！" },
     annoyed: { color: "#8b2a22", eyeLeft: "×", eyeRight: "×", brow: "﹏" },
   };
+
+  /**
+   * 卡通分层设色（参考 cel / toon：亮·中·暗分层 + 轮廓权重）
+   */
+  function celRgbFromGlyph(g, lightCanvas, tSec, articPhase) {
+    const Sref = 320;
+    const nx = clamp(g.tx / (Sref * 0.48), -1, 1);
+    const ny = clamp(g.ty / (Sref * 0.48), -1, 1);
+    const ndotl = clamp(0.5 + (-ny) * 0.42 + nx * 0.06, 0, 1);
+    const rim = clamp((g.edge || 0) - 0.52, 0, 1);
+    const breathe =
+      0.5 +
+      0.5 * Math.sin(tSec * 0.95 + (g.patrolSeed || 0) * 0.5 + (articPhase || 0) * 0.25);
+    const band = clamp(ndotl + (breathe - 0.5) * 0.07 - rim * 0.14, 0, 1);
+
+    const shadeRgb = (lit, mid, shd, outlineRgb) => {
+      let r;
+      let gg;
+      let b;
+      if (band > 0.58) {
+        const w = (band - 0.58) / 0.42;
+        r = lerp(mid[0], lit[0], w);
+        gg = lerp(mid[1], lit[1], w);
+        b = lerp(mid[2], lit[2], w);
+      } else if (band > 0.28) {
+        const w = (band - 0.28) / 0.3;
+        r = lerp(shd[0], mid[0], w);
+        gg = lerp(shd[1], mid[1], w);
+        b = lerp(shd[2], mid[2], w);
+      } else {
+        const w = band / 0.28;
+        r = lerp(shd[0] * 0.72, shd[0], w);
+        gg = lerp(shd[1] * 0.72, shd[1], w);
+        b = lerp(shd[2] * 0.72, shd[2], w);
+      }
+      const edgeMul = 0.42 + rim * 0.58;
+      return { r, gg, b, outlineRgb, edgeMul };
+    };
+
+    if (lightCanvas) {
+      return shadeRgb([52, 54, 58], [34, 36, 42], [22, 24, 30], [16, 17, 22]);
+    }
+    return shadeRgb([248, 250, 255], [195, 205, 235], [95, 115, 175], [18, 22, 38]);
+  }
 
   // ---------- Pet 主类 ---------- //
   class Pet {
@@ -1128,6 +1229,7 @@
       /** 拖拽：每字滞后锚点（有序中的乱） */
       this.dragLagEnabled = opts.dragLag !== false;
       this.dragVel = { x: 0, y: 0 };
+      this._pendingScriptReturn = false;
 
       /** 渐进换形：逐字走向新形态目标，速度与日常格移同量级 */
       this.morphToKey = null;
@@ -1466,6 +1568,15 @@
       this.anchor.x = this.center.x;
       this.anchor.y = this.center.y;
       this.setForm("script", silent, silent);
+    }
+
+    /** 字灵拖回：回到整齐文稿（沿用当前 scriptLines） */
+    revertToScript(silent) {
+      const lines =
+        this.scriptLines && this.scriptLines.length
+          ? this.scriptLines
+          : ["山色有无中", "江流天地外", "云霞出海曙"];
+      this.enterScriptMode(lines, silent);
     }
 
     awakenPet(preferredForm, silent) {
@@ -2322,6 +2433,32 @@
       setTimeout(() => this.setExpression("normal"), 800);
     }
 
+    markRevertAfterDrag(on) {
+      this._pendingScriptReturn = !!on;
+    }
+
+    /** 连续轻点画布：涟漪与闪光随链长增强 */
+    tapInteractionBurst(chain) {
+      const n = Math.min(6, Math.max(1, Math.floor(chain) || 1));
+      this._rumbleAmp = Math.min(0.52, (this._rumbleAmp || 0) + 0.06 * n);
+      this._glyphFlash = Math.min(0.48, (this._glyphFlash || 0) + 0.08 * n);
+      for (let k = 0; k < 3 + n; k++) {
+        this.ripples.push({
+          x: this.pos.x + rand(-this.size * 0.22, this.size * 0.22),
+          y: this.pos.y + rand(-this.size * 0.18, this.size * 0.18),
+          r: 5 + n * 2,
+          alpha: 0.35 + n * 0.05,
+        });
+      }
+      if (n >= 3) {
+        this._glyphFlash = Math.min(0.55, (this._glyphFlash || 0) + 0.2);
+        this.setExpression("happy");
+        setTimeout(() => {
+          if (this.expression === "happy") this.setExpression("normal");
+        }, 700);
+      }
+    }
+
     // 拖拽（世界坐标系）
     beginDrag(x, y) {
       if (this.viewMode !== "pet") return;
@@ -2347,8 +2484,13 @@
       this.pos.y = ny;
     }
     endDrag() {
+      const pending = this._pendingScriptReturn;
+      this._pendingScriptReturn = false;
       this.dragging = false;
       this._dragPrevPos = null;
+      if (pending && this.scriptLines && this.scriptLines.length) {
+        this.revertToScript(true);
+      }
       this.setExpression("happy");
       setTimeout(() => {
         if (this.expression === "happy") this.setExpression("normal");
@@ -2915,32 +3057,54 @@
         ctx.font = emojiLike
           ? `${size.toFixed(1)}px ${this.emojiFontStack}, ${fontMain}`
           : `${size.toFixed(1)}px ${fontMain}`;
+        let fillStyle = null;
+        let outlinePass = null;
         if (opts.color) {
           const c = opts.color;
           if (c.startsWith("#") && (c.length === 7 || c.length === 9)) {
             const r = parseInt(c.slice(1, 3), 16);
             const gg = parseInt(c.slice(3, 5), 16);
             const b = parseInt(c.slice(5, 7), 16);
-            ctx.fillStyle = `rgba(${r},${gg},${b},${alpha})`;
+            fillStyle = `rgba(${r},${gg},${b},${alpha})`;
           } else {
-            ctx.fillStyle = c;
+            fillStyle = c;
           }
-        } else {
+        } else if (opts.cel === false) {
           if (light) {
             const inkR = Math.round(lerp(28, 100, edge));
             const inkG = Math.round(lerp(28, 110, edge));
             const inkB = Math.round(lerp(34, 120, edge));
-            ctx.fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
+            fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
           } else {
             const inkR = Math.round(lerp(240, 110, edge));
             const inkG = Math.round(lerp(248, 160, edge));
             const inkB = Math.round(lerp(255, 210, edge));
-            ctx.fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
+            fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
           }
+        } else {
+          const cel = celRgbFromGlyph(g, light, t, this._fluidPhase || 0);
+          const [or, og, ob] = cel.outlineRgb;
+          const outlineA = alpha * (0.5 + cel.edgeMul * 0.38);
+          if (!g.faceRole && cel.edgeMul > 0.38) {
+            outlinePass = {
+              rgba: `rgba(${or},${og},${ob},${outlineA})`,
+              off: 1.05,
+            };
+          }
+          fillStyle = `rgba(${Math.round(cel.r)},${Math.round(cel.gg)},${Math.round(cel.b)},${alpha})`;
         }
         ctx.save();
         ctx.translate(rx, ry);
         ctx.rotate(g.rot);
+        if (outlinePass) {
+          ctx.fillStyle = outlinePass.rgba;
+          const o = outlinePass.off;
+          ctx.fillText(g.char, -o, 0);
+          ctx.fillText(g.char, o, 0);
+          ctx.fillText(g.char, 0, -o);
+          ctx.fillText(g.char, 0, o);
+        }
+        ctx.fillStyle = fillStyle;
         if (opts.shadow) {
           ctx.shadowColor = opts.shadow;
           ctx.shadowBlur = opts.shadowBlur || 6;

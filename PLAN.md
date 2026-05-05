@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.0.0** 起）。
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.1.0** 起）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
 
@@ -47,6 +47,16 @@
 | 拖拽非整块平移 | **部分完成** | 每字 `lagX/lagY` 弹簧追 `pos`，`lagK` 差异化 + 指针速度侧向冲量 |
 
 URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定初始字灵形态。
+
+### 1.12 在线风格参考 + 输入流 + cel 层次 + 旋迹（3.1.0）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 视频/动画中的轮廓与层次（设计记录） | **设计记录** | 赛璐璐/描边常见做法：顶光 + 硬分阶阴影 + **外轮廓**（inverted hull / 壳层挤出），如 [Cel 描边教程](https://danielilett.com/2019-06-15-tut2-4-edge-outline/)、[轮廓与笔压感](https://mooatoon.com/en/docs/TutorialLegacy/5.0-5.3/AddAdvancedRenderingFeaturesToCharacters/ControlOutline-5.3)。字灵侧用 `celRgbFromGlyph` 做明度分带 + 边缘部首字加描。 |
+| 持续输入、双击文稿化字灵 | **已完成** | `textarea` 的 `input/change` 同步 `setScriptLines`；**双击** 与「化为字灵」同效 |
+| 长按后拖回文稿 | **已完成** | 字灵 **inner** 区：先长按再拖则松手 `revertToScript`；**拖回文稿** 按钮同效 |
+| 连续轻点画布 | **已完成** | `tapInteractionBurst`：涟漪与闪光随链长增强；**第三次轻点** 触发觅食 |
+| 抽象几何 | **已完成** | **`spiro`（旋迹）**：内旋轮线 + `maskDraw` |
 
 ---
 

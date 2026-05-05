@@ -25,6 +25,7 @@
   const btnPresentScript = document.getElementById("btnPresentScript");
   const btnAwakenPet = document.getElementById("btnAwakenPet");
   const btnBackIntro = document.getElementById("btnBackIntro");
+  const btnRevertScript = document.getElementById("btnRevertScript");
 
   const params = new URL(location.href).searchParams;
   const skipIntro = params.get("skipIntro") === "1" || params.get("pet") === "1";
@@ -66,9 +67,39 @@
     "字灵 · " +
     (skipIntro ? urlForm || "blob" : "开场");
 
+  let toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1600);
+  }
+
   function parseOpeningLines() {
     if (!openingPreset) return [];
     return openingPreset.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  }
+
+  function applyLinesToPetFromInput() {
+    const lines = parseOpeningLines();
+    pet.setScriptLines(lines);
+  }
+  if (openingPreset) {
+    openingPreset.addEventListener("input", applyLinesToPetFromInput);
+    openingPreset.addEventListener("change", applyLinesToPetFromInput);
+    openingPreset.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      const lines = parseOpeningLines();
+      if (!lines.length) {
+        toast("请先输入至少一行");
+        return;
+      }
+      pet.setScriptLines(lines);
+      pet.attachBodyChars(lines.join("").slice(0, 96));
+      pet.awakenPet(urlForm && FORMS[urlForm] ? urlForm : null, false);
+      syncUiMode();
+      toast("化为字灵");
+    });
   }
 
   if (btnPresentScript) {
@@ -95,6 +126,17 @@
       pet.enterIntroMode(false);
       syncUiMode();
       toast("已回空白");
+    });
+  }
+  if (btnRevertScript) {
+    btnRevertScript.addEventListener("click", () => {
+      if (pet.viewMode !== "pet") {
+        toast("请先化为字灵");
+        return;
+      }
+      pet.revertToScript(false);
+      syncUiMode();
+      toast("已回到文稿");
     });
   }
 
@@ -129,6 +171,28 @@
   let downPos = null;
   let moved = false;
   let lastTap = 0;
+  let tapChainCount = 0;
+  /** inner pet | mid nuis | far */
+  let downZone = "";
+  let dragPhase = "none";
+  let longRevertArmed = false;
+  let longPressTimer = null;
+  const LONG_PRESS_MS = 420;
+  const DRAG_THRESHOLD = 6;
+
+  function clearLongPressTimer() {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  }
+
+  function zoneAt(canvasPos) {
+    const d = Math.hypot(canvasPos.x - pet.pos.x, canvasPos.y - pet.pos.y);
+    if (d < pet.size * 0.3) return "inner";
+    if (d < pet.size * 0.48) return "mid";
+    return "far";
+  }
 
   function onDown(e) {
     if (e.cancelable) e.preventDefault();
@@ -136,10 +200,17 @@
     downTime = performance.now();
     downPos = p;
     moved = false;
-    // 按在宠物身上才算拖拽
-    if (Math.hypot(p.x - pet.pos.x, p.y - pet.pos.y) < pet.size * 0.3) {
-      pet.beginDrag(p.x, p.y);
-    } else if (Math.hypot(p.x - pet.pos.x, p.y - pet.pos.y) < pet.size * 0.48) {
+    downZone = zoneAt(p);
+    dragPhase = "none";
+    longRevertArmed = false;
+    clearLongPressTimer();
+
+    if (pet.viewMode === "pet" && downZone === "inner") {
+      dragPhase = "pending";
+      longPressTimer = setTimeout(() => {
+        longRevertArmed = true;
+      }, LONG_PRESS_MS);
+    } else if (downZone === "mid") {
       pet.nuisTap();
       pet.pulse(p.x, p.y);
     } else {
@@ -153,6 +224,21 @@
     if (e.cancelable) e.preventDefault();
     const p = getPos(e);
     if (Math.hypot(p.x - downPos.x, p.y - downPos.y) > 4) moved = true;
+
+    if (
+      dragPhase === "pending" &&
+      pet.viewMode === "pet" &&
+      Math.hypot(p.x - downPos.x, p.y - downPos.y) > DRAG_THRESHOLD
+    ) {
+      if (longRevertArmed) {
+        pet.markRevertAfterDrag(true);
+      }
+      pet.beginDrag(downPos.x, downPos.y);
+      dragPhase = "dragging";
+      clearLongPressTimer();
+      pet.dragTo(p.x, p.y);
+      return;
+    }
     if (pet.dragging) pet.dragTo(p.x, p.y);
   }
 
@@ -160,24 +246,44 @@
     if (e && e.cancelable) e.preventDefault();
     const now = performance.now();
     const dt = now - downTime;
+    clearLongPressTimer();
+
     if (pet.dragging) pet.endDrag();
 
-    if (!moved && dt < 260) {
-      if (now - lastTap < 320) {
-        triggerFeeding();
-        lastTap = 0;
-      } else {
-        lastTap = now;
-      }
+    if (moved || dragPhase === "dragging") tapChainCount = 0;
+
+    if (dragPhase === "pending" && !moved && dt < 280 && downZone === "inner") {
+      pet.pulse(pet.pos.x, pet.pos.y);
     }
+
+    if (!moved && dt < 260 && dragPhase !== "dragging") {
+      let chain = 1;
+      if (now - lastTap < 340) tapChainCount += 1;
+      else tapChainCount = 1;
+      chain = tapChainCount;
+      lastTap = now;
+      pet.tapInteractionBurst(chain);
+      if (chain >= 3) {
+        triggerFeeding();
+        tapChainCount = 0;
+      }
+    } else if (!moved && dt >= 260) {
+      tapChainCount = 0;
+    }
+
     downPos = null;
     moved = false;
+    dragPhase = "none";
+    downZone = "";
   }
 
   function onCancel(e) {
+    clearLongPressTimer();
     if (pet.dragging) pet.endDrag();
     downPos = null;
     moved = false;
+    dragPhase = "none";
+    downZone = "";
   }
 
   stage.addEventListener("touchstart", onDown, { passive: false });
@@ -197,15 +303,6 @@
     hint.classList.add("hidden");
   }
   setTimeout(hideHint, 6000);
-
-  // ---------- Toast ----------
-  let toastTimer = null;
-  function toast(msg) {
-    toastEl.textContent = msg;
-    toastEl.classList.add("show");
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1600);
-  }
 
   // ---------- 工具栏 ----------
   document.querySelectorAll(".tool").forEach((btn) => {

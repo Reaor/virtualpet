@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.0.0" />
+  <meta name="ziling-build" content="3.1.0" />
   <title>字灵 · Zì Líng</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -30,7 +30,7 @@
 
       <div class="form-label" id="formLabel">软团</div>
 
-      <div class="hint" id="hint">拖移字灵 · 戳身边会闹 · 双击觅食 · 再点觅食可停止</div>
+      <div class="hint" id="hint">长按字灵再拖可还原文稿 · 快连点画布有闪光 · 三连击觅食</div>
 
       <div class="opening-panel" id="openingPanel">
         <label class="opening-label" for="openingPreset">开场文稿（每行一句）</label>
@@ -41,7 +41,11 @@
           <button type="button" class="opening-btn primary" id="btnPresentScript">呈现文稿</button>
           <button type="button" class="opening-btn accent" id="btnAwakenPet">化为字灵</button>
           <button type="button" class="opening-btn ghost" id="btnBackIntro">空白</button>
+          <button type="button" class="opening-btn ghost" id="btnRevertScript">拖回文稿</button>
         </div>
+        <p class="opening-hint" id="openingHint">
+          输入后双击文稿区可化为字灵 · 长按画布再拖曳可还原文稿 · 三连击画布觅食
+        </p>
       </div>
     </section>
 
@@ -130,7 +134,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="./pet.js?v=3.0.0"></script>
-    <script src="./app.js?v=3.0.0"></script>
+    <script src="./pet.js?v=3.1.0"></script>
+    <script src="./app.js?v=3.1.0"></script>
 </body>
 </html>
