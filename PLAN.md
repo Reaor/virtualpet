@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.2.1** 起）。
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.2.2** 起）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
 
@@ -59,6 +59,14 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 | 长按后拖回文稿 | **已完成** | 字灵 **inner** 区：先长按再拖则松手 `revertToScript`；**拖回文稿** 按钮同效 |
 | 连续轻点画布 | **已完成** | `tapInteractionBurst`：涟漪与闪光随链长增强；**第三次轻点** 触发觅食 |
 | 抽象几何 | **已完成** | **`spiro`（旋迹）**：内旋轮线 + `maskDraw` |
+
+### 1.14 UI：活动范围 + 工具栏可点（3.2.2）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 字灵活动范围 | **已完成** | `_motionPad()` 约 **0.2×半宽** 边距（原 ~0.38×全尺寸）；idle 锚点摆动幅度加大 |
+| 舞台高度 | **已完成** | `aspect-ratio` 略扁、`max-height: 72vh`、`min-height: 260px` |
+| 换形/觅食等点不动 | **已完成** | `opening-panel.docked`：`pointer-events: none`，子元素恢复；`toolbar` / `import-row` `z-index: 20` |
 
 ### 1.13 字灵 + 输入：已完成吞食、未完成穿透（3.2.0～3.2.1）
 

@@ -125,9 +125,9 @@ body {
 .stage {
   position: relative;
   width: 100%;
-  aspect-ratio: 1 / 1.05;
-  max-height: 62vh;
-  min-height: 220px;
+  aspect-ratio: 1 / 0.92;
+  max-height: 72vh;
+  min-height: 260px;
   border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   overflow: hidden;
@@ -276,6 +276,15 @@ body {
   right: 11px;
   max-width: min(280px, calc(100% - 22px));
   padding: 8px 10px 10px;
+  /* 字灵模式：整块面板不抢画布点击（否则底部工具栏也难点）；仅输入区与按钮可点 */
+  pointer-events: none;
+}
+.opening-panel.docked .opening-label,
+.opening-panel.docked .opening-textarea,
+.opening-panel.docked .opening-actions,
+.opening-panel.docked .opening-btn,
+.opening-panel.docked .opening-hint {
+  pointer-events: auto;
 }
 .opening-panel.docked .opening-textarea {
   min-height: 64px;
@@ -287,6 +296,8 @@ body {
   display: flex;
   gap: 8px;
   align-items: stretch;
+  position: relative;
+  z-index: 20;
 }
 .import-input {
   flex: 1;
@@ -380,6 +391,8 @@ body {
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   padding: 0;
+  position: relative;
+  z-index: 20;
 }
 
 .tool {

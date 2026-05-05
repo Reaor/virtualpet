@@ -2510,6 +2510,12 @@
       }
     }
 
+    /** 画布内可移动边距（原 0.38~0.42×size 过小，字灵活动范围像被框死） */
+    _motionPad() {
+      const half = (this.size || 320) * 0.5;
+      return Math.max(12, half * 0.2);
+    }
+
     // 拖拽（世界坐标系）
     beginDrag(x, y) {
       if (this.viewMode !== "pet") return;
@@ -2522,7 +2528,7 @@
     }
     dragTo(x, y) {
       if (!this.dragging) return;
-      const pad = this.size * 0.42;
+      const pad = this._motionPad();
       const nx = clamp(x + this.dragOffset.x, pad, this.width - pad);
       const ny = clamp(y + this.dragOffset.y, pad, this.height - pad);
       if (this._dragPrevPos) {
@@ -2601,12 +2607,12 @@
           this.idleAngle += dt * 0.35;
           const ax =
             this.center.x +
-            Math.sin(this.idleAngle * 0.7) * this.width * 0.14 +
-            Math.sin(this.idleAngle * 1.3 + 1.1) * this.width * 0.06;
+            Math.sin(this.idleAngle * 0.7) * this.width * 0.24 +
+            Math.sin(this.idleAngle * 1.3 + 1.1) * this.width * 0.1;
           const ay =
             this.center.y +
-            Math.cos(this.idleAngle * 0.6) * this.height * 0.1 +
-            Math.sin(this.idleAngle * 1.1) * this.height * 0.05;
+            Math.cos(this.idleAngle * 0.6) * this.height * 0.18 +
+            Math.sin(this.idleAngle * 1.1) * this.height * 0.09;
           this.anchor.x = ax;
           this.anchor.y = ay;
         } else if (this.mode === "sleep") {
@@ -2635,7 +2641,7 @@
       this.pos.x += this.vel.x * dt;
       this.pos.y += this.vel.y * dt;
       if (!this.dragging) {
-        const pad = this.size * 0.38;
+        const pad = this._motionPad();
         this.pos.x = clamp(this.pos.x, pad, this.width - pad);
         this.pos.y = clamp(this.pos.y, pad, this.height - pad);
       }
