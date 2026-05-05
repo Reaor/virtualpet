@@ -172,6 +172,64 @@
     );
   }
 
+  /** 5×7 点阵数字（计时 / 数字形态用） */
+  function digitPattern5x7(d) {
+    const p = {
+      0: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+      1: ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
+      2: ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
+      3: ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
+      4: ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
+      5: ["11111", "10000", "10000", "11110", "00001", "00001", "11110"],
+      6: ["01110", "10000", "10000", "11110", "10001", "10001", "01110"],
+      7: ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
+      8: ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
+      9: ["01110", "10001", "10001", "01111", "00001", "00001", "01110"],
+    };
+    return p[d] || p[0];
+  }
+
+  function mergeDigitRows(leftRows, gapCols, rightRows) {
+    const g = ".".repeat(gapCols);
+    return leftRows.map((row, i) => row + g + (rightRows[i] || ""));
+  }
+
+  function rowsToTargets(rows, cell, n, jitter = 0.12) {
+    const h = rows.length;
+    const w = rows[0] ? rows[0].length : 0;
+    const pts = [];
+    for (let y = 0; y < h; y++) {
+      const row = rows[y] || "";
+      for (let x = 0; x < row.length; x++) {
+        const ch = row[x];
+        if (ch === "1") {
+          pts.push({
+            x: (x - w / 2 + 0.5) * cell,
+            y: (y - h / 2 + 0.5) * cell,
+          });
+        }
+      }
+    }
+    if (pts.length === 0) {
+      return Array.from({ length: n }, () => ({ x: 0, y: 0 }));
+    }
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const p = pts[i % pts.length];
+      out.push({
+        x: p.x + rand(-cell * jitter, cell * jitter),
+        y: p.y + rand(-cell * jitter, cell * jitter),
+      });
+    }
+    return out;
+  }
+
+  function colonRows() {
+    const dot = ".....1.....";
+    const emp = "...........";
+    return [dot, dot, emp, dot, dot, emp, emp];
+  }
+
   // ---------- 形态库 ---------- //
   // 每个形态：{ label, build(count, S) -> {targets: [{x,y}], eyes: [{x,y},{x,y}], faceDir } }
   const FORMS = {
@@ -669,86 +727,32 @@
         };
       },
     },
-  };
 
-  /** 5×7 点阵数字 → 局部坐标点列表 */
-  function digitPattern5x7(d) {
-    const p = {
-      0: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
-      1: ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
-      2: ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
-      3: ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
-      4: ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
-      5: ["11111", "10000", "10000", "11110", "00001", "00001", "11110"],
-      6: ["01110", "10000", "10000", "11110", "10001", "10001", "01110"],
-      7: ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
-      8: ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
-      9: ["01110", "10001", "10001", "01111", "00001", "00001", "01110"],
-    };
-    return p[d] || p[0];
-  }
-
-  function mergeDigitRows(leftRows, gapCols, rightRows) {
-    const g = ".".repeat(gapCols);
-    return leftRows.map((row, i) => row + g + (rightRows[i] || ""));
-  }
-
-  function rowsToTargets(rows, cell, n, jitter = 0.12) {
-    const h = rows.length;
-    const w = rows[0] ? rows[0].length : 0;
-    const pts = [];
-    for (let y = 0; y < h; y++) {
-      const row = rows[y] || "";
-      for (let x = 0; x < row.length; x++) {
-        const ch = row[x];
-        if (ch === "1") {
-          pts.push({
-            x: (x - w / 2 + 0.5) * cell,
-            y: (y - h / 2 + 0.5) * cell,
-          });
-        }
-      }
-    }
-    if (pts.length === 0) {
-      return Array.from({ length: n }, () => ({ x: 0, y: 0 }));
-    }
-    const out = [];
-    for (let i = 0; i < n; i++) {
-      const p = pts[i % pts.length];
-      out.push({
-        x: p.x + rand(-cell * jitter, cell * jitter),
-        y: p.y + rand(-cell * jitter, cell * jitter),
-      });
-    }
-    return out;
-  }
-
-  function colonRows() {
-    const dot = ".....1.....";
-    const emp = "...........";
-    return [dot, dot, emp, dot, dot, emp, emp];
-  }
-
-  FORMS.clock = {
-    label: "计时",
-    build(n, S) {
-      const d = new Date();
-      const hh = String(d.getHours()).padStart(2, "0");
-      const mm = String(d.getMinutes()).padStart(2, "0");
-      const r1 = mergeDigitRows(digitPattern5x7(hh[0]), 1, digitPattern5x7(hh[1]));
-      const rMid = mergeDigitRows(r1, 1, colonRows());
-      const rows = mergeDigitRows(rMid, 1, mergeDigitRows(digitPattern5x7(mm[0]), 1, digitPattern5x7(mm[1])));
-      const cell = S * 0.028;
-      const targets = rowsToTargets(rows, cell, n, 0.08);
-      return {
-        targets,
-        ordered: true,
-        eyes: [
-          { x: -S * 0.25, y: -S * 0.32 },
-          { x: S * 0.25, y: -S * 0.32 },
-        ],
-        eyeSize: 1,
-      };
+    clock: {
+      label: "计时",
+      build(n, S) {
+        const d = new Date();
+        const hh = String(d.getHours()).padStart(2, "0");
+        const mm = String(d.getMinutes()).padStart(2, "0");
+        const r1 = mergeDigitRows(digitPattern5x7(hh[0]), 1, digitPattern5x7(hh[1]));
+        const rMid = mergeDigitRows(r1, 1, colonRows());
+        const rows = mergeDigitRows(
+          rMid,
+          1,
+          mergeDigitRows(digitPattern5x7(mm[0]), 1, digitPattern5x7(mm[1]))
+        );
+        const cell = S * 0.028;
+        const targets = rowsToTargets(rows, cell, n, 0.08);
+        return {
+          targets,
+          ordered: true,
+          eyes: [
+            { x: -S * 0.25, y: -S * 0.32 },
+            { x: S * 0.25, y: -S * 0.32 },
+          ],
+          eyeSize: 1,
+        };
+      },
     },
   };
 
