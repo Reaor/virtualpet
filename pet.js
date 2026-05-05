@@ -132,6 +132,55 @@
     return points.slice(0, count);
   }
 
+  /** 与剪影相同的缩放栅格，用于轮廓内可走判定（alpha > 128） */
+  function rasterizeMask(drawFn, S) {
+    const cap = 280;
+    const sampleS = Math.min(Math.round(S), cap);
+    const scale = sampleS / S;
+    const c = document.createElement("canvas");
+    c.width = sampleS;
+    c.height = sampleS;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.clearRect(0, 0, sampleS, sampleS);
+    ctx.save();
+    ctx.scale(scale, scale);
+    drawFn(ctx, S);
+    ctx.restore();
+    const img = ctx.getImageData(0, 0, sampleS, sampleS).data;
+    const grid = new Uint8Array(sampleS * sampleS);
+    for (let i = 0; i < sampleS * sampleS; i++) {
+      grid[i] = img[i * 4 + 3] > 128 ? 1 : 0;
+    }
+    return { grid, w: sampleS, h: sampleS, scale };
+  }
+
+  function maskLocalWalkable(maskPack, lx, ly, flip) {
+    if (!maskPack || !maskPack.grid) return true;
+    const lxu = lx * (flip || 1);
+    const xi = Math.round(lxu * maskPack.scale + maskPack.w * 0.5);
+    const yi = Math.round(ly * maskPack.scale + maskPack.h * 0.5);
+    if (xi < 0 || yi < 0 || xi >= maskPack.w || yi >= maskPack.h) return false;
+    return maskPack.grid[yi * maskPack.w + xi] === 1;
+  }
+
+  /** 将局部偏移拉回可走区域：螺旋搜索邻域 */
+  function clampLocalToMask(maskPack, lx, ly, flip, maxR = 14) {
+    if (!maskPack || !maskPack.grid) return { lx, ly };
+    if (maskLocalWalkable(maskPack, lx, ly, flip)) return { lx, ly };
+    const step = 1 / Math.max(maskPack.scale, 0.001);
+    for (let r = 1; r <= maxR; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dy++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const nx = lx + dx * step * 3;
+          const ny = ly + dy * step * 3;
+          if (maskLocalWalkable(maskPack, nx, ny, flip)) return { lx: nx, ly: ny };
+        }
+      }
+    }
+    return { lx, ly };
+  }
+
   // 数学曲线采样（更光滑）
   function parametricPoints(fn, count, scale) {
     const out = [];
@@ -224,6 +273,47 @@
     return [dot, dot, emp, dot, dot, emp, emp];
   }
 
+  function buildScriptLayout(lines, n, S) {
+    const cleaned = (lines || []).map((l) => String(l || "").trim()).filter(Boolean);
+    const useLines = cleaned.length ? cleaned : ["山色有无中", "江流天地外", "云霞出海曙"];
+    const cell = clamp(Math.round(S * 0.048), 11, 22);
+    const slots = [];
+    let flat = "";
+    for (let li = 0; li < useLines.length; li++) {
+      const chs = Array.from(useLines[li]);
+      flat += useLines[li];
+      const rowY = (li - (useLines.length - 1) / 2) * cell * 1.38;
+      for (let i = 0; i < chs.length; i++) {
+        slots.push({
+          x: (i - (chs.length - 1) / 2) * cell,
+          y: rowY,
+        });
+      }
+    }
+    const targets = [];
+    for (let i = 0; i < n; i++) {
+      const p = slots[i % slots.length];
+      targets.push({
+        x: p.x + rand(-cell * 0.06, cell * 0.06),
+        y: p.y + rand(-cell * 0.06, cell * 0.06),
+      });
+    }
+    const maskDraw = (ctx, s) => {
+      const sc = Math.min(Math.round(s), 280);
+      const c = cell * (sc / s);
+      ctx.fillStyle = "#000";
+      for (let li = 0; li < useLines.length; li++) {
+        const chs = Array.from(useLines[li]);
+        const cy = s * 0.5 + (li - (useLines.length - 1) / 2) * c * 1.38;
+        for (let i = 0; i < chs.length; i++) {
+          const cx = s * 0.5 + (i - (chs.length - 1) / 2) * c;
+          ctx.fillRect(cx - c * 0.48, cy - c * 0.48, c * 0.96, c * 0.96);
+        }
+      }
+    };
+    return { targets, maskDraw, flat, ordered: true };
+  }
+
   // ---------- 形态库 ---------- //
   // 每个形态：{ label, build(count, S) -> {targets: [{x,y}], eyes: [{x,y},{x,y}], faceDir } }
   const FORMS = {
@@ -246,6 +336,12 @@
             { x: R * 0.32, y: -R * 0.1 },
           ],
           eyeSize: 1.5,
+          maskDraw: (ctx, s) => {
+            ctx.fillStyle = "#000";
+            ctx.beginPath();
+            ctx.arc(s / 2, s / 2, s * 0.32, 0, TAU);
+            ctx.fill();
+          },
         };
       },
     },
@@ -783,6 +879,68 @@
         };
       },
     },
+
+    /** 预设文稿：整齐行列；用于开场展示，mask 为字格矩形并集 */
+    script: {
+      label: "文稿",
+      build(n, S) {
+        const b = buildScriptLayout(null, n, S);
+        return {
+          targets: b.targets,
+          ordered: b.ordered,
+          eyes: [
+            { x: -S * 0.14, y: -S * 0.32 },
+            { x: S * 0.14, y: -S * 0.32 },
+          ],
+          eyeSize: 1,
+          maskDraw: b.maskDraw,
+        };
+      },
+    },
+
+    /** 李萨如曲线填充：动态几何标杆，粗笔画作可走轮廓 */
+    lissajous: {
+      label: "李萨如",
+      build(n, S) {
+        const a = 3;
+        const b = 2;
+        const R = S * 0.34;
+        const targets = [];
+        for (let i = 0; i < n; i++) {
+          const u = (i / Math.max(n, 1)) * TAU * 2 + rand(-0.05, 0.05);
+          targets.push({
+            x: Math.sin(a * u) * R + rand(-R * 0.06, R * 0.06),
+            y: Math.sin(b * u + 0.7) * R * 0.92 + rand(-R * 0.06, R * 0.06),
+          });
+        }
+        return {
+          targets,
+          eyes: [
+            { x: -S * 0.1, y: -S * 0.22 },
+            { x: S * 0.1, y: -S * 0.22 },
+          ],
+          eyeSize: 1.25,
+          maskDraw: (ctx, s) => {
+            ctx.strokeStyle = "#000";
+            ctx.lineWidth = s * 0.1;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            ctx.beginPath();
+            const cx = s * 0.5;
+            const cy = s * 0.52;
+            const Rm = s * 0.34;
+            for (let k = 0; k <= 280; k++) {
+              const u = (k / 280) * TAU * 2;
+              const x = cx + Math.sin(a * u) * Rm;
+              const y = cy + Math.sin(b * u + 0.7) * Rm * 0.92;
+              if (k === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+          },
+        };
+      },
+    },
   };
 
   for (let di = 0; di <= 9; di++) {
@@ -824,6 +982,7 @@
     "emoji_face_c",
     "digit_8",
     "clock",
+    "lissajous",
   ];
 
   // ---------- 表情（眼区由躯体内的「字层」呈现；此处供旧逻辑/色值参考） ---------- //
@@ -939,6 +1098,37 @@
       this.internalMotion = opts.internalMotion !== false;
       this._patrolAmp = opts.patrolAmp != null ? opts.patrolAmp : 1;
 
+      /** intro=仅背景；script=整齐文稿；pet=字灵 */
+      this.viewMode =
+        opts.initialViewMode === "pet"
+          ? "pet"
+          : opts.initialViewMode === "script"
+            ? "script"
+            : opts.initialViewMode === "intro"
+              ? "intro"
+              : "intro";
+      /** 文稿行（script / intro 切回用） */
+      this.scriptLines = (opts.scriptLines || []).slice();
+      /** 化为字灵后的默认形态 */
+      this._petEntryForm =
+        opts.petEntryForm && FORMS[opts.petEntryForm]
+          ? opts.petEntryForm
+          : opts.initialForm && FORMS[opts.initialForm]
+            ? opts.initialForm
+            : "blob";
+      /** 轮廓内可走：栅格位图 + scale */
+      this._maskPack = null;
+      this._maskFormKey = "";
+      this._maskSizeIdx = 0;
+      /** 轮廓内游走（曼哈顿累积偏移）；none 关闭 */
+      this.pathMode =
+        opts.pathMode !== undefined ? opts.pathMode : "wander";
+      this._nextWanderPick = 0;
+
+      /** 拖拽：每字滞后锚点（有序中的乱） */
+      this.dragLagEnabled = opts.dragLag !== false;
+      this.dragVel = { x: 0, y: 0 };
+
       /** 渐进换形：逐字走向新形态目标，速度与日常格移同量级 */
       this.morphToKey = null;
       this.morphFinalMeta = null;
@@ -967,7 +1157,18 @@
       }
 
       this._initGlyphs();
-      this.setForm("blob");
+      if (this.viewMode === "intro") {
+        this.form = "blob";
+        this.formData = null;
+      } else if (this.viewMode === "script") {
+        this.setForm("script", true);
+      } else {
+        const startKey =
+          opts.initialForm && FORMS[opts.initialForm]
+            ? opts.initialForm
+            : this._petEntryForm;
+        this.setForm(startKey);
+      }
 
       this._lastTime = performance.now();
       this._raf = requestAnimationFrame(this._loop.bind(this));
@@ -1039,6 +1240,19 @@
           // 外圈字略模糊：给粒子一个"深度"参数
           depth: Math.random(),
           edge: 0.5,
+          /** 拖拽滞后位置（世界坐标，追 pos） */
+          lagX: 0,
+          lagY: 0,
+          lagVx: 0,
+          lagVy: 0,
+          lagK: 1,
+          /** 轮廓内游走：相对锚点格的偏移（整数格） */
+          wgx: 0,
+          wgy: 0,
+          wtgx: 0,
+          wtgy: 0,
+          wanderNextAt: 0,
+          wanderRad: 10,
           /** 巡逻相位（每字不同） */
           patrolSeed: Math.random() * TAU,
           patrolAmpMul: 0.85 + Math.random() * 0.3,
@@ -1053,7 +1267,22 @@
       this.formStartTime = performance.now();
       if (name === "clock") this._clockMinuteSlot = -1;
       const S = this.size;
-      const data = FORMS[name].build(this.particleCount, S);
+      let data =
+        name === "script" && this.scriptLines && this.scriptLines.length
+          ? (() => {
+              const b = buildScriptLayout(this.scriptLines, this.particleCount, S);
+              return {
+                targets: b.targets,
+                ordered: true,
+                eyes: [
+                  { x: -S * 0.14, y: -S * 0.32 },
+                  { x: S * 0.14, y: -S * 0.32 },
+                ],
+                eyeSize: 1,
+                maskDraw: b.maskDraw,
+              };
+            })()
+          : FORMS[name].build(this.particleCount, S);
       // 稳定分配
       const order = data.ordered
         ? data.targets
@@ -1084,11 +1313,22 @@
       data.leftEyeSize = this.size * 0.05 * (data.eyeSize || 1.4);
       this.formData = data;
       this._cinnabarIdx = null; // 换形 → 重新挑朱砂字
-      if (this.faceLayerMode) this._assignFaceGlyphs();
+
+      if (data.maskDraw) {
+        this._maskPack = rasterizeMask(data.maskDraw, S);
+        this._maskFormKey = name;
+        this._maskSizeIdx = Math.round(S * 10);
+      } else {
+        this._maskPack = null;
+        this._maskFormKey = "";
+      }
+
+      if (this.faceLayerMode && name !== "script") this._assignFaceGlyphs();
       this._applyEmojiPaletteIfNeeded();
       if (!(this.formData && this.formData.charPalette)) {
         this._reapplyBodyFromQueue();
       }
+      if (name === "script") this._applyScriptCharsFromLayout();
       if (this.gridSnapping) this._snapGlyphTargetsToGrid();
       this._resolveUniqueLocalGrid();
       this._applyGridTypography();
@@ -1103,10 +1343,165 @@
           g.vy = 0;
         }
       }
+
+      const cell = this.gridCell;
+      const rot = this.rotation;
+      const flip = this.facingFlip;
+      const cos = Math.cos(rot);
+      const sin = Math.sin(rot);
+      const bx = this.pos.x;
+      const by = this.pos.y;
+      const nowSec = performance.now() / 1000;
+      for (let i = 0; i < this.glyphs.length; i++) {
+        const g = this.glyphs[i];
+        g.wgx = 0;
+        g.wgy = 0;
+        g.wtgx = 0;
+        g.wtgy = 0;
+        const ph = (g.patrolSeed || 0) * 13.7 + i * 1.73;
+        g.lagK = 0.38 + (Math.sin(ph * 1.1) * 0.5 + 0.5) * 1.45;
+        if (g.faceRole) g.lagK *= 0.52;
+        g.lagX = bx;
+        g.lagY = by;
+        g.lagVx = 0;
+        g.lagVy = 0;
+        g.wanderNextAt = nowSec + rand(0.15, 0.9);
+        const radBase = 8 + Math.floor((g.depth || 0.5) * 24);
+        g.wanderRad =
+          name === "script" ? clamp(radBase, 5, 14) : clamp(radBase, 12, 44);
+        const txl = g.tx * flip;
+        const tyl = g.ty;
+        const wx = bx + (txl * cos - tyl * sin);
+        const wy = by + (txl * sin + tyl * cos);
+        g._anchorGx = Math.round(wx / cell);
+        g._anchorGy = Math.round(wy / cell);
+      }
+      this._nextWanderPick = nowSec + 0.35;
+
       if (typeof this.onFormChange === "function" && !noEmitOnFormChange) {
         try {
           this.onFormChange(this.form);
         } catch (_) {}
+      }
+    }
+
+    _applyScriptCharsFromLayout() {
+      const lines =
+        this.scriptLines && this.scriptLines.length
+          ? this.scriptLines
+          : ["山色有无中", "江流天地外", "云霞出海曙"];
+      const flat = lines.join("");
+      const chars = Array.from(flat).filter((c) => c.trim());
+      const slots = this.glyphs.filter((g) => !g.faceRole);
+      for (let i = 0; i < slots.length; i++) {
+        slots[i].char = chars[i % chars.length] || slots[i].char;
+      }
+    }
+
+    /**
+     * 世界格心是否在剪影 mask 内（局部坐标检测）
+     */
+    _worldCellWalkable(gx, gy, bx, by, cos, sin, flip) {
+      if (!this._maskPack || !this._maskPack.grid) return true;
+      const cell = this.gridCell;
+      const wx = gx * cell;
+      const wy = gy * cell;
+      const rdx = wx - bx;
+      const rdy = wy - by;
+      const txl = rdx * cos + rdy * sin;
+      const tyl = -rdx * sin + rdy * cos;
+      const lx = txl / flip;
+      return maskLocalWalkable(this._maskPack, lx, tyl, flip);
+    }
+
+    _pickWanderDelta(g, bx, by, cos, sin, flip) {
+      const cell = this.gridCell;
+      const txl = g.tx * flip;
+      const tyl = g.ty;
+      const wxb = bx + (txl * cos - tyl * sin);
+      const wyb = by + (txl * sin + tyl * cos);
+      const anchorGx = Math.round(wxb / cell);
+      const anchorGy = Math.round(wyb / cell);
+      const rad = g.wanderRad || 14;
+      for (let k = 0; k < 48; k++) {
+        const ddx = Math.floor(rand(-rad, rad + 1));
+        const ddy = Math.floor(rand(-rad, rad + 1));
+        if (ddx * ddx + ddy * ddy > rad * rad) continue;
+        const tgx = anchorGx + ddx;
+        const tgy = anchorGy + ddy;
+        if (this._worldCellWalkable(tgx, tgy, bx, by, cos, sin, flip)) {
+          g.wtgx = ddx;
+          g.wtgy = ddy;
+          return;
+        }
+      }
+      g.wtgx = 0;
+      g.wtgy = 0;
+    }
+
+    _stepWanderToward(g) {
+      if (g.wgx === g.wtgx && g.wgy === g.wtgy) return;
+      const adx = g.wtgx - g.wgx;
+      const ady = g.wtgy - g.wgy;
+      if (Math.abs(adx) >= Math.abs(ady) && adx !== 0) {
+        g.wgx += adx > 0 ? 1 : -1;
+      } else if (ady !== 0) {
+        g.wgy += ady > 0 ? 1 : -1;
+      }
+    }
+
+    setScriptLines(lines) {
+      this.scriptLines = Array.isArray(lines)
+        ? lines.map((l) => String(l || "").trim()).filter(Boolean)
+        : [];
+    }
+
+    enterScriptMode(lines, silent) {
+      this.viewMode = "script";
+      if (lines && lines.length) this.setScriptLines(lines);
+      this.pos.x = this.center.x;
+      this.pos.y = this.center.y;
+      this.vel.x = 0;
+      this.vel.y = 0;
+      this.anchor.x = this.center.x;
+      this.anchor.y = this.center.y;
+      this.setForm("script", silent, silent);
+    }
+
+    awakenPet(preferredForm, silent) {
+      const key =
+        (preferredForm && FORMS[preferredForm] && preferredForm) ||
+        this._petEntryForm ||
+        "blob";
+      this.viewMode = "pet";
+      this.pos.x = this.center.x;
+      this.pos.y = this.center.y;
+      this.vel.x = 0;
+      this.vel.y = 0;
+      this.anchor.x = this.center.x;
+      this.anchor.y = this.center.y;
+      this.setForm(key, silent, silent);
+    }
+
+    enterIntroMode(silent) {
+      this.viewMode = "intro";
+      this.abortFeeding();
+      if (this.morphGlyphToTarget) this._cancelMorph(false);
+      this.dragging = false;
+      this._dragPrevPos = null;
+      this.form = "blob";
+      this.formData = null;
+      for (const g of this.glyphs) {
+        g.mgx = null;
+        g.mgy = null;
+        g.lagX = this.center.x;
+        g.lagY = this.center.y;
+        g.lagVx = 0;
+        g.lagVy = 0;
+        g.wgx = 0;
+        g.wgy = 0;
+        g.wtgx = 0;
+        g.wtgy = 0;
       }
     }
 
@@ -1862,8 +2257,16 @@
     // 觅食路径：传入一组世界坐标目标点（按顺序访问），每到一个触发 callback
     startFeeding(targets, onReach, onDone) {
       if (this.dragging) this.endDrag();
+      if (this.viewMode !== "pet") this.awakenPet(null, true);
       this.mode = "feeding";
-      this._formBeforeFeed = this.form && FORMS[this.form] ? this.form : "blob";
+      this._formBeforeFeed =
+        this.form === "script"
+          ? this._petEntryForm && FORMS[this._petEntryForm]
+            ? this._petEntryForm
+            : "blob"
+          : this.form && FORMS[this.form]
+            ? this.form
+            : "blob";
       this.feedQueue = targets.slice();
       this.feedTargetWorld = null;
       this.onFeedReach = onReach;
@@ -1901,6 +2304,7 @@
     sleep(on) {
       if (on) {
         if (this.mode === "feeding") this.abortFeeding();
+        if (this.viewMode !== "pet") this.awakenPet(null, true);
         this.mode = "sleep";
         this.setExpression("sleep");
       } else {
@@ -1911,6 +2315,7 @@
 
     shake() {
       if (this.mode === "feeding") this.abortFeeding();
+      if (this.viewMode !== "pet") this.awakenPet(null, true);
       this._rumbleAmp = Math.min(0.55, (this._rumbleAmp || 0) + 0.45);
       this._glyphFlash = Math.min(0.55, (this._glyphFlash || 0) + 0.42);
       this.setExpression("surprised");
@@ -1919,9 +2324,12 @@
 
     // 拖拽（世界坐标系）
     beginDrag(x, y) {
+      if (this.viewMode !== "pet") return;
       this.dragging = true;
       this.dragOffset.x = this.pos.x - x;
       this.dragOffset.y = this.pos.y - y;
+      this._dragPrevPos = { x: this.pos.x, y: this.pos.y };
+      this.dragVel = { x: 0, y: 0 };
       this.setExpression("shy");
     }
     dragTo(x, y) {
@@ -1929,11 +2337,18 @@
       const pad = this.size * 0.42;
       const nx = clamp(x + this.dragOffset.x, pad, this.width - pad);
       const ny = clamp(y + this.dragOffset.y, pad, this.height - pad);
+      if (this._dragPrevPos) {
+        this.dragVel.x = nx - this._dragPrevPos.x;
+        this.dragVel.y = ny - this._dragPrevPos.y;
+        this._dragPrevPos.x = nx;
+        this._dragPrevPos.y = ny;
+      }
       this.pos.x = nx;
       this.pos.y = ny;
     }
     endDrag() {
       this.dragging = false;
+      this._dragPrevPos = null;
       this.setExpression("happy");
       setTimeout(() => {
         if (this.expression === "happy") this.setExpression("normal");
@@ -1952,6 +2367,15 @@
     _update(dt, now) {
       const t = now / 1000;
       this.breath = Math.sin(t * 1.3) * 0.06 + 1;
+
+      if (this.viewMode === "intro") {
+        for (const r of this.ripples) {
+          r.r += 160 * dt;
+          r.alpha -= 0.9 * dt;
+        }
+        this.ripples = this.ripples.filter((r) => r.alpha > 0);
+        return;
+      }
 
       // 觅食路径必须与拖拽解耦：否则手指在画布外松开时 dragging 一直为 true，会永久卡住
       if (this.mode === "feeding") {
@@ -1980,7 +2404,7 @@
           }
         }
       } else if (!this.dragging) {
-        if (this.mode === "idle") {
+        if (this.mode === "idle" && this.viewMode === "pet") {
           this.idleAngle += dt * 0.35;
           const ax =
             this.center.x +
@@ -1998,7 +2422,12 @@
         }
       }
 
-      // 宠物整体位置向 anchor 靠近（有惯性）
+      if (this.viewMode === "script") {
+        this.anchor.x = this.center.x;
+        this.anchor.y = this.center.y;
+        this.vel.x *= 0.82;
+        this.vel.y *= 0.82;
+      }
       if (!this.dragging) {
         const k = this.mode === "feeding" ? 14 : 3.5;
         const damp = this.mode === "feeding" ? 4 : 2.2;
@@ -2061,6 +2490,50 @@
       const cos = Math.cos(rot);
       const sin = Math.sin(rot);
 
+      if (
+        this.gridMarch &&
+        this.gridSnapping &&
+        !this.morphGlyphToTarget &&
+        this.viewMode === "pet" &&
+        this.pathMode !== "none" &&
+        this.form !== "script"
+      ) {
+        if (t >= this._nextWanderPick) {
+          this._nextWanderPick = t + rand(0.35, 1.05);
+          for (const g of this.glyphs) {
+            if (g.faceRole || this.form === "clock") continue;
+            if (t >= g.wanderNextAt) {
+              g.wanderNextAt = t + rand(0.55, 2.4);
+              this._pickWanderDelta(g, bx, by, cos, sin, flip);
+            }
+          }
+        }
+        for (const g of this.glyphs) {
+          if (!g.faceRole && this.form !== "clock") this._stepWanderToward(g);
+        }
+      }
+
+      if (this.dragLagEnabled) {
+        const dvx = this.dragging ? this.dragVel.x : 0;
+        const dvy = this.dragging ? this.dragVel.y : 0;
+        for (const g of this.glyphs) {
+          const rate = 4 + g.lagK * 6;
+          const sp = 1 - Math.exp(-rate * dt);
+          g.lagX = lerp(g.lagX, bx, sp);
+          g.lagY = lerp(g.lagY, by, sp);
+          if (this.dragging) {
+            const imp = 0.022 * g.lagK * (g.faceRole ? 0.35 : 1);
+            g.lagX += dvx * imp;
+            g.lagY += dvy * imp;
+          }
+        }
+      } else {
+        for (const g of this.glyphs) {
+          g.lagX = bx;
+          g.lagY = by;
+        }
+      }
+
       const eyeClearR = this.size * 0.08;
       const useEyeClear = !this.faceLayerMode;
 
@@ -2097,16 +2570,31 @@
 
           const txl = g.tx * flip;
           const tyl = g.ty;
-          let wx = bx + (txl * cos - tyl * sin);
-          let wy = by + (txl * sin + tyl * cos);
+          const lbx = this.dragLagEnabled ? g.lagX : bx;
+          const lby = this.dragLagEnabled ? g.lagY : by;
+          let wx = lbx + (txl * cos - tyl * sin);
+          let wy = lby + (txl * sin + tyl * cos);
+
+          const mT = this.morphGlyphToTarget && this.morphGlyphToTarget[gi];
+          if (
+            !mT &&
+            !g.faceRole &&
+            this.viewMode === "pet" &&
+            this.pathMode !== "none" &&
+            this.form !== "clock" &&
+            this.form !== "script"
+          ) {
+            wx += (g.wgx || 0) * cell;
+            wy += (g.wgy || 0) * cell;
+          }
 
           if (this.internalMotion && !g.faceRole) {
             const pAmp =
               cell *
-              0.065 *
+              0.11 *
               (this._patrolAmp || 1) *
               (g.patrolAmpMul || 1) *
-              (this.dragging ? 1.25 : 1);
+              (this.dragging ? 1.35 : 1);
             const ph = g.patrolSeed || 0;
             wx +=
               Math.sin(t * 0.52 + ph * 2.1) * pAmp * 0.62 +
@@ -2197,8 +2685,20 @@
         for (const g of this.glyphs) {
           const txl = g.tx * flip;
           const tyl = g.ty;
-          let wx = bx + (txl * cos - tyl * sin);
-          let wy = by + (txl * sin + tyl * cos);
+          const lbx = this.dragLagEnabled ? g.lagX : bx;
+          const lby = this.dragLagEnabled ? g.lagY : by;
+          let wx = lbx + (txl * cos - tyl * sin);
+          let wy = lby + (txl * sin + tyl * cos);
+          if (
+            !g.faceRole &&
+            this.viewMode === "pet" &&
+            this.pathMode !== "none" &&
+            this.form !== "clock" &&
+            this.form !== "script"
+          ) {
+            wx += (g.wgx || 0) * cell;
+            wy += (g.wgy || 0) * cell;
+          }
           if (this.gridSnapping && !g.faceRole) {
             wx = Math.round(wx / cell) * cell;
             wy = Math.round(wy / cell) * cell;
@@ -2372,6 +2872,8 @@
         ctx.stroke();
       }
       ctx.restore();
+
+      if (this.viewMode === "intro") return;
 
       ctx.save();
       ctx.textAlign = "center";

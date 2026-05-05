@@ -182,6 +182,99 @@ body {
   opacity: 0;
 }
 
+/* Opening: empty canvas → script → pet */
+.opening-panel {
+  position: absolute;
+  z-index: 7;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  max-width: calc(100% - 20px);
+  margin: 0 auto;
+  padding: 10px 12px 12px;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--separator);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto;
+}
+.opening-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.opening-textarea {
+  width: 100%;
+  min-height: 88px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--separator);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+}
+.opening-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.opening-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.opening-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 10px;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.opening-btn.primary {
+  background: #e5e5ea;
+  color: var(--text);
+}
+.opening-btn.accent {
+  background: var(--accent);
+  color: #fff;
+}
+.opening-btn.ghost {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--separator);
+  flex: 0 0 auto;
+}
+.opening-btn:active {
+  opacity: 0.88;
+  transform: scale(0.98);
+}
+.opening-panel.docked {
+  top: 11px;
+  bottom: auto;
+  left: auto;
+  right: 11px;
+  max-width: min(280px, calc(100% - 22px));
+  padding: 8px 10px 10px;
+}
+.opening-panel.docked .opening-textarea {
+  min-height: 64px;
+  font-size: 14px;
+}
+
 /* ---------- Import row ---------- */
 .import-row {
   display: flex;

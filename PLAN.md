@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **2.8.0** 起）。
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.0.0** 起）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
 
@@ -36,9 +36,19 @@
 - **觅食**：沿路径巡游 + 面板吸字；与拖拽解耦防卡死。  
 - **AI 面板 UI**：已按产品决策移除；`ingestAiSuggestionBlock` 等 **API 仍保留** 供日后接后端。
 
----
+### 1.11 开场空白 → 文稿 → 字灵 · 轮廓内游走 · 拖拽分流（3.0.0）
 
-## 2. 待办与建议顺序（下一波）
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 初始画布空白 | **已完成** | `viewMode=intro`：仅背景 + 涟漪；`Pet` 不绘制字粒子 |
+| 预设字段整齐呈现 | **已完成** | 形态 **`script`** + `buildScriptLayout`；textarea「呈现文稿」→ `enterScriptMode` |
+| 化为字灵 / 回空白 | **已完成** | 「化为字灵」→ `awakenPet`（默认 `?form=` 或软团）；「空白」→ `enterIntroMode` |
+| 轮廓内游走 | **部分完成** | `maskDraw` + `rasterizeMask`；曼哈顿累积偏移 `wgx/wgy`；目标格经 `_worldCellWalkable` 筛选 |
+| 拖拽非整块平移 | **部分完成** | 每字 `lagX/lagY` 弹簧追 `pos`，`lagK` 差异化 + 指针速度侧向冲量 |
+
+URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定初始字灵形态。
+
+---
 
 | 优先级 | 项 | 说明 |
 |--------|----|------|

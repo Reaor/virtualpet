@@ -20,36 +20,102 @@
     buildStamp.textContent = "build " + buildMeta.content;
   }
 
+  const openingPanel = document.getElementById("openingPanel");
+  const openingPreset = document.getElementById("openingPreset");
+  const btnPresentScript = document.getElementById("btnPresentScript");
+  const btnAwakenPet = document.getElementById("btnAwakenPet");
+  const btnBackIntro = document.getElementById("btnBackIntro");
+
+  const params = new URL(location.href).searchParams;
+  const skipIntro = params.get("skipIntro") === "1" || params.get("pet") === "1";
+  const urlForm = params.get("form");
+  const scriptLinesFromUi = openingPreset
+    ? openingPreset.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+    : [];
+
   const pet = new Pet(canvas, {
     particleCount: 220,
+    initialViewMode: skipIntro ? "pet" : "intro",
+    initialForm: urlForm && FORMS[urlForm] ? urlForm : undefined,
+    scriptLines: scriptLinesFromUi.length ? scriptLinesFromUi : undefined,
     onFormChange(key) {
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
+      syncUiMode();
     },
   });
-  window._pet = pet; // 便于调试
+  window._pet = pet;
+
+  function syncUiMode() {
+    if (!openingPanel || !formLabel) return;
+    const vm = pet.viewMode;
+    if (vm === "intro") {
+      formLabel.textContent = "空白";
+      openingPanel.classList.remove("docked");
+    } else if (vm === "script") {
+      formLabel.textContent = "文稿";
+      openingPanel.classList.remove("docked");
+    } else {
+      formLabel.textContent = FORMS[pet.form] ? FORMS[pet.form].label : "";
+      openingPanel.classList.add("docked");
+    }
+  }
+
+  syncUiMode();
+
+  document.title =
+    "字灵 · " +
+    (skipIntro ? urlForm || "blob" : "开场");
+
+  function parseOpeningLines() {
+    if (!openingPreset) return [];
+    return openingPreset.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  }
+
+  if (btnPresentScript) {
+    btnPresentScript.addEventListener("click", () => {
+      const lines = parseOpeningLines();
+      pet.setScriptLines(lines);
+      pet.enterScriptMode(lines, false);
+      syncUiMode();
+      toast(lines.length ? "已呈现文稿 · 可点「化为字灵」" : "请先输入文稿");
+    });
+  }
+  if (btnAwakenPet) {
+    btnAwakenPet.addEventListener("click", () => {
+      const lines = parseOpeningLines();
+      if (lines.length) pet.setScriptLines(lines);
+      pet.attachBodyChars(lines.join("").slice(0, 96));
+      pet.awakenPet(urlForm && FORMS[urlForm] ? urlForm : null, false);
+      syncUiMode();
+      toast("化为字灵");
+    });
+  }
+  if (btnBackIntro) {
+    btnBackIntro.addEventListener("click", () => {
+      pet.enterIntroMode(false);
+      syncUiMode();
+      toast("已回空白");
+    });
+  }
 
   function setForm(key, announce = true) {
+    if (pet.viewMode !== "pet") pet.awakenPet(null, true);
     pet.setForm(key);
     formLabel.textContent = FORMS[key].label;
+    syncUiMode();
     if (announce) toast("换形 · " + FORMS[key].label);
   }
 
   function morphToForm(key, announce = true) {
     if (!FORMS[key]) return;
+    if (pet.viewMode !== "pet") pet.awakenPet(null, true);
     if (pet.gridMarch && pet.gridSnapping && pet.startMorphTo(key)) {
       formLabel.textContent = FORMS[key].label;
+      syncUiMode();
       if (announce) toast("换形中 · " + FORMS[key].label);
       return;
     }
     setForm(key, announce);
-  }
-  // 支持 URL ?form=cat 直接显示某形态（用于预览/调试）
-  const initialForm = new URL(location.href).searchParams.get("form");
-  document.title = "字灵 · " + (initialForm || "blob");
-  if (initialForm && FORMS[initialForm]) {
-    setForm(initialForm, false);
-  } else {
-    setForm("blob", false);
   }
 
   // ---------- 触摸/鼠标交互 ----------
@@ -213,6 +279,7 @@
   });
 
   function eatGlyphElement(el) {
+    if (pet.viewMode !== "pet") pet.awakenPet(null, true);
     const rect = el.getBoundingClientRect();
     const cvsRect = canvas.getBoundingClientRect();
     const fromX = rect.left + rect.width / 2 - cvsRect.left;
@@ -235,6 +302,7 @@
   // （注意：字灵活动范围在画布内，所以觅食的可视路径也在画布内；
   //  我们另外把下方面板上的真字在 pet 回到 idle 后依次"吸"进来作为收尾）
   function triggerFeeding() {
+    if (pet.viewMode !== "pet") pet.awakenPet(null, true);
     if (pet.mode === "feeding") {
       pet.abortFeeding();
       toast("已停止觅食");
@@ -352,6 +420,7 @@
 
   // ---------- 自动换形 / 偶发表情 ----------
   setInterval(() => {
+    if (pet.viewMode !== "pet") return;
     if (pet.mode !== "idle" || pet.dragging || pet.morphGlyphToTarget) return;
     if (Math.random() < 0.18) {
       const cur = pet.form;
@@ -367,6 +436,7 @@
   }, 11000);
 
   setInterval(() => {
+    if (pet.viewMode !== "pet") return;
     if (pet.mode !== "idle" || pet.dragging) return;
     const r = Math.random();
     if (r < 0.15) pet.setExpression("wink");
@@ -376,6 +446,7 @@
 
   function applyBodyImport() {
     const raw = (bodyImport && bodyImport.value) || "";
+    if (pet.viewMode !== "pet") pet.awakenPet(null, true);
     pet.attachBodyChars(raw.trim().slice(0, 24));
     pet.digestText(raw.trim());
     toast("已写入躯体 · 外圈字");

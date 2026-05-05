@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="2.8.0" />
+  <meta name="ziling-build" content="3.0.0" />
   <title>字灵 · Zì Líng</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -31,6 +31,18 @@
       <div class="form-label" id="formLabel">软团</div>
 
       <div class="hint" id="hint">拖移字灵 · 戳身边会闹 · 双击觅食 · 再点觅食可停止</div>
+
+      <div class="opening-panel" id="openingPanel">
+        <label class="opening-label" for="openingPreset">开场文稿（每行一句）</label>
+        <textarea id="openingPreset" class="opening-textarea" rows="4" maxlength="160" spellcheck="false">山色有无中
+江流天地外
+云霞出海曙</textarea>
+        <div class="opening-actions">
+          <button type="button" class="opening-btn primary" id="btnPresentScript">呈现文稿</button>
+          <button type="button" class="opening-btn accent" id="btnAwakenPet">化为字灵</button>
+          <button type="button" class="opening-btn ghost" id="btnBackIntro">空白</button>
+        </div>
+      </div>
     </section>
 
     <nav class="toolbar" role="toolbar" aria-label="互动">
@@ -118,7 +130,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="./pet.js?v=2.8.0"></script>
-    <script src="./app.js?v=2.8.0"></script>
+    <script src="./pet.js?v=3.0.0"></script>
+    <script src="./app.js?v=3.0.0"></script>
 </body>
 </html>
