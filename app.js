@@ -80,9 +80,25 @@
     return openingPreset.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   }
 
+  let scheduleInputTimer = null;
   function applyLinesToPetFromInput() {
     const lines = parseOpeningLines();
     pet.setScriptLines(lines);
+    if (pet.viewMode !== "pet") return;
+    if (scheduleInputTimer) clearTimeout(scheduleInputTimer);
+    scheduleInputTimer = setTimeout(() => {
+      scheduleInputTimer = null;
+      const L = parseOpeningLines();
+      pet.setScriptLines(L);
+      const r = pet.tryConsumeCompletedScriptLines(L);
+      if (r.ate > 0) {
+        toast(
+          r.todoTouch > 0
+            ? `已吞食 ${r.ate} 条已完成（待办未贴躯体）`
+            : `已吞食 ${r.ate} 条已完成`
+        );
+      }
+    }, 420);
   }
   if (openingPreset) {
     openingPreset.addEventListener("input", applyLinesToPetFromInput);
@@ -95,8 +111,8 @@
         return;
       }
       pet.setScriptLines(lines);
-      pet.attachBodyChars(lines.join("").slice(0, 96));
       pet.awakenPet(urlForm && FORMS[urlForm] ? urlForm : null, false);
+      pet.tryConsumeCompletedScriptLines(parseOpeningLines());
       syncUiMode();
       toast("化为字灵");
     });
@@ -115,8 +131,8 @@
     btnAwakenPet.addEventListener("click", () => {
       const lines = parseOpeningLines();
       if (lines.length) pet.setScriptLines(lines);
-      pet.attachBodyChars(lines.join("").slice(0, 96));
       pet.awakenPet(urlForm && FORMS[urlForm] ? urlForm : null, false);
+      pet.tryConsumeCompletedScriptLines(parseOpeningLines());
       syncUiMode();
       toast("化为字灵");
     });
@@ -543,10 +559,27 @@
 
   function applyBodyImport() {
     const raw = (bodyImport && bodyImport.value) || "";
+    const trimmed = raw.trim();
+    if (!trimmed) return;
     if (pet.viewMode !== "pet") pet.awakenPet(null, true);
-    pet.attachBodyChars(raw.trim().slice(0, 24));
-    pet.digestText(raw.trim());
-    toast("已写入躯体 · 外圈字");
+    const lines = trimmed.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const blocks = lines.length ? lines : [trimmed];
+    const r = pet.tryConsumeCompletedScriptLines(blocks);
+    const anyTodoOrDone = blocks.some((line) => {
+      const cl = window.ZiLing.classifyScheduleLine(line);
+      return cl.status === "todo" || cl.status === "done";
+    });
+    if (r.ate === 0 && !anyTodoOrDone) {
+      pet.attachBodyChars(trimmed.slice(0, 24));
+      pet.digestText(trimmed);
+      toast("已写入躯体 · 外圈字");
+    } else if (r.ate > 0 && r.todoTouch > 0) {
+      toast(`已吞食 ${r.ate} 条已完成 · 待办未贴躯体`);
+    } else if (r.ate > 0) {
+      toast(`已吞食 ${r.ate} 条已完成`);
+    } else if (anyTodoOrDone) {
+      toast("待办未贴躯体 · 标记已完成后可吞食");
+    }
   }
   if (bodyImportBtn) bodyImportBtn.addEventListener("click", applyBodyImport);
   if (bodyImport) {

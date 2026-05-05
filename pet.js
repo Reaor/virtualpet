@@ -47,6 +47,31 @@
     { keys: ["拖延", "耽搁", "推迟", "延后"], kind: "delay" },
   ];
 
+  /**
+   * 单行日程语义（与后续日程 App 对齐）：已完成可吞食；未完成仅穿透不贴躯体。
+   * 约定：【已完成】【完成】【未完成】【待办】、行首 ✓/✅。
+   */
+  function classifyScheduleLine(rawLine) {
+    const line = String(rawLine || "").trim();
+    if (!line) return { status: "neutral", content: "", line };
+
+    const todoMarks = /【未完成】|【待办】/;
+    const doneMarks = /【已完成】|【完成】/;
+    const donePrefix = /^\s*[✓✔✅]/;
+
+    let status = "neutral";
+    if (todoMarks.test(line)) status = "todo";
+    else if (doneMarks.test(line) || donePrefix.test(line)) status = "done";
+
+    let content = line
+      .replace(/【已完成】|【完成】|【未完成】|【待办】/g, " ")
+      .replace(/^\s*[✓✔✅]\s*/, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return { status, content, line };
+  }
+
   /** 字池中出现某字时给形态的「饮食偏好」累积 */
   const CHAR_FORM_BIAS = {
     鱼: "koi",
@@ -1114,6 +1139,9 @@
       /** 多次「写入躯体」累积队列，轮换贴到更多粒子上 */
       this.bodyCharQueue = [];
       this.bodyCharQueueMax = opts.bodyCharQueueMax != null ? opts.bodyCharQueueMax : 96;
+      /** 已在字灵模式下吞食过的「已完成」行指纹（整行 trim），避免重复吸入 */
+      this._scriptDigestSeen =
+        typeof Set !== "undefined" ? new Set() : { add() {}, has() { return false; } };
       /** 计时形态刷新间隔（秒） */
       this.clockRefreshSec = opts.clockRefreshSec != null ? opts.clockRefreshSec : 30;
       this._lastClockTick = 0;
@@ -1596,6 +1624,9 @@
 
     enterIntroMode(silent) {
       this.viewMode = "intro";
+      if (this._scriptDigestSeen && this._scriptDigestSeen.clear) {
+        this._scriptDigestSeen.clear();
+      }
       this.abortFeeding();
       if (this.morphGlyphToTarget) this._cancelMorph(false);
       this.dragging = false;
@@ -3171,6 +3202,39 @@
       ctx.restore();
     }
 
+    /**
+     * 字灵模式下根据文稿行处理日程：**已完成** → 吸入躯体；**未完成** → 不修改躯体（穿透）。
+     * 同一「已完成」整行只在首次出现时吞食（指纹为 trim 后的整行）。
+     */
+    tryConsumeCompletedScriptLines(scriptLines) {
+      if (this.viewMode !== "pet") return { ate: 0, todoTouch: 0 };
+      const lines = Array.isArray(scriptLines)
+        ? scriptLines.map((l) => String(l || "").trim()).filter(Boolean)
+        : [];
+      let ate = 0;
+      let todoTouch = 0;
+      const todoChunks = [];
+      for (const line of lines) {
+        const cl = classifyScheduleLine(line);
+        if (cl.status === "todo") {
+          todoTouch++;
+          todoChunks.push(line);
+          continue;
+        }
+        if (cl.status !== "done" || !cl.content) continue;
+        const fp = line.trim();
+        if (this._scriptDigestSeen.has(fp)) continue;
+        this._scriptDigestSeen.add(fp);
+        this.attachBodyChars(cl.content.slice(0, this.bodyCharQueueMax));
+        this.digestText(line);
+        ate++;
+      }
+      if (todoChunks.length > 0) {
+        this.digestText(todoChunks.join("\n"));
+      }
+      return { ate, todoTouch };
+    }
+
     /** 将一段文字「贴」到躯体粒子上；多次写入会**累积队列**并覆盖更多字 */
     attachBodyChars(text) {
       const arr = Array.from(String(text || "")).filter((c) => c.trim());
@@ -3261,5 +3325,6 @@
     DIGEST_RULES,
     CHAR_DIGEST_HINT,
     CHAR_FORM_BIAS,
+    classifyScheduleLine,
   };
 })();
