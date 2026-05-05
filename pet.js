@@ -729,6 +729,7 @@
     return [dot, dot, emp, dot, dot, emp, emp];
   }
 
+  FORMS.clock = {
     label: "计时",
     build(n, S) {
       const d = new Date();
