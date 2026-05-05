@@ -127,6 +127,7 @@ body {
   width: 100%;
   aspect-ratio: 1 / 1.05;
   max-height: 62vh;
+  min-height: 220px;
   border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   overflow: hidden;
@@ -140,12 +141,12 @@ body {
   height: 100%;
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 5;
 }
 
 .form-label {
   position: absolute;
-  z-index: 2;
+  z-index: 6;
   top: 12px;
   left: 12px;
   font-size: 13px;
@@ -164,7 +165,7 @@ body {
 
 .hint {
   position: absolute;
-  z-index: 2;
+  z-index: 6;
   bottom: 12px;
   left: 50%;
   transform: translateX(-50%);

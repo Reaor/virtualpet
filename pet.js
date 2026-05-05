@@ -965,7 +965,8 @@
       this.center = { x: this.width / 2, y: this.height / 2 };
       // 身体参考尺寸：按短边
       this.size = Math.min(this.width, this.height) * 0.9;
-      this.gridCell = clamp(Math.round(this.size * 0.024), 5, 10);
+      // 格距过小会导致 em 只有 3～4px，字「存在但看不见」
+      this.gridCell = clamp(Math.round(this.size * 0.03), 8, 13);
       this.anchor = { x: this.center.x, y: this.center.y };
       if (this.pos.x === 0 && this.pos.y === 0) {
         this.pos.x = this.center.x;
@@ -1387,9 +1388,9 @@
         }
         return;
       }
-      const emMin = this.gridCell * 0.66;
-      const emMax = this.gridCell * 0.84;
-      const em = clamp(this.gridCell * 0.76, emMin, emMax);
+      const emMin = Math.max(8, this.gridCell * 0.66);
+      const emMax = Math.max(emMin + 0.5, this.gridCell * 0.86);
+      const em = Math.max(9, clamp(this.gridCell * 0.78, emMin, emMax));
       for (const g of this.glyphs) {
         if (g.faceRole === "brow") {
           g.targetRot = this._quantizeTargetRot(rand(-0.06, 0.06));
@@ -2337,6 +2338,7 @@
           const capE = (this.gridCell || 10) * 0.92 * this.scale;
           if (size > capE) size = capE;
         }
+        if (size < 7.5) size = 7.5;
         const flashW = opts.flashWeight != null ? opts.flashWeight : 0.5;
         const flashBoost = 1 + Math.min(flash, 0.52) * flashW * 0.42;
         const alpha =
