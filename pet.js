@@ -824,7 +824,50 @@
     "emoji_face_c",
     "digit_8",
     "clock",
-  ];
+  };
+
+  /** 四足 / 翼龙 / 鹤：启用关节式局部摆动（字在局部坐标系内位移，模拟四肢与翼） */
+  const QUAD_LIMB_FORMS = new Set(["cat", "fox", "rabbit", "dragon", "crane"]);
+
+  /**
+   * 按形态与局部坐标（与剪影采样一致，原点在形心）划分解剖分区，供摆动与墨色层次使用。
+   */
+  function classifyAnatom(formKey, lx, ly, S) {
+    if (!S || S < 1) return "core";
+    const x = lx / S;
+    const y = ly / S;
+    switch (formKey) {
+      case "cat":
+        if (y < -0.035) return "head";
+        if (x > 0.12 && y > -0.06 && y < 0.16) return "tail";
+        if (y > 0.085) return Math.abs(x) < 0.13 ? "forelimb" : "hindlimb";
+        return "core";
+      case "fox":
+        if (y < -0.02) return "head";
+        if (x < -0.1 && y < 0.12) return "tail";
+        if (y > 0.055) return "forelimb";
+        return "core";
+      case "rabbit":
+        if (y < -0.1) return "ear";
+        if (y < 0.03) return "head";
+        if (y > 0.075) return Math.abs(x) < 0.11 ? "hindlimb" : "forelimb";
+        return "core";
+      case "dragon":
+        if (y < -0.22) return "head";
+        if (x < -0.04 && y < 0.1) return "wing";
+        if (x > 0.03 && y < 0.11) return "wing";
+        if (x > 0.07 && y > -0.02) return "tail";
+        if (y > 0.11 && x > -0.14 && x < 0.05) return "hindlimb";
+        return "core";
+      case "crane":
+        if (y < -0.12) return "head";
+        if (y > 0.08 && Math.abs(x) < 0.05) return "leg";
+        if (x > 0.08 && y < 0.12 && y > -0.22) return "wing";
+        return "core";
+      default:
+        return "core";
+    }
+  }
 
   // ---------- 表情（眼区由躯体内的「字层」呈现；此处供旧逻辑/色值参考） ---------- //
   const EXPRESSIONS = {
@@ -939,6 +982,10 @@
       this.internalMotion = opts.internalMotion !== false;
       this._patrolAmp = opts.patrolAmp != null ? opts.patrolAmp : 1;
 
+      /** 四足/翼龙等：关节式局部摆动（四肢、翼、尾） */
+      this.articMotionEnabled = opts.articMotion !== false;
+      this._articPhase = Math.random() * TAU;
+
       /** 渐进换形：逐字走向新形态目标，速度与日常格移同量级 */
       this.morphToKey = null;
       this.morphFinalMeta = null;
@@ -1039,6 +1086,8 @@
           // 外圈字略模糊：给粒子一个"深度"参数
           depth: Math.random(),
           edge: 0.5,
+          anatomRole: "core",
+          _articDrot: 0,
           /** 巡逻相位（每字不同） */
           patrolSeed: Math.random() * TAU,
           patrolAmpMul: 0.85 + Math.random() * 0.3,
@@ -1079,6 +1128,7 @@
         const d = Math.hypot(t.x - cx, t.y - cy) / maxD; // 0..1
         this.glyphs[i].edge = d;
         this.glyphs[i].faceRole = null;
+        this.glyphs[i].anatomRole = classifyAnatom(name, t.x, t.y, S);
       }
       this._layoutSettle = 0.42;
       data.leftEyeSize = this.size * 0.05 * (data.eyeSize || 1.4);
@@ -1108,6 +1158,106 @@
           this.onFormChange(this.form);
         } catch (_) {}
       }
+    }
+
+    /**
+     * 关节式局部位移（局部坐标）：在 flip/rotation 之前加到 tx,ty 上，
+     * 使四肢、翼、尾相对躯干有可见摆动，而非仅整体平移。
+     */
+    _articulateOffset(g, tSec) {
+      if (
+        !this.articMotionEnabled ||
+        g.faceRole ||
+        this.morphGlyphToTarget ||
+        !QUAD_LIMB_FORMS.has(this.form)
+      ) {
+        return { dx: 0, dy: 0, drot: 0 };
+      }
+      const role = g.anatomRole || "core";
+      if (role === "core") return { dx: 0, dy: 0, drot: 0 };
+
+      const S = this.size;
+      const ph = this._articPhase + (g.patrolSeed || 0) * 0.4;
+      const walk = Math.abs(this.vel.x) + Math.abs(this.vel.y) > 25 ? 1 : 0;
+      const dragE = this.dragging ? 1 : 0;
+      const gate = 0.42 + walk * 0.38 + dragE * 0.35;
+
+      let dx = 0;
+      let dy = 0;
+      let drot = 0;
+
+      switch (role) {
+        case "forelimb": {
+          const s = Math.sin(tSec * 2.4 + ph);
+          dx = s * S * 0.022 * gate;
+          dy = Math.cos(tSec * 2.4 + ph) * S * 0.012 * gate;
+          drot = s * 0.11 * gate;
+          break;
+        }
+        case "hindlimb": {
+          const s = Math.sin(tSec * 2.4 + ph + Math.PI * 0.85);
+          dx = s * S * 0.026 * gate;
+          dy = -Math.abs(s) * S * 0.008 * gate;
+          drot = -s * 0.1 * gate;
+          break;
+        }
+        case "tail": {
+          const s = Math.sin(tSec * 1.55 + ph);
+          dx = s * S * 0.038 * gate;
+          dy = Math.sin(tSec * 1.2 + ph * 2) * S * 0.014 * gate;
+          drot = s * 0.16 * gate;
+          break;
+        }
+        case "wing": {
+          const flap = Math.sin(tSec * 3.2 + ph);
+          dx = flap * S * 0.03 * gate;
+          dy = -Math.abs(flap) * S * 0.045 * gate;
+          drot = flap * 0.22 * gate;
+          break;
+        }
+        case "leg": {
+          const s = Math.sin(tSec * 1.9 + ph);
+          dx = s * S * 0.008 * gate;
+          dy = Math.abs(s) * S * 0.018 * gate;
+          break;
+        }
+        case "ear": {
+          const s = Math.sin(tSec * 2.1 + ph);
+          dy = s * S * 0.015 * gate;
+          drot = s * 0.08 * gate;
+          break;
+        }
+        case "head": {
+          const s = Math.sin(tSec * 1.1 + ph);
+          dx = s * S * 0.006 * gate;
+          dy = Math.cos(tSec * 0.9 + ph) * S * 0.005 * gate;
+          break;
+        }
+        default:
+          break;
+      }
+
+      return { dx, dy, drot };
+    }
+
+    /**
+     * 连贯墨色：顶光 + 轮廓 + 慢呼吸，使浓淡随时间一致变化（非每字随机杂色）。
+     */
+    _inkShade(g, tSec) {
+      const S = this.size || 320;
+      const nx = clamp(g.tx / (S * 0.52), -1, 1);
+      const ny = clamp(g.ty / (S * 0.52), -1, 1);
+      const topLit = 0.52 + (-ny) * 0.38 + nx * 0.06;
+      const core = (1 - (g.edge || 0) * 0.94) * 0.58;
+      let tone = clamp(topLit * 0.42 + core * 0.58, 0, 1);
+      const breath =
+        0.5 +
+        0.5 * Math.sin(tSec * 1.05 + (g.patrolSeed || 0) + this._articPhase * 0.3);
+      tone = clamp(tone + (breath - 0.5) * 0.09, 0, 1);
+      if (this.mode === "sleep") tone = lerp(tone, tone * 0.78, 0.55);
+      const alphaMul = lerp(0.58, 0.99, tone);
+      const sizeMul = lerp(1.06, 0.93, tone);
+      return { tone, alphaMul, sizeMul };
     }
 
     /**
@@ -1203,6 +1353,7 @@
           baseTy: snap(t.y),
           faceRole: null,
           edge: d,
+          anatomRole: classifyAnatom(name, t.x, t.y, S),
         });
       }
 
@@ -1272,6 +1423,7 @@
             twy,
             edge: g.edge,
             faceRole: g.faceRole,
+            anatomRole: g.anatomRole || "core",
           };
         }),
       };
@@ -1343,6 +1495,7 @@
         g.baseTy = g.ty;
         g.edge = t.edge;
         g.faceRole = t.faceRole || null;
+        g.anatomRole = t.anatomRole || classifyAnatom(key, g.tx, g.ty, this.size);
         g.mgx = Math.round(t.twx / step);
         g.mgy = Math.round(t.twy / step);
         g.x = g.mgx * step;
@@ -1533,6 +1686,9 @@
       const iB = pickNear(mx, my, used);
       if (iB >= 0) {
         this.glyphs[iB].faceRole = "brow";
+      }
+      for (const g of this.glyphs) {
+        if (g.faceRole) g.anatomRole = "head";
       }
     }
 
@@ -2040,6 +2196,8 @@
       this.rotation = lerp(this.rotation, this.targetRotation, 0.1);
       this.scale = lerp(this.scale, this.targetScale * this.breath, 0.15);
 
+      this._articPhase += dt * (this.mode === "sleep" ? 0.5 : 1.12);
+
       this.annoyance = Math.max(0, this.annoyance - 0.22 * dt);
       if (t >= this._moodUntil && this._moodSwap.length) this._restoreMoodChars();
       if (t >= this._unifiedUntil && this._unifiedSwap.length) this._restoreUnifiedChars();
@@ -2095,10 +2253,20 @@
             g.marchPref = g.depth > 0.5 ? 1 : 0;
           }
 
-          const txl = g.tx * flip;
-          const tyl = g.ty;
-          let wx = bx + (txl * cos - tyl * sin);
-          let wy = by + (txl * sin + tyl * cos);
+          let txf;
+          let tyf;
+          if (g.faceRole) {
+            g._articDrot = 0;
+            txf = g.tx * flip;
+            tyf = g.ty;
+          } else {
+            const art = this._articulateOffset(g, t);
+            g._articDrot = art.drot;
+            txf = (g.tx + art.dx) * flip;
+            tyf = g.ty + art.dy;
+          }
+          let wx = bx + (txf * cos - tyf * sin);
+          let wy = by + (txf * sin + tyf * cos);
 
           if (this.internalMotion && !g.faceRole) {
             const pAmp =
@@ -2106,7 +2274,8 @@
               0.065 *
               (this._patrolAmp || 1) *
               (g.patrolAmpMul || 1) *
-              (this.dragging ? 1.25 : 1);
+              (this.dragging ? 1.25 : 1) *
+              (QUAD_LIMB_FORMS.has(this.form) ? 0.5 : 1);
             const ph = g.patrolSeed || 0;
             wx +=
               Math.sin(t * 0.52 + ph * 2.1) * pAmp * 0.62 +
@@ -2195,10 +2364,20 @@
         this._fluidPhase += dt * 1.05;
 
         for (const g of this.glyphs) {
-          const txl = g.tx * flip;
-          const tyl = g.ty;
-          let wx = bx + (txl * cos - tyl * sin);
-          let wy = by + (txl * sin + tyl * cos);
+          let txf;
+          let tyf;
+          if (g.faceRole) {
+            g._articDrot = 0;
+            txf = g.tx * flip;
+            tyf = g.ty;
+          } else {
+            const art = this._articulateOffset(g, t);
+            g._articDrot = art.drot;
+            txf = (g.tx + art.dx) * flip;
+            tyf = g.ty + art.dy;
+          }
+          let wx = bx + (txf * cos - tyf * sin);
+          let wy = by + (txf * sin + tyf * cos);
           if (this.gridSnapping && !g.faceRole) {
             wx = Math.round(wx / cell) * cell;
             wy = Math.round(wy / cell) * cell;
@@ -2380,6 +2559,9 @@
 
       const drawGlyph = (g, opts) => {
         const edge = g.edge;
+        const ink =
+          !g.faceRole && !opts.skipInk ? this._inkShade(g, t) : null;
+        const shade = ink ? clamp(lerp(edge, ink.tone, 0.62), 0, 1) : edge;
         const rx = this.gridUnity ? Math.round(g.x) : g.x;
         const ry = this.gridUnity ? Math.round(g.y) : g.y;
         const roleMul =
@@ -2388,13 +2570,12 @@
             : g.faceRole
               ? lerp(1.12, 0.88, edge)
               : lerp(1.28, 0.72, edge);
-        const baseSize = g.size * this.scale * (opts.sizeMul || 1);
+        const baseSize = g.size * this.scale * (opts.sizeMul || 1) * (ink ? ink.sizeMul : 1);
         let size = baseSize * roleMul;
         if (this.gridUnity && this.gridCell) {
           const cap = this.gridCell * 0.88 * this.scale;
           if (size > cap) size = cap;
         }
-        const ch0 = g.char && g.char.length ? g.char.codePointAt(0) : 0;
         const emojiLike = glyphUsesEmojiFont(g.char);
         if (emojiLike) {
           const capE = (this.gridCell || 10) * 0.92 * this.scale;
@@ -2406,7 +2587,8 @@
         const alpha =
           (opts.alphaMul != null ? opts.alphaMul : 1) *
           flashBoost *
-          lerp(0.94, 0.42, edge) *
+          (ink ? ink.alphaMul : 1) *
+          lerp(0.94, 0.42, shade) *
           g.alpha;
         const fontMain =
           '"LXGW WenKai","LXGW WenKai Screen","Noto Serif SC","Noto Sans SC",serif';
@@ -2425,20 +2607,20 @@
           }
         } else {
           if (light) {
-            const inkR = Math.round(lerp(28, 100, edge));
-            const inkG = Math.round(lerp(28, 110, edge));
-            const inkB = Math.round(lerp(34, 120, edge));
+            const inkR = Math.round(lerp(28, 100, shade));
+            const inkG = Math.round(lerp(28, 110, shade));
+            const inkB = Math.round(lerp(34, 120, shade));
             ctx.fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
           } else {
-            const inkR = Math.round(lerp(240, 110, edge));
-            const inkG = Math.round(lerp(248, 160, edge));
-            const inkB = Math.round(lerp(255, 210, edge));
+            const inkR = Math.round(lerp(240, 110, shade));
+            const inkG = Math.round(lerp(248, 160, shade));
+            const inkB = Math.round(lerp(255, 210, shade));
             ctx.fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
           }
         }
         ctx.save();
         ctx.translate(rx, ry);
-        ctx.rotate(g.rot);
+        ctx.rotate((g.rot || 0) + (g._articDrot || 0));
         if (opts.shadow) {
           ctx.shadowColor = opts.shadow;
           ctx.shadowBlur = opts.shadowBlur || 6;
@@ -2461,6 +2643,7 @@
           if (!g || g.faceRole) continue;
           drawGlyph(g, {
             sizeMul: 1.12,
+            skipInk: true,
             color: light
               ? `rgba(0, 122, 255, ${0.55 * g.alpha})`
               : `rgba(255, 160, 190, ${0.72 * g.alpha})`,
@@ -2479,6 +2662,7 @@
         const mul = g.faceRole === "brow" ? 0.92 : 1.18;
         drawGlyph(g, {
           sizeMul: mul,
+          skipInk: true,
           color: eyeHex,
           shadow: light ? "rgba(0, 0, 0, 0.12)" : "rgba(100, 160, 255, 0.45)",
           shadowBlur: 10,
