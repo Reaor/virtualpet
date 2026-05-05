@@ -1,17 +1,19 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.2.0** 起）。
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.2.1** 起）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
 
 | 检查项 | 预期 |
 |--------|------|
 | 页头小字 | **build ×.×.×** 与 `meta ziling-build` 一致 |
-| 脚本 URL | `./pet.js?v=…` / `./app.js?v=…`（强刷缓存） |
+| 脚本 / 样式 URL | `./pet.js?v=…` / `./app.js?v=…` / `./styles.css?v=…`（强刷缓存） |
 | 页面 | 浅色 App 风；**无**整段「AI 建议」面板（协议仍可在代码 `ingestAiSuggestionBlock` 使用） |
 
 若不符：多为 **CDN/浏览器缓存**。请无痕窗口或核对 Network 里 `pet.js` 响应内容首行附近版本。
+
+**GitHub Pages 源若选「Deploy from a branch」且分支为 `gh-pages`**：须将 **`gh-pages` 与 `main` 同步**（`main` 上的 Actions 部署不会更新该分支）。本仓库已用推送合并保持 `gh-pages` ≈ `main`。
 
 ---
 
@@ -58,7 +60,7 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 | 连续轻点画布 | **已完成** | `tapInteractionBurst`：涟漪与闪光随链长增强；**第三次轻点** 触发觅食 |
 | 抽象几何 | **已完成** | **`spiro`（旋迹）**：内旋轮线 + `maskDraw` |
 
-### 1.13 字灵 + 输入：已完成吞食、未完成穿透（3.2.0）
+### 1.13 字灵 + 输入：已完成吞食、未完成穿透（3.2.0～3.2.1）
 
 | 子需求 | 状态 | 说明 |
 |--------|------|------|

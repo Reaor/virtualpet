@@ -49,23 +49,43 @@
 
   /**
    * 单行日程语义（与后续日程 App 对齐）：已完成可吞食；未完成仅穿透不贴躯体。
-   * 约定：【已完成】【完成】【未完成】【待办】、行首 ✓/✅。
+   * 约定：【已完成】【完成】【未完成】【待办】、半角 []、行首 ✓/✅、行首「已完成：」「待办：」等。
    */
   function classifyScheduleLine(rawLine) {
     const line = String(rawLine || "").trim();
     if (!line) return { status: "neutral", content: "", line };
 
-    const todoMarks = /【未完成】|【待办】/;
-    const doneMarks = /【已完成】|【完成】/;
+    const tagHits = [];
+    const pushHit = (status, index, len) => {
+      tagHits.push({ status, index, len });
+    };
+    const scan = (pattern, status) => {
+      const r = new RegExp(pattern.source, pattern.global ? pattern.flags : pattern.flags + "g");
+      let m;
+      while ((m = r.exec(line)) !== null) {
+        pushHit(status, m.index, m[0].length);
+      }
+    };
+    scan(/【已完成】|【完成】|\[已完成\]|\[完成\]/g, "done");
+    scan(/【未完成】|【待办】|\[未完成\]|\[待办\]/g, "todo");
+    tagHits.sort((a, b) => a.index - b.index);
+    const firstTag = tagHits[0];
+
     const donePrefix = /^\s*[✓✔✅]/;
+    const leadDone = /^(已完成|完成了|搞定)\s*[：:]\s*/;
+    const leadTodo = /^(未完成|待办|待完成|没做完)\s*[：:]\s*/;
 
     let status = "neutral";
-    if (todoMarks.test(line)) status = "todo";
-    else if (doneMarks.test(line) || donePrefix.test(line)) status = "done";
+    if (firstTag) status = firstTag.status;
+    else if (donePrefix.test(line)) status = "done";
+    else if (leadTodo.test(line)) status = "todo";
+    else if (leadDone.test(line)) status = "done";
 
     let content = line
       .replace(/【已完成】|【完成】|【未完成】|【待办】/g, " ")
+      .replace(/\[已完成\]|\[完成\]|\[未完成\]|\[待办\]/g, " ")
       .replace(/^\s*[✓✔✅]\s*/, "")
+      .replace(/^(已完成|完成了|搞定|未完成|待办|待完成|没做完)\s*[：:]\s*/, "")
       .replace(/\s+/g, " ")
       .trim();
 

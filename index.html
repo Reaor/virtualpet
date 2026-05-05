@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.2.0" />
+  <meta name="ziling-build" content="3.2.1" />
   <title>字灵 · Zì Líng</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css?v=3.2.1" />
 </head>
 <body>
   <div class="app">
@@ -44,7 +44,7 @@
           <button type="button" class="opening-btn ghost" id="btnRevertScript">拖回文稿</button>
         </div>
         <p class="opening-hint" id="openingHint">
-          字灵模式下编辑文稿：<strong>【已完成】</strong>行程会被吞入躯体；<strong>【未完成】</strong>仅穿透不贴字 · 双击文稿化为字灵 · 长按拖回文稿
+          字灵模式下编辑：<strong>【已完成】</strong>或 <code>[已完成]</code> / 行首 ✓ 会被吞入躯体；<strong>【未完成】</strong>或 <code>[待办]</code> 穿透不贴字 · 双击文稿化为字灵
         </p>
       </div>
     </section>
@@ -134,7 +134,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="./pet.js?v=3.2.0"></script>
-    <script src="./app.js?v=3.2.0"></script>
+    <script src="./pet.js?v=3.2.1"></script>
+    <script src="./app.js?v=3.2.1"></script>
 </body>
 </html>

@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -37,3 +37,19 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  # 若仓库 Settings → Pages 仍选「Deploy from branch: gh-pages」，须与 main 同步，否则会一直停在旧版（如 2.8）。
+  sync-gh-pages-branch:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Point gh-pages at main (same tree as Actions deploy)
+        run: git push origin HEAD:gh-pages --force
