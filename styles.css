@@ -306,11 +306,10 @@ body {
 
 #petCanvas {
   display: block;
-  width: 100%;
-  height: 100%;
   position: absolute;
   inset: 0;
   z-index: 5;
+  /* width/height 由 JS 设为整数 CSS 像素，与 buffer×DPR 对齐，避免 100% 拉伸位图发糊 */
 }
 
 .form-label {

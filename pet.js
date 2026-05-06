@@ -1641,9 +1641,10 @@
       this._resize = this._resize.bind(this);
       this._resize();
       window.addEventListener("resize", this._resize);
+      this._roHost = this.canvas.parentElement || this.canvas;
       if (typeof ResizeObserver !== "undefined") {
         this._ro = new ResizeObserver(() => this._resize());
-        this._ro.observe(this.canvas);
+        this._ro.observe(this._roHost);
       } else {
         this._ro = null;
       }
@@ -1668,26 +1669,35 @@
     }
 
     _resize() {
-      const rect = this.canvas.getBoundingClientRect();
-      let w = rect.width || this.canvas.clientWidth || this.canvas.offsetWidth;
-      let h = rect.height || this.canvas.clientHeight || this.canvas.offsetHeight;
+      const host = this.canvas.parentElement;
+      let w = host ? Math.floor(host.clientWidth) : 0;
+      let h = host ? Math.floor(host.clientHeight) : 0;
       if (!w || !h) {
-        const stage = this.canvas.parentElement;
-        if (stage) {
-          const sr = stage.getBoundingClientRect();
-          w = w || sr.width || 320;
-          h = h || sr.height || 320;
-        }
-        w = w || 320;
-        h = h || 320;
+        const rect = this.canvas.getBoundingClientRect();
+        w = Math.floor(rect.width || this.canvas.clientWidth || 0);
+        h = Math.floor(rect.height || this.canvas.clientHeight || 0);
+      }
+      if (!w || !h) {
+        w = 320;
+        h = 320;
       }
       w = Math.max(64, w);
       h = Math.max(64, h);
+
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      const bw = Math.max(1, Math.round(w * dpr));
+      const bh = Math.max(1, Math.round(h * dpr));
+
       this.width = w;
       this.height = h;
-      this.canvas.width = w * this.DPR;
-      this.canvas.height = h * this.DPR;
-      this.ctx.setTransform(this.DPR, 0, 0, this.DPR, 0, 0);
+      this.DPR = dpr;
+
+      this.canvas.width = bw;
+      this.canvas.height = bh;
+      this.canvas.style.width = w + "px";
+      this.canvas.style.height = h + "px";
+
+      this.ctx.setTransform(bw / w, 0, 0, bh / h, 0, 0);
       this.center = { x: this.width / 2, y: this.height / 2 };
       // 身体参考尺寸：按短边
       this.size = Math.min(this.width, this.height) * 0.9;
@@ -3534,6 +3544,11 @@
       ctx.save();
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
+      try {
+        if (typeof ctx.textRendering === "string") {
+          ctx.textRendering = "geometricPrecision";
+        }
+      } catch (_) {}
       const flash = this._glyphFlash || 0;
 
       const drawGlyph = (g, opts) => {
@@ -3573,7 +3588,10 @@
           g.alpha;
         const fontMain =
           '"LXGW WenKai","LXGW WenKai Screen","Noto Serif SC","Noto Sans SC",serif';
-        const szLabel = crispForm ? `${Math.round(size)}px` : `${size.toFixed(1)}px`;
+        const szLabel =
+          crispForm || this.gridUnity
+            ? `${Math.max(8, Math.round(size))}px`
+            : `${(Math.round(size * 10) / 10).toFixed(1)}px`;
         ctx.font = emojiLike
           ? `${szLabel} ${this.emojiFontStack}, ${fontMain}`
           : `${szLabel} ${fontMain}`;
@@ -3614,6 +3632,10 @@
           fillStyle = `rgba(${Math.round(cel.r)},${Math.round(cel.gg)},${Math.round(cel.b)},${alpha})`;
         }
         ctx.save();
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.shadowColor = "transparent";
         ctx.translate(rx, ry);
         ctx.rotate(g.rot);
         if (outlinePass) {
@@ -3628,6 +3650,11 @@
         if (opts.shadow) {
           ctx.shadowColor = opts.shadow;
           ctx.shadowBlur = opts.shadowBlur || 6;
+        } else {
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+          ctx.shadowColor = "transparent";
         }
         ctx.fillText(g.char, 0, 0);
         ctx.restore();
