@@ -2510,10 +2510,10 @@
       }
     }
 
-    /** 画布内可移动边距（原 0.38~0.42×size 过小，字灵活动范围像被框死） */
+    /** 画布内可移动边距：尽量贴近边缘，留出少量抗锯齿边即可 */
     _motionPad() {
       const half = (this.size || 320) * 0.5;
-      return Math.max(12, half * 0.2);
+      return Math.max(6, half * 0.08);
     }
 
     // 拖拽（世界坐标系）
@@ -2607,12 +2607,12 @@
           this.idleAngle += dt * 0.35;
           const ax =
             this.center.x +
-            Math.sin(this.idleAngle * 0.7) * this.width * 0.24 +
-            Math.sin(this.idleAngle * 1.3 + 1.1) * this.width * 0.1;
+            Math.sin(this.idleAngle * 0.7) * this.width * 0.3 +
+            Math.sin(this.idleAngle * 1.3 + 1.1) * this.width * 0.12;
           const ay =
             this.center.y +
-            Math.cos(this.idleAngle * 0.6) * this.height * 0.18 +
-            Math.sin(this.idleAngle * 1.1) * this.height * 0.09;
+            Math.cos(this.idleAngle * 0.6) * this.height * 0.22 +
+            Math.sin(this.idleAngle * 1.1) * this.height * 0.11;
           this.anchor.x = ax;
           this.anchor.y = ay;
         } else if (this.mode === "sleep") {

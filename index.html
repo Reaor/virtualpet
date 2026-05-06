@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.2.2" />
+  <meta name="ziling-build" content="3.2.3" />
   <title>字灵 · Zì Líng</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.2.2" />
+  <link rel="stylesheet" href="./styles.css?v=3.2.3" />
 </head>
 <body>
   <div class="app">
@@ -31,10 +31,13 @@
       <div class="form-label" id="formLabel">软团</div>
 
       <div class="hint" id="hint">长按字灵再拖可还原文稿 · 快连点画布有闪光 · 三连击觅食</div>
+    </section>
 
+    <!-- 文稿与工具栏在舞台外，避免叠层挡住画布与按钮命中 -->
+    <section class="controls-strip" aria-label="文稿与互动">
       <div class="opening-panel" id="openingPanel">
-        <label class="opening-label" for="openingPreset">开场文稿（每行可标【已完成】/【未完成】）</label>
-        <textarea id="openingPreset" class="opening-textarea" rows="4" maxlength="400" spellcheck="false">山色有无中
+        <label class="opening-label" for="openingPreset">日程文稿（每行可标【已完成】/【未完成】）</label>
+        <textarea id="openingPreset" class="opening-textarea" rows="3" maxlength="400" spellcheck="false">山色有无中
 江流天地外
 云霞出海曙</textarea>
         <div class="opening-actions">
@@ -44,10 +47,9 @@
           <button type="button" class="opening-btn ghost" id="btnRevertScript">拖回文稿</button>
         </div>
         <p class="opening-hint" id="openingHint">
-          字灵模式下编辑：<strong>【已完成】</strong>或 <code>[已完成]</code> / 行首 ✓ 会被吞入躯体；<strong>【未完成】</strong>或 <code>[待办]</code> 穿透不贴字 · 双击文稿化为字灵
+          字灵模式下：<strong>【已完成】</strong> / <code>[已完成]</code> / 行首 ✓ 会吞入躯体；<strong>【未完成】</strong>穿透 · 双击文稿化为字灵
         </p>
       </div>
-    </section>
 
     <nav class="toolbar" role="toolbar" aria-label="互动">
       <button class="tool" data-action="morph">
@@ -67,6 +69,7 @@
         <span class="tool-label">抖擞</span>
       </button>
     </nav>
+    </section>
 
     <section class="import-row" aria-label="躯体字导入">
       <input
@@ -134,7 +137,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="./pet.js?v=3.2.2"></script>
-    <script src="./app.js?v=3.2.2"></script>
+    <script src="./pet.js?v=3.2.3"></script>
+    <script src="./app.js?v=3.2.3"></script>
 </body>
 </html>
