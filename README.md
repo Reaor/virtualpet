@@ -6,6 +6,8 @@
 可以通过 **WebView** 直接嵌入任何安卓 App（原生、Flutter、React Native、uni-app、Hybrid 皆可），
 也可以独立部署为网页。
 
+**阶段性详细汇报（宠物介绍、设计原因、App/后端/UI 对接）** → **[`ZI_LING_STAGE_REPORT.md`](./ZI_LING_STAGE_REPORT.md)**（建议优先阅读）
+
 **需求与迭代对照**见仓库根目录 [`PLAN.md`](./PLAN.md)（含完成度、未做项与版本号约定）。
 
 ## 如何查看效果
