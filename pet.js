@@ -255,6 +255,23 @@
     return out;
   }
 
+  /** 沿闭合轮廓均匀取点（曲线类形态保持可辨，避免随机填充打散） */
+  function samplesOnOutlineLoop(outline, n, jitter) {
+    const L = outline.length;
+    if (!L || n < 1) return [];
+    const out = [];
+    const jt = jitter || 0;
+    for (let i = 0; i < n; i++) {
+      const idx = Math.min(L - 1, Math.floor((i * L) / Math.max(n, 1)));
+      const p = outline[idx];
+      out.push({
+        x: p.x + rand(-jt, jt),
+        y: p.y + rand(-jt, jt),
+      });
+    }
+    return out;
+  }
+
   /** 低阶傅里叶闭合轮廓（类「视频关键帧」平滑有机外形，系数由 seed 固定） */
   function seededFourierCoeffs(seedStr) {
     let s = 2166136261;
@@ -1026,7 +1043,7 @@
           mergeDigitRows(digitPattern5x7(mm[0]), 1, digitPattern5x7(mm[1]))
         );
         const cell = S * 0.042;
-        const targets = rowsToTargets(rows, cell, n, 0.08);
+        const targets = rowsToTargets(rows, cell, n, 0.035);
         return {
           targets,
           ordered: true,
@@ -1057,7 +1074,7 @@
       },
     },
 
-    /** 李萨如曲线填充：动态几何标杆，粗笔画作可走轮廓 */
+    /** 李萨如曲线：粒子沿曲线顺序排布，名实一致 */
     lissajous: {
       label: "李萨如",
       build(n, S) {
@@ -1066,14 +1083,15 @@
         const R = S * 0.34;
         const targets = [];
         for (let i = 0; i < n; i++) {
-          const u = (i / Math.max(n, 1)) * TAU * 2 + rand(-0.05, 0.05);
+          const u = (i / Math.max(n, 1)) * TAU * 2;
           targets.push({
-            x: Math.sin(a * u) * R + rand(-R * 0.06, R * 0.06),
-            y: Math.sin(b * u + 0.7) * R * 0.92 + rand(-R * 0.06, R * 0.06),
+            x: Math.sin(a * u) * R,
+            y: Math.sin(b * u + 0.7) * R * 0.92,
           });
         }
         return {
           targets,
+          ordered: true,
           eyes: [
             { x: -S * 0.1, y: -S * 0.22 },
             { x: S * 0.1, y: -S * 0.22 },
@@ -1101,7 +1119,7 @@
       },
     },
 
-    /** 内旋轮线（圆内滚铅笔轨迹）：细曲线 + 粗轮廓便于约束游走 */
+    /** 内旋轮线：顺序沿轨迹排布 */
     spiro: {
       label: "旋迹",
       build(n, S) {
@@ -1110,18 +1128,17 @@
         const h = S * 0.095;
         const targets = [];
         for (let i = 0; i < n; i++) {
-          const t = (i / Math.max(n, 1)) * TAU * 3 + rand(-0.04, 0.04);
-          const x =
-            (Rm - r) * Math.cos(t) + h * Math.cos(((Rm - r) / r) * t);
-          const y =
-            (Rm - r) * Math.sin(t) - h * Math.sin(((Rm - r) / r) * t);
+          const t = (i / Math.max(n, 1)) * TAU * 3;
+          const x = (Rm - r) * Math.cos(t) + h * Math.cos(((Rm - r) / r) * t);
+          const y = (Rm - r) * Math.sin(t) - h * Math.sin(((Rm - r) / r) * t);
           targets.push({
-            x: x + rand(-S * 0.03, S * 0.03),
-            y: y * 0.92 + rand(-S * 0.03, S * 0.03),
+            x,
+            y: y * 0.92,
           });
         }
         return {
           targets,
+          ordered: true,
           eyes: [
             { x: -S * 0.08, y: -S * 0.2 },
             { x: S * 0.08, y: -S * 0.2 },
@@ -1175,7 +1192,7 @@
         const rowSec = mergeDigitRows(digitPattern5x7(ss[0]), 1, digitPattern5x7(ss[1]));
         const rows = stackDigitRowBlocks(rowHM, rowSec, 2);
         const cell = S * 0.032;
-        const targets = rowsToTargets(rows, cell, n, 0.045);
+        const targets = rowsToTargets(rows, cell, n, 0.032);
         return {
           targets,
           ordered: true,
@@ -1208,9 +1225,10 @@
           const t = (j / steps) * TAU;
           outline.push(fourierXY(t, cf, rm));
         }
-        const targets = fillFromOutline(outline, n, S * 0.055);
+        const targets = samplesOnOutlineLoop(outline, n, S * 0.012);
         return {
           targets,
+          ordered: true,
           eyes: [
             { x: -S * 0.12, y: -S * 0.26 },
             { x: S * 0.12, y: -S * 0.26 },
@@ -1252,9 +1270,10 @@
             y: rk * Math.sin(t) * 0.92,
           });
         }
-        const targets = fillFromOutline(outline, n, S * 0.052);
+        const targets = samplesOnOutlineLoop(outline, n, S * 0.012);
         return {
           targets,
+          ordered: true,
           eyes: [
             { x: -S * 0.1, y: -S * 0.22 },
             { x: S * 0.1, y: -S * 0.22 },
@@ -1292,9 +1311,10 @@
           const ct = Math.cos(t);
           outline.push({ x: a * st, y: a * st * ct * 0.88 });
         }
-        const targets = fillFromOutline(outline, n, S * 0.048);
+        const targets = samplesOnOutlineLoop(outline, n, S * 0.012);
         return {
           targets,
+          ordered: true,
           eyes: [
             { x: -S * 0.1, y: -S * 0.22 },
             { x: S * 0.1, y: -S * 0.22 },
@@ -1328,7 +1348,7 @@
       build(n, S) {
         const cell = S * 0.058;
         const rows = digitPattern5x7(ds);
-        const targets = rowsToTargets(rows, cell, n, 0.1);
+        const targets = rowsToTargets(rows, cell, n, 0.04);
         return {
           targets,
           ordered: true,
@@ -1340,6 +1360,23 @@
         };
       },
     };
+  }
+
+  /** 需严格保持目标几何的形态：关闭游走/波纹/赛璐璐叠层，并跳过「一格一字」螺旋挤占 */
+  function isLayoutLockedForm(form) {
+    if (!form) return false;
+    if (form === "script" || form === "clock" || form === "chrono") return true;
+    if (
+      form === "lissajous" ||
+      form === "spiro" ||
+      form === "rose" ||
+      form === "lemniscate" ||
+      form === "fourier" ||
+      form === "mega"
+    )
+      return true;
+    if (String(form).startsWith("digit_")) return true;
+    return false;
   }
 
   function buildFormLayoutData(self, name, n, S) {
@@ -1529,12 +1566,12 @@
       /** 活字栅：统一字号、离散倾角、像素对齐 */
       this.gridUnity = opts.gridUnity !== false;
       /** 液体感：仅轻波面（不拉对角「凝聚」，以免破坏纵横走位） */
-      this.fluidStrength = opts.fluidStrength != null ? opts.fluidStrength : 0.45;
+      this.fluidStrength = opts.fluidStrength != null ? opts.fluidStrength : 0.2;
       this._fluidPhase = 0;
       /** 沿格子纵横**各自**平滑走位（曼哈顿路径），队形变换感 */
       this.gridMarch = opts.gridMarch !== false;
       /** 沿格线移动速度（格/秒） */
-      this.gridMarchSpeed = opts.gridMarchSpeed != null ? opts.gridMarchSpeed : 3.1;
+      this.gridMarchSpeed = opts.gridMarchSpeed != null ? opts.gridMarchSpeed : 2;
 
       /** 吞字后对形态的偏好（多字命中同一形会提高概率） */
       this.formDigestBias = {};
@@ -1824,8 +1861,9 @@
         g.lagVy = 0;
         g.wanderNextAt = nowSec + rand(0.15, 0.9);
         const radBase = 8 + Math.floor((g.depth || 0.5) * 24);
-        g.wanderRad =
-          name === "script" ? clamp(radBase, 5, 14) : clamp(radBase, 12, 44);
+        g.wanderRad = isLayoutLockedForm(name)
+          ? clamp(radBase, 4, 11)
+          : clamp(radBase, 12, 44);
         const txl = g.tx * flip;
         const tyl = g.ty;
         const wx = bx + (txl * cos - tyl * sin);
@@ -2157,7 +2195,9 @@
         }
       }
 
-      this._resolveUniqueLocalGridFor(list);
+      if (!isLayoutLockedForm(name)) {
+        this._resolveUniqueLocalGridFor(list);
+      }
 
       const bx = this.pos.x;
       const by = this.pos.y;
@@ -2287,6 +2327,7 @@
      */
     _resolveUniqueLocalGrid() {
       if (!this.gridSnapping) return;
+      if (isLayoutLockedForm(this.form)) return;
       const step = this.gridCell;
       const occupied = new Set();
 
@@ -2362,6 +2403,22 @@
         for (const g of this.glyphs) {
           g.targetRot = 0;
           g.size = em * (0.96 + (1 - g.edge) * 0.08);
+        }
+        return;
+      }
+      if (isLayoutLockedForm(this.form)) {
+        const em = clamp(this.gridCell * 0.83, 11.5, 20);
+        for (const g of this.glyphs) {
+          if (g.faceRole === "brow") {
+            g.targetRot = this._quantizeTargetRot(rand(-0.04, 0.04));
+            g.size = em * 0.93;
+          } else if (g.faceRole === "eyeL" || g.faceRole === "eyeR") {
+            g.targetRot = this._quantizeTargetRot(rand(-0.03, 0.03));
+            g.size = em * 1.04;
+          } else {
+            g.targetRot = 0;
+            g.size = em * lerp(1.02, 0.94, g.edge);
+          }
         }
         return;
       }
@@ -2925,7 +2982,9 @@
 
     _update(dt, now) {
       const t = now / 1000;
-      this.breath = this.form === "script" ? 1 : Math.sin(t * 1.3) * 0.06 + 1;
+      this.breath = isLayoutLockedForm(this.form)
+        ? 1
+        : Math.sin(t * 1.05) * 0.032 + 1;
 
       if (this.viewMode === "intro") {
         for (const r of this.ripples) {
@@ -2964,17 +3023,28 @@
         }
       } else if (!this.dragging) {
         if (this.mode === "idle" && this.viewMode === "pet") {
-          this.idleAngle += dt * 0.35;
-          const ax =
-            this.center.x +
-            Math.sin(this.idleAngle * 0.7) * this.width * 0.3 +
-            Math.sin(this.idleAngle * 1.3 + 1.1) * this.width * 0.12;
-          const ay =
-            this.center.y +
-            Math.cos(this.idleAngle * 0.6) * this.height * 0.22 +
-            Math.sin(this.idleAngle * 1.1) * this.height * 0.11;
-          this.anchor.x = ax;
-          this.anchor.y = ay;
+          if (isLayoutLockedForm(this.form)) {
+            this.idleAngle += dt * 0.12;
+            const s = 0.055;
+            this.anchor.x =
+              this.center.x +
+              Math.sin(this.idleAngle * 0.42) * this.width * s;
+            this.anchor.y =
+              this.center.y +
+              Math.cos(this.idleAngle * 0.38) * this.height * s * 0.92;
+          } else {
+            this.idleAngle += dt * 0.35;
+            const ax =
+              this.center.x +
+              Math.sin(this.idleAngle * 0.7) * this.width * 0.3 +
+              Math.sin(this.idleAngle * 1.3 + 1.1) * this.width * 0.12;
+            const ay =
+              this.center.y +
+              Math.cos(this.idleAngle * 0.6) * this.height * 0.22 +
+              Math.sin(this.idleAngle * 1.1) * this.height * 0.11;
+            this.anchor.x = ax;
+            this.anchor.y = ay;
+          }
         } else if (this.mode === "sleep") {
           this.anchor.x = lerp(this.anchor.x, this.center.x, 0.05);
           this.anchor.y = lerp(this.anchor.y, this.center.y + this.height * 0.05, 0.05);
@@ -2988,8 +3058,9 @@
         this.vel.y *= 0.82;
       }
       if (!this.dragging) {
-        const k = this.mode === "feeding" ? 14 : 3.5;
-        const damp = this.mode === "feeding" ? 4 : 2.2;
+        const layoutLocked = isLayoutLockedForm(this.form);
+        const k = this.mode === "feeding" ? 14 : layoutLocked ? 2.85 : 3.5;
+        const damp = this.mode === "feeding" ? 4 : layoutLocked ? 2.75 : 2.2;
         const ax = (this.anchor.x - this.pos.x) * k - this.vel.x * damp;
         const ay = (this.anchor.y - this.pos.y) * k - this.vel.y * damp;
         this.vel.x += ax * dt;
@@ -3038,9 +3109,11 @@
       if (Math.abs(this.vel.x) > 40) {
         this.facingFlip = this.vel.x > 0 ? 1 : -1;
       }
-      this.targetRotation = clamp(this.vel.x * 0.0005, -0.2, 0.2);
+      this.targetRotation = isLayoutLockedForm(this.form)
+        ? 0
+        : clamp(this.vel.x * 0.0005, -0.2, 0.2);
       this.rotation = lerp(this.rotation, this.targetRotation, 0.1);
-      const breathUse = this.form === "script" ? 1 : this.breath;
+      const breathUse = isLayoutLockedForm(this.form) ? 1 : this.breath;
       this.scale = lerp(this.scale, this.targetScale * breathUse, 0.15);
 
       this.annoyance = Math.max(0, this.annoyance - 0.22 * dt);
@@ -3073,26 +3146,17 @@
         this.form !== "script"
       ) {
         if (t >= this._nextWanderPick) {
-          this._nextWanderPick = t + rand(0.35, 1.05);
+          this._nextWanderPick = t + rand(0.45, 1.15);
           for (const g of this.glyphs) {
-            if (
-              g.faceRole ||
-              this.form === "clock" ||
-              this.form === "chrono"
-            )
-              continue;
+            if (g.faceRole || isLayoutLockedForm(this.form)) continue;
             if (t >= g.wanderNextAt) {
-              g.wanderNextAt = t + rand(0.55, 2.4);
+              g.wanderNextAt = t + rand(1.0, 2.9);
               this._pickWanderDelta(g, bx, by, cos, sin, flip);
             }
           }
         }
         for (const g of this.glyphs) {
-          if (
-            !g.faceRole &&
-            this.form !== "clock" &&
-            this.form !== "chrono"
-          )
+          if (!g.faceRole && !isLayoutLockedForm(this.form))
             this._stepWanderToward(g);
         }
       }
@@ -3137,10 +3201,13 @@
       const cell = this.gridCell;
       const rumble = (this._rumbleAmp || 0) * cell * 0.08;
       const waveAmp = (this.fluidStrength || 0) * cell * 0.09;
-      this._fluidPhase += dt * 0.95;
+      this._fluidPhase += dt * 0.48;
 
       if (this.gridMarch && this.gridSnapping) {
-        const stepBudget = Math.max(1, Math.min(6, Math.round((this.gridMarchSpeed || 3) * dt * 14)));
+        const stepBudget = Math.max(
+          1,
+          Math.min(4, Math.round((this.gridMarchSpeed || 2) * dt * 6))
+        );
 
         for (let gi = 0; gi < this.glyphs.length; gi++) {
           const g = this.glyphs[gi];
@@ -3165,26 +3232,20 @@
             !g.faceRole &&
             this.viewMode === "pet" &&
             this.pathMode !== "none" &&
-            this.form !== "clock" &&
-            this.form !== "chrono" &&
-            this.form !== "script"
+            !isLayoutLockedForm(this.form)
           ) {
             wx += (g.wgx || 0) * cell;
             wy += (g.wgy || 0) * cell;
           }
 
-          const scriptStill = this.form === "script";
-          const timerStill =
-            this.form === "clock" || this.form === "chrono";
           if (
             this.internalMotion &&
             !g.faceRole &&
-            !scriptStill &&
-            !timerStill
+            !isLayoutLockedForm(this.form)
           ) {
             const pAmp =
               cell *
-              0.11 *
+              0.055 *
               (this._patrolAmp || 1) *
               (g.patrolAmpMul || 1) *
               (this.dragging ? 1.35 : 1);
@@ -3197,12 +3258,7 @@
               Math.cos(t * 0.33 + ph * 6.2) * pAmp * 0.35;
           }
 
-          if (
-            waveAmp > 0.001 &&
-            this.form !== "script" &&
-            this.form !== "clock" &&
-            this.form !== "chrono"
-          ) {
+          if (waveAmp > 0.001 && !isLayoutLockedForm(this.form)) {
             const nx = wx * 0.017 + this._fluidPhase;
             const ny = wy * 0.015 - this._fluidPhase * 0.75;
             wx += Math.sin(nx + g.depth * 2.1) * waveAmp * 0.55;
@@ -3277,7 +3333,7 @@
         const rumble2 = (this._rumbleAmp || 0) * cell * 0.1;
         const waveAmp2 = (this.fluidStrength || 0) * cell * 0.11;
 
-        this._fluidPhase += dt * 1.05;
+        this._fluidPhase += dt * 0.52;
 
         for (const g of this.glyphs) {
           const txl = g.tx * flip;
@@ -3290,9 +3346,7 @@
             !g.faceRole &&
             this.viewMode === "pet" &&
             this.pathMode !== "none" &&
-            this.form !== "clock" &&
-            this.form !== "chrono" &&
-            this.form !== "script"
+            !isLayoutLockedForm(this.form)
           ) {
             wx += (g.wgx || 0) * cell;
             wy += (g.wgy || 0) * cell;
@@ -3301,11 +3355,7 @@
             wx = Math.round(wx / cell) * cell;
             wy = Math.round(wy / cell) * cell;
           }
-          if (
-            waveAmp2 > 0.001 &&
-            this.form !== "clock" &&
-            this.form !== "chrono"
-          ) {
+          if (waveAmp2 > 0.001 && !isLayoutLockedForm(this.form)) {
             const nx = wx * 0.019 + this._fluidPhase;
             const ny = wy * 0.017 - this._fluidPhase * 0.82;
             wx += Math.sin(nx + g.depth * 2.2) * waveAmp2 * 0.62;
@@ -3317,7 +3367,9 @@
           let ax = (wx + rx - g.x) * springK - g.vx * damping;
           let ay = (wy + ry - g.y) * springK - g.vy * damping;
           if (!g.faceRole) {
-            ax += Math.sin(t * 2 + g.depth * 6) * (this.gridSnapping ? 0.28 : 1.0);
+            const mush = this.gridSnapping ? 0.28 : 1.0;
+            const mushUse = isLayoutLockedForm(this.form) ? 0.05 : mush;
+            ax += Math.sin(t * 2 + g.depth * 6) * mushUse;
           }
           if (eyeWorld) {
             for (const e of eyeWorld) {
@@ -3403,7 +3455,7 @@
         sky.addColorStop(1, "#ebebf0");
         ctx.fillStyle = sky;
         ctx.fillRect(0, 0, W, H);
-        if (this.form !== "script") {
+        if (!isLayoutLockedForm(this.form)) {
           ctx.save();
           ctx.strokeStyle = "rgba(0, 0, 0, 0.04)";
           ctx.lineWidth = 1;
@@ -3485,7 +3537,8 @@
       const flash = this._glyphFlash || 0;
 
       const drawGlyph = (g, opts) => {
-        const isScriptForm = this.form === "script";
+        const crispForm =
+          this.form === "script" || isLayoutLockedForm(this.form);
         const edge = g.edge;
         const rx = this.gridUnity ? Math.round(g.x) : g.x;
         const ry = this.gridUnity ? Math.round(g.y) : g.y;
@@ -3494,13 +3547,13 @@
             ? lerp(1.05, 0.78, edge)
             : g.faceRole
               ? lerp(1.12, 0.88, edge)
-              : isScriptForm
+              : crispForm
                 ? 1
                 : lerp(1.28, 0.72, edge);
         const baseSize = g.size * this.scale * (opts.sizeMul || 1);
         let size = baseSize * roleMul;
         if (this.gridUnity && this.gridCell) {
-          const cap = this.gridCell * (isScriptForm ? 0.92 : 0.88) * this.scale;
+          const cap = this.gridCell * (crispForm ? 0.92 : 0.88) * this.scale;
           if (size > cap) size = cap;
         }
         const ch0 = g.char && g.char.length ? g.char.codePointAt(0) : 0;
@@ -3512,7 +3565,7 @@
         if (size < 7.5) size = 7.5;
         const flashW = opts.flashWeight != null ? opts.flashWeight : 0.5;
         const flashBoost = 1 + Math.min(flash, 0.52) * flashW * 0.42;
-        const edgeAlpha = isScriptForm ? lerp(0.99, 0.92, edge) : lerp(0.94, 0.42, edge);
+        const edgeAlpha = crispForm ? lerp(0.99, 0.92, edge) : lerp(0.94, 0.42, edge);
         const alpha =
           (opts.alphaMul != null ? opts.alphaMul : 1) *
           flashBoost *
@@ -3520,7 +3573,7 @@
           g.alpha;
         const fontMain =
           '"LXGW WenKai","LXGW WenKai Screen","Noto Serif SC","Noto Sans SC",serif';
-        const szLabel = isScriptForm ? `${Math.round(size)}px` : `${size.toFixed(1)}px`;
+        const szLabel = crispForm ? `${Math.round(size)}px` : `${size.toFixed(1)}px`;
         ctx.font = emojiLike
           ? `${szLabel} ${this.emojiFontStack}, ${fontMain}`
           : `${szLabel} ${fontMain}`;
@@ -3581,14 +3634,14 @@
       };
 
       // 主躯体字：文稿形态关闭 cel 描边叠层，避免发糊
-      const useCelInk = this.form !== "script";
+      const useCelInk = !isLayoutLockedForm(this.form);
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
         drawGlyph(g, { flashWeight: 0.45, cel: useCelInk });
       }
 
-      // 朱砂点缀（文稿形态跳过，避免叠影发糊）
-      if (this.glyphs.length > 0 && this.form !== "script") {
+      // 朱砂点缀（布局锁定形态跳过，避免叠影发糊）
+      if (this.glyphs.length > 0 && !isLayoutLockedForm(this.form)) {
         const sorted = this._cinnabarIdx || this._pickCinnabar();
         for (let k = 0; k < sorted.length; k++) {
           const g = this.glyphs[sorted[k]];
