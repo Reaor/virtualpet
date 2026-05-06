@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.2.6" />
+  <meta name="ziling-build" content="3.3.0" />
   <title>字灵 · Zì Líng</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.2.6" />
+  <link rel="stylesheet" href="./styles.css?v=3.3.0" />
 </head>
 <body>
   <div class="app">
@@ -62,7 +62,17 @@
               <button type="button" class="rail-form compact" data-form="lissajous" title="李萨如">纹</button>
               <button type="button" class="rail-form compact" data-form="spiro" title="螺线">螺</button>
               <button type="button" class="rail-form compact" data-form="flower" title="花">花</button>
-              <button type="button" class="rail-form compact" data-form="clock" title="钟">钟</button>
+              <button type="button" class="rail-form compact" data-form="clock" title="时分">钟</button>
+              <button type="button" class="rail-form compact" data-form="chrono" title="时分秒">秒</button>
+            </div>
+          </details>
+          <details class="rail-group">
+            <summary>曲线·巨字</summary>
+            <div class="rail-group-btns">
+              <button type="button" class="rail-form compact" data-form="fourier" title="傅里叶轮廓">傅</button>
+              <button type="button" class="rail-form compact" data-form="rose" title="蔷薇线">蔷</button>
+              <button type="button" class="rail-form compact" data-form="lemniscate" title="双纽线">纽</button>
+              <button type="button" class="rail-form compact" data-form="mega" title="小字拼大字">巨</button>
             </div>
           </details>
           <details class="rail-group">
@@ -165,7 +175,7 @@
       </article>
 
       <div class="panel-footnote">
-        点击卡片中的字可喂食 · URL：<code>?form=clock</code> 计时、<code>?form=dragon</code> 飞龙
+        点击卡片中的字可喂食 · URL：<code>?form=chrono</code> 秒级计时 · <code>?form=mega&amp;mega=福</code> 巨字 · <code>?form=fourier</code> 傅里叶形 · <code>?form=dragon</code> 飞龙
       </div>
     </section>
 
@@ -177,7 +187,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="./pet.js?v=3.2.6"></script>
-  <script src="./app.js?v=3.2.6"></script>
+  <script src="./pet.js?v=3.3.0"></script>
+  <script src="./app.js?v=3.3.0"></script>
 </body>
 </html>

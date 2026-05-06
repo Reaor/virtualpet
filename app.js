@@ -31,6 +31,7 @@
   const params = new URL(location.href).searchParams;
   const skipIntro = params.get("skipIntro") === "1" || params.get("pet") === "1";
   const urlForm = params.get("form");
+  const urlMega = params.get("mega");
   const scriptLinesFromUi = openingPreset
     ? openingPreset.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
     : [];
@@ -40,6 +41,7 @@
     initialViewMode: skipIntro ? "pet" : "intro",
     initialForm: urlForm && FORMS[urlForm] ? urlForm : undefined,
     scriptLines: scriptLinesFromUi.length ? scriptLinesFromUi : undefined,
+    macroChar: urlMega || undefined,
     onFormChange(key) {
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
       syncUiMode();

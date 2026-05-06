@@ -114,6 +114,11 @@
     星: "star",
     兔: "rabbit",
     狐: "fox",
+    巨: "mega",
+    傅: "fourier",
+    蔷: "rose",
+    纽: "lemniscate",
+    秒: "chrono",
   };
 
   // ---------- 工具 ---------- //
@@ -250,6 +255,68 @@
     return out;
   }
 
+  /** 低阶傅里叶闭合轮廓（类「视频关键帧」平滑有机外形，系数由 seed 固定） */
+  function seededFourierCoeffs(seedStr) {
+    let s = 2166136261;
+    for (let i = 0; i < seedStr.length; i++) {
+      s ^= seedStr.charCodeAt(i);
+      s = Math.imul(s, 16777619);
+    }
+    const rnd = () => {
+      s = (Math.imul(s, 48271) + 11) >>> 0;
+      return (s & 0xfffffff) / 0x10000000;
+    };
+    const ax = [];
+    const bx = [];
+    const ay = [];
+    const by = [];
+    for (let k = 0; k < 5; k++) {
+      const kk = k + 2;
+      const inv = 1 / kk;
+      ax.push((rnd() - 0.5) * 1.05 * inv);
+      bx.push((rnd() - 0.5) * 1.05 * inv);
+      ay.push((rnd() - 0.5) * 1.05 * inv);
+      by.push((rnd() - 0.5) * 1.05 * inv);
+    }
+    const R = 0.92 + rnd() * 0.38;
+    return { ax, bx, ay, by, R };
+  }
+
+  function fourierXY(t, cf, rm) {
+    let x = cf.R * rm * Math.cos(t);
+    let y = cf.R * rm * Math.sin(t);
+    for (let i = 0; i < cf.ax.length; i++) {
+      const k = i + 2;
+      x += (cf.ax[i] * Math.cos(k * t) + cf.bx[i] * Math.sin(k * t)) * rm;
+      y += (cf.ay[i] * Math.cos(k * t) + cf.by[i] * Math.sin(k * t)) * rm;
+    }
+    return { x, y };
+  }
+
+  /** 小字粒子填满大字笔画（与 sampleSilhouette 同源栅格采样） */
+  function buildMegaGlyphLayout(ch, n, S) {
+    const g0 = Array.from(String(ch || "字"))[0] || "字";
+    const draw = (ctx, s) => {
+      const fs = s * 0.56;
+      ctx.fillStyle = "#000";
+      ctx.font = `700 ${fs}px "LXGW WenKai","LXGW WenKai Screen","Noto Serif SC","Noto Sans SC",serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(g0, s * 0.5, s * 0.52);
+    };
+    const targets = sampleSilhouette(draw, S, n);
+    return {
+      targets,
+      ordered: true,
+      eyes: [
+        { x: -S * 0.12, y: -S * 0.3 },
+        { x: S * 0.12, y: -S * 0.3 },
+      ],
+      eyeSize: 1,
+      maskDraw: draw,
+    };
+  }
+
   function glyphUsesEmojiFont(str) {
     if (!str || !str.length) return false;
     const cp = str.codePointAt(0);
@@ -280,6 +347,25 @@
   function mergeDigitRows(leftRows, gapCols, rightRows) {
     const g = ".".repeat(gapCols);
     return leftRows.map((row, i) => row + g + (rightRows[i] || ""));
+  }
+
+  /** 纵向拼接两块点阵（用于时分 + 秒） */
+  function padDigitRow(row, width, ch = ".") {
+    if (row.length >= width) return row.slice(0, width);
+    const padL = Math.floor((width - row.length) / 2);
+    const padR = width - row.length - padL;
+    return ch.repeat(padL) + row + ch.repeat(padR);
+  }
+
+  function stackDigitRowBlocks(topRows, bottomRows, gapRows = 2) {
+    const w = Math.max(
+      ...topRows.map((r) => r.length),
+      ...bottomRows.map((r) => r.length)
+    );
+    const top = topRows.map((r) => padDigitRow(r, w));
+    const bot = bottomRows.map((r) => padDigitRow(r, w));
+    const gap = Array(gapRows).fill(".".repeat(w));
+    return [...top, ...gap, ...bot];
   }
 
   function rowsToTargets(rows, cell, n, jitter = 0.12) {
@@ -1070,6 +1156,169 @@
         };
       },
     },
+
+    /** 分秒刷新：在 clock 基础上增加两位秒（点阵） */
+    chrono: {
+      label: "时分秒",
+      build(n, S) {
+        const d = new Date();
+        const hh = String(d.getHours()).padStart(2, "0");
+        const mm = String(d.getMinutes()).padStart(2, "0");
+        const ss = String(d.getSeconds()).padStart(2, "0");
+        const r1 = mergeDigitRows(digitPattern5x7(hh[0]), 1, digitPattern5x7(hh[1]));
+        const rMid = mergeDigitRows(r1, 1, colonRows());
+        const rowHM = mergeDigitRows(
+          rMid,
+          1,
+          mergeDigitRows(digitPattern5x7(mm[0]), 1, digitPattern5x7(mm[1]))
+        );
+        const rowSec = mergeDigitRows(digitPattern5x7(ss[0]), 1, digitPattern5x7(ss[1]));
+        const rows = stackDigitRowBlocks(rowHM, rowSec, 2);
+        const cell = S * 0.032;
+        const targets = rowsToTargets(rows, cell, n, 0.045);
+        return {
+          targets,
+          ordered: true,
+          eyes: [
+            { x: -S * 0.22, y: -S * 0.36 },
+            { x: S * 0.22, y: -S * 0.36 },
+          ],
+          eyeSize: 0.92,
+        };
+      },
+    },
+
+    /** 小字铺满大字笔画；具体字元由 buildFormLayoutData + macroChar / 文稿首字决定 */
+    mega: {
+      label: "巨字",
+      build(n, S) {
+        return buildMegaGlyphLayout("字", n, S);
+      },
+    },
+
+    /** 低阶傅里叶闭合曲线：类运动捕捉平滑轮廓 */
+    fourier: {
+      label: "傅里叶形",
+      build(n, S) {
+        const cf = seededFourierCoeffs("fourier-v3");
+        const rm = S * 0.29;
+        const outline = [];
+        const steps = 520;
+        for (let j = 0; j < steps; j++) {
+          const t = (j / steps) * TAU;
+          outline.push(fourierXY(t, cf, rm));
+        }
+        const targets = fillFromOutline(outline, n, S * 0.055);
+        return {
+          targets,
+          eyes: [
+            { x: -S * 0.12, y: -S * 0.26 },
+            { x: S * 0.12, y: -S * 0.26 },
+          ],
+          eyeSize: 1.15,
+          maskDraw: (ctx, s) => {
+            const cfx = seededFourierCoeffs("fourier-v3");
+            const rmm = s * 0.29;
+            ctx.fillStyle = "#000";
+            ctx.beginPath();
+            for (let j = 0; j <= steps; j++) {
+              const t = (j / steps) * TAU;
+              const p = fourierXY(t, cfx, rmm);
+              const x = s * 0.5 + p.x;
+              const y = s * 0.52 + p.y;
+              if (j === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+          },
+        };
+      },
+    },
+
+    /** 玫瑰线 r=cos(kθ) 填充 */
+    rose: {
+      label: "蔷薇线",
+      build(n, S) {
+        const k = 5;
+        const R = S * 0.34;
+        const outline = [];
+        const steps = 480;
+        for (let j = 0; j < steps; j++) {
+          const t = (j / steps) * TAU;
+          const rk = R * Math.cos(k * t);
+          outline.push({
+            x: rk * Math.cos(t),
+            y: rk * Math.sin(t) * 0.92,
+          });
+        }
+        const targets = fillFromOutline(outline, n, S * 0.052);
+        return {
+          targets,
+          eyes: [
+            { x: -S * 0.1, y: -S * 0.22 },
+            { x: S * 0.1, y: -S * 0.22 },
+          ],
+          eyeSize: 1.2,
+          maskDraw: (ctx, s) => {
+            const Rm = s * 0.34;
+            ctx.fillStyle = "#000";
+            ctx.beginPath();
+            for (let j = 0; j <= steps; j++) {
+              const t = (j / steps) * TAU;
+              const rk = Rm * Math.cos(k * t);
+              const x = s * 0.5 + rk * Math.cos(t);
+              const y = s * 0.52 + rk * Math.sin(t) * 0.92;
+              if (j === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+          },
+        };
+      },
+    },
+
+    /** Gerono 8 字双纽线填充 */
+    lemniscate: {
+      label: "双纽线",
+      build(n, S) {
+        const a = S * 0.38;
+        const outline = [];
+        const steps = 560;
+        for (let j = 0; j < steps; j++) {
+          const t = (j / steps) * TAU;
+          const st = Math.sin(t);
+          const ct = Math.cos(t);
+          outline.push({ x: a * st, y: a * st * ct * 0.88 });
+        }
+        const targets = fillFromOutline(outline, n, S * 0.048);
+        return {
+          targets,
+          eyes: [
+            { x: -S * 0.1, y: -S * 0.22 },
+            { x: S * 0.1, y: -S * 0.22 },
+          ],
+          eyeSize: 1.15,
+          maskDraw: (ctx, s) => {
+            const aa = s * 0.38;
+            ctx.fillStyle = "#000";
+            ctx.beginPath();
+            for (let j = 0; j <= steps; j++) {
+              const t = (j / steps) * TAU;
+              const st = Math.sin(t);
+              const ct = Math.cos(t);
+              const x = s * 0.5 + aa * st;
+              const y = s * 0.52 + aa * st * ct * 0.88;
+              if (j === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+          },
+        };
+      },
+    },
   };
 
   for (let di = 0; di <= 9; di++) {
@@ -1093,6 +1342,27 @@
     };
   }
 
+  function buildFormLayoutData(self, name, n, S) {
+    if (name === "script" && self.scriptLines && self.scriptLines.length) {
+      const b = buildScriptLayout(self.scriptLines, n, S);
+      return {
+        targets: b.targets,
+        ordered: true,
+        eyes: [
+          { x: -S * 0.14, y: -S * 0.32 },
+          { x: S * 0.14, y: -S * 0.32 },
+        ],
+        eyeSize: 1,
+        maskDraw: b.maskDraw,
+      };
+    }
+    if (name === "mega") {
+      return buildMegaGlyphLayout(self._pickMacroChar(), n, S);
+    }
+    if (!FORMS[name]) return null;
+    return FORMS[name].build(n, S);
+  }
+
   const FORM_ORDER = [
     "blob",
     "cloud",
@@ -1109,8 +1379,13 @@
     "emoji_face_a",
     "emoji_face_b",
     "emoji_face_c",
+    "mega",
+    "fourier",
+    "rose",
+    "lemniscate",
     "digit_8",
     "clock",
+    "chrono",
     "lissajous",
     "spiro",
   ];
@@ -1194,6 +1469,8 @@
       this.clockRefreshSec = opts.clockRefreshSec != null ? opts.clockRefreshSec : 30;
       this._lastClockTick = 0;
       this._clockMinuteSlot = -1;
+      this._chronoSecondSlot = -1;
+      this.macroChar = opts.macroChar || null;
 
       this.glyphs = [];
       this.eyes = [
@@ -1447,26 +1724,13 @@
       if (name === "script") {
         this._resizeGlyphsForScript(this.scriptLines, { mode: "script" });
       }
+      const S = this.size;
+      const data = buildFormLayoutData(this, name, this.particleCount, S);
+      if (!data || !data.targets || !data.targets.length) return;
       this.form = name;
       this.formStartTime = performance.now();
       if (name === "clock") this._clockMinuteSlot = -1;
-      const S = this.size;
-      let data =
-        name === "script" && this.scriptLines && this.scriptLines.length
-          ? (() => {
-              const b = buildScriptLayout(this.scriptLines, this.particleCount, S);
-              return {
-                targets: b.targets,
-                ordered: true,
-                eyes: [
-                  { x: -S * 0.14, y: -S * 0.32 },
-                  { x: S * 0.14, y: -S * 0.32 },
-                ],
-                eyeSize: 1,
-                maskDraw: b.maskDraw,
-              };
-            })()
-          : FORMS[name].build(this.particleCount, S);
+      if (name === "chrono") this._chronoSecondSlot = -1;
       // 稳定分配
       const order = data.ordered
         ? data.targets
@@ -1671,6 +1935,21 @@
       }
     }
 
+    _pickMacroChar() {
+      const raw = this.macroChar && String(this.macroChar).trim();
+      if (raw) {
+        const a = Array.from(raw);
+        if (a.length) return a[0];
+      }
+      const lines = this.scriptLines || [];
+      for (const line of lines) {
+        for (const ch of Array.from(String(line || ""))) {
+          if (ch.trim()) return ch;
+        }
+      }
+      return "字";
+    }
+
     setScriptLines(lines) {
       this.scriptLines = Array.isArray(lines)
         ? lines.map((l) => String(l || "").trim()).filter(Boolean)
@@ -1804,7 +2083,8 @@
     _computeMorphGridTargets(name) {
       if (!FORMS[name]) return null;
       const S = this.size;
-      const data = FORMS[name].build(this.particleCount, S);
+      const data = buildFormLayoutData(this, name, this.particleCount, S);
+      if (!data || !data.targets || !data.targets.length) return null;
       const order = data.ordered
         ? data.targets
         : hashShuffle(data.targets, name.charCodeAt(0) + this.particleCount);
@@ -2740,6 +3020,20 @@
         }
       }
 
+      if (
+        this.form === "chrono" &&
+        this.mode === "idle" &&
+        !this.dragging &&
+        !this.morphGlyphToTarget
+      ) {
+        const d = new Date();
+        const slot = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+        if (slot !== this._chronoSecondSlot) {
+          this._chronoSecondSlot = slot;
+          this.setForm("chrono", true);
+        }
+      }
+
       // 朝向：速度方向决定左右翻面 & 小角度倾斜
       if (Math.abs(this.vel.x) > 40) {
         this.facingFlip = this.vel.x > 0 ? 1 : -1;
@@ -2781,7 +3075,12 @@
         if (t >= this._nextWanderPick) {
           this._nextWanderPick = t + rand(0.35, 1.05);
           for (const g of this.glyphs) {
-            if (g.faceRole || this.form === "clock") continue;
+            if (
+              g.faceRole ||
+              this.form === "clock" ||
+              this.form === "chrono"
+            )
+              continue;
             if (t >= g.wanderNextAt) {
               g.wanderNextAt = t + rand(0.55, 2.4);
               this._pickWanderDelta(g, bx, by, cos, sin, flip);
@@ -2789,7 +3088,12 @@
           }
         }
         for (const g of this.glyphs) {
-          if (!g.faceRole && this.form !== "clock") this._stepWanderToward(g);
+          if (
+            !g.faceRole &&
+            this.form !== "clock" &&
+            this.form !== "chrono"
+          )
+            this._stepWanderToward(g);
         }
       }
 
@@ -2862,6 +3166,7 @@
             this.viewMode === "pet" &&
             this.pathMode !== "none" &&
             this.form !== "clock" &&
+            this.form !== "chrono" &&
             this.form !== "script"
           ) {
             wx += (g.wgx || 0) * cell;
@@ -2869,10 +3174,13 @@
           }
 
           const scriptStill = this.form === "script";
+          const timerStill =
+            this.form === "clock" || this.form === "chrono";
           if (
             this.internalMotion &&
             !g.faceRole &&
-            !scriptStill
+            !scriptStill &&
+            !timerStill
           ) {
             const pAmp =
               cell *
@@ -2889,7 +3197,12 @@
               Math.cos(t * 0.33 + ph * 6.2) * pAmp * 0.35;
           }
 
-          if (waveAmp > 0.001 && this.form !== "script") {
+          if (
+            waveAmp > 0.001 &&
+            this.form !== "script" &&
+            this.form !== "clock" &&
+            this.form !== "chrono"
+          ) {
             const nx = wx * 0.017 + this._fluidPhase;
             const ny = wy * 0.015 - this._fluidPhase * 0.75;
             wx += Math.sin(nx + g.depth * 2.1) * waveAmp * 0.55;
@@ -2978,6 +3291,7 @@
             this.viewMode === "pet" &&
             this.pathMode !== "none" &&
             this.form !== "clock" &&
+            this.form !== "chrono" &&
             this.form !== "script"
           ) {
             wx += (g.wgx || 0) * cell;
@@ -2987,7 +3301,11 @@
             wx = Math.round(wx / cell) * cell;
             wy = Math.round(wy / cell) * cell;
           }
-          if (waveAmp2 > 0.001) {
+          if (
+            waveAmp2 > 0.001 &&
+            this.form !== "clock" &&
+            this.form !== "chrono"
+          ) {
             const nx = wx * 0.019 + this._fluidPhase;
             const ny = wy * 0.017 - this._fluidPhase * 0.82;
             wx += Math.sin(nx + g.depth * 2.2) * waveAmp2 * 0.62;
