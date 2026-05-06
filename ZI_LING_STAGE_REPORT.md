@@ -79,7 +79,7 @@ flowchart LR
 
 | 方式 | 适用 | 要点 |
 |------|------|------|
-| **远程 URL** | 可联网、要热更新 | 加载 `https://…/index.html`，通过 **Query** 传参（如 `?form=…&mega=…&skipIntro=1`）。 |
+| **远程 URL** | 可联网、要热更新 | 加载 `https://…/index.html`，通过 **Query** 传参（如 `?form=…&macroText=…&skipIntro=1`，`mega=` 仍兼容）。 |
 | **本地包内 HTML** | 离线、审核包 | 与 `pet.js` 等同目录部署；注意 **file://** 下字体 CDN 策略。 |
 | **WebView 双工** | 要与原生导航、登录态联动 | 使用 **`postMessage` / JSBridge** 在「壳 ↔ 页面」之间传 JSON 指令（见下节消息契约建议）。 |
 

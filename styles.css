@@ -492,6 +492,12 @@ body {
   position: relative;
   z-index: 28;
 }
+.import-row + .import-row {
+  margin-top: 8px;
+}
+.glyph-shape-row {
+  margin-top: 4px;
+}
 .import-input {
   flex: 1;
   min-width: 0;

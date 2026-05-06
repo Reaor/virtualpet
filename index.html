@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.3.3" />
+  <meta name="ziling-build" content="3.4.0" />
   <title>字灵 · Zì Líng</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.3.3" />
+  <link rel="stylesheet" href="./styles.css?v=3.4.0" />
 </head>
 <body>
   <div class="app">
@@ -39,9 +39,6 @@
             <summary>软象</summary>
             <div class="rail-group-btns">
               <button type="button" class="rail-form compact" data-form="blob" title="软团">团</button>
-              <button type="button" class="rail-form compact" data-form="cloud" title="云">云</button>
-              <button type="button" class="rail-form compact" data-form="heart" title="心">心</button>
-              <button type="button" class="rail-form compact" data-form="star" title="星">星</button>
             </div>
           </details>
           <details class="rail-group">
@@ -76,11 +73,11 @@
             </div>
           </details>
           <details class="rail-group">
-            <summary>表情</summary>
+            <summary>颜文字</summary>
             <div class="rail-group-btns">
-              <button type="button" class="rail-form compact" data-form="emoji_face_a" title="表情甲">甲</button>
-              <button type="button" class="rail-form compact" data-form="emoji_face_b" title="表情乙">乙</button>
-              <button type="button" class="rail-form compact" data-form="emoji_face_c" title="表情丙">丙</button>
+              <button type="button" class="rail-form compact" data-form="kao_joy" title="颜·喜">喜</button>
+              <button type="button" class="rail-form compact" data-form="kao_sweat" title="颜·汗">汗</button>
+              <button type="button" class="rail-form compact" data-form="kao_cool" title="颜·呆">呆</button>
             </div>
           </details>
           <details class="rail-group">
@@ -119,6 +116,18 @@
           左侧形态按类别展开；「呈」后画布字序与输入一致（不叠在同一格）。<strong>【已完成】</strong>吞入 · <strong>【未完成】</strong>穿透 · 侧栏 <strong>呈/灵/空/回</strong>
         </p>
       </div>
+    </section>
+
+    <section class="import-row glyph-shape-row" aria-label="化身大字与数字">
+      <input
+        type="text"
+        id="glyphShapeInput"
+        class="import-input"
+        maxlength="48"
+        placeholder="化身字形：一字、一词或数字（如 春 / 2026 / 休）— 点「形」应用到巨字形态"
+        autocomplete="off"
+      />
+      <button type="button" class="import-btn" id="glyphShapeBtn">形</button>
     </section>
 
     <section class="import-row" aria-label="躯体字导入">
@@ -175,7 +184,7 @@
       </article>
 
       <div class="panel-footnote">
-        点击卡片中的字可喂食 · URL：<code>?form=chrono</code> 秒级计时 · <code>?form=mega&amp;mega=福</code> 巨字 · <code>?form=fourier</code> 傅里叶形 · <code>?form=dragon</code> 飞龙
+        点击卡片中的字可喂食 · URL：<code>?form=chrono</code> 秒级计时 · <code>?form=mega&amp;macroText=2026</code> 巨字 · <code>?form=kao_joy</code> 颜文字 · <code>?form=fourier</code> 傅里叶形 · <code>?form=dragon</code> 飞龙
       </div>
     </section>
 
@@ -187,7 +196,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="./pet.js?v=3.3.3"></script>
-  <script src="./app.js?v=3.3.3"></script>
+  <script src="./pet.js?v=3.4.0"></script>
+  <script src="./app.js?v=3.4.0"></script>
 </body>
 </html>

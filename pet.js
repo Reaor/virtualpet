@@ -98,22 +98,26 @@
     鲤: "koi",
     花: "flower",
     蝶: "butterfly",
-    网: "emoji_face_c",
-    符: "emoji_face_c",
-    情: "emoji_face_a",
-    绘: "emoji_face_b",
+    网: "kao_cool",
+    符: "kao_cool",
+    情: "kao_joy",
+    绘: "kao_sweat",
     时: "clock",
     钟: "clock",
     数: "digit_8",
     龙: "dragon",
-    云: "cloud",
-    心: "heart",
+    云: "blob",
+    心: "blob",
     猫: "cat",
     鹤: "crane",
-    月: "star",
-    星: "star",
+    月: "blob",
+    星: "blob",
     兔: "rabbit",
     狐: "fox",
+    颜: "kao_joy",
+    笑: "kao_joy",
+    汗: "kao_sweat",
+    囧: "kao_sweat",
     巨: "mega",
     傅: "fourier",
     蔷: "rose",
@@ -310,16 +314,44 @@
     return { x, y };
   }
 
-  /** 小字粒子填满大字笔画（与 sampleSilhouette 同源栅格采样） */
-  function buildMegaGlyphLayout(ch, n, S) {
-    const g0 = Array.from(String(ch || "字"))[0] || "字";
+  const FONT_SILHOUETTE_SERIF =
+    '"LXGW WenKai","LXGW WenKai Screen","Noto Serif SC","Noto Sans SC",serif';
+  const FONT_SILHOUETTE_MONO =
+    'ui-monospace,"Cascadia Code","SFMono-Regular","Consolas","Liberation Mono",monospace';
+  /** 颜文字：混排符号，不用纯等宽，避免缺字形 */
+  const FONT_SILHOUETTE_KAO =
+    '"LXGW WenKai","Noto Sans SC","Noto Sans CJK SC","Segoe UI Symbol",sans-serif';
+
+  /**
+   * 小字粒子铺满任意字符串的笔画轮廓（与 sampleSilhouette 同源栅格采样）。
+   * opts.kao：颜文字专用字体栈；否则无 CJK 时用等宽（数字/ASCII），有汉字用-serif。
+   */
+  function buildTextSilhouetteLayout(raw, n, S, opts) {
+    const text = String(raw || "字").trim() || "字";
+    const kao = opts && opts.kao;
+    const forceMono = opts && opts.mono;
+    const hasHan = /[\u3400-\u9fff\uf900-\ufadf]/.test(text);
+    const fontStack = kao
+      ? FONT_SILHOUETTE_KAO
+      : forceMono || !hasHan
+        ? FONT_SILHOUETTE_MONO
+        : FONT_SILHOUETTE_SERIF;
+
     const draw = (ctx, s) => {
-      const fs = s * 0.56;
       ctx.fillStyle = "#000";
-      ctx.font = `700 ${fs}px "LXGW WenKai","LXGW WenKai Screen","Noto Serif SC","Noto Sans SC",serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(g0, s * 0.5, s * 0.52);
+      let fs = s * 0.52;
+      const maxW = s * 0.9;
+      for (let iter = 0; iter < 22; iter++) {
+        ctx.font = `700 ${fs}px ${fontStack}`;
+        const w = ctx.measureText(text).width;
+        if (w <= maxW && fs <= s * 0.58) break;
+        fs *= 0.9;
+      }
+      fs = Math.max(fs, s * 0.055);
+      ctx.font = `700 ${fs}px ${fontStack}`;
+      ctx.fillText(text, s * 0.5, s * 0.52);
     };
     const targets = sampleSilhouette(draw, S, n);
     return {
@@ -496,17 +528,20 @@
     blob: {
       label: "软团",
       build(n, S) {
-        const R = S * 0.32;
-        const targets = [];
-        for (let i = 0; i < n; i++) {
-          // 柔和不规则团：半径由几个低频正弦叠加
-          const a = Math.random() * TAU;
-          const wob = 1 + 0.15 * Math.sin(a * 3) + 0.08 * Math.sin(a * 5 + 1.3);
-          const r = R * wob * Math.sqrt(Math.random());
-          targets.push({ x: Math.cos(a) * r, y: Math.sin(a) * r * 0.92 });
+        const R = S * 0.34;
+        const outline = [];
+        for (let j = 0; j < 140; j++) {
+          const t = (j / 140) * TAU;
+          const wob = 1 + 0.06 * Math.sin(t * 3) + 0.04 * Math.sin(t * 5 + 1.1);
+          outline.push({
+            x: Math.cos(t) * R * wob,
+            y: Math.sin(t) * R * wob * 0.9,
+          });
         }
+        const targets = samplesOnOutlineLoop(outline, n, S * 0.014);
         return {
           targets,
+          ordered: true,
           eyes: [
             { x: -R * 0.32, y: -R * 0.1 },
             { x: R * 0.32, y: -R * 0.1 },
@@ -515,7 +550,18 @@
           maskDraw: (ctx, s) => {
             ctx.fillStyle = "#000";
             ctx.beginPath();
-            ctx.arc(s / 2, s / 2, s * 0.32, 0, TAU);
+            const cx = s / 2;
+            const cy = s / 2;
+            for (let j = 0; j <= 140; j++) {
+              const t = (j / 140) * TAU;
+              const wob = 1 + 0.06 * Math.sin(t * 3) + 0.04 * Math.sin(t * 5 + 1.1);
+              const rr = s * 0.34 * wob;
+              const x = cx + Math.cos(t) * rr;
+              const y = cy + Math.sin(t) * rr * 0.9;
+              if (j === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
             ctx.fill();
           },
         };
@@ -741,34 +787,6 @@
       },
     },
 
-    /** 云团：比软团更有体积层次 */
-    cloud: {
-      label: "云",
-      build(n, S) {
-        const targets = sampleSilhouette((ctx, s) => {
-          ctx.fillStyle = "#000";
-          const cx = s / 2;
-          const cy = s / 2;
-          for (let k = 0; k < 5; k++) {
-            const ox = (Math.sin(k * 1.7) * 0.22 + (k - 2) * 0.08) * s;
-            const oy = (Math.cos(k * 1.3) * 0.08) * s;
-            ctx.beginPath();
-            ctx.ellipse(cx + ox, cy + oy, s * (0.22 + k * 0.02), s * (0.14 + k * 0.015), k * 0.15, 0, TAU);
-            ctx.fill();
-          }
-        }, S, n);
-        const R = S * 0.28;
-        return {
-          targets,
-          eyes: [
-            { x: -R * 0.15, y: -R * 0.12 },
-            { x: R * 0.15, y: -R * 0.12 },
-          ],
-          eyeSize: 1.35,
-        };
-      },
-    },
-
     /** 鹤：全身站姿剪影 */
     crane: {
       label: "鹤",
@@ -806,31 +824,6 @@
           eyes: [
             { x: -R * 0.35, y: -R * 1.35 },
             { x: -R * 0.2, y: -R * 1.32 },
-          ],
-          eyeSize: 1.2,
-        };
-      },
-    },
-
-    /** 星芒：几何放射，偏装饰性 */
-    star: {
-      label: "星",
-      build(n, S) {
-        const outline = [];
-        const rays = 5;
-        for (let r = 0; r < rays; r++) {
-          const a = (r / rays) * TAU - Math.PI / 2;
-          for (let t = 0; t < 1; t += 0.06) {
-            const br = t * S * 0.38;
-            outline.push({ x: Math.cos(a) * br, y: Math.sin(a) * br });
-          }
-        }
-        const targets = fillFromOutline(outline, n, S * 0.04);
-        return {
-          targets,
-          eyes: [
-            { x: -S * 0.02, y: -S * 0.06 },
-            { x: S * 0.02, y: -S * 0.06 },
           ],
           eyeSize: 1.2,
         };
@@ -919,113 +912,23 @@
       },
     },
 
-    heart: {
-      label: "心",
+    /** 颜文字：小字沿轮廓排布（与巨字同源采样） */
+    kao_joy: {
+      label: "颜·喜",
       build(n, S) {
-        const fn = (t) => {
-          // 心形
-          const x = 16 * Math.pow(Math.sin(t), 3);
-          const y =
-            -(13 * Math.cos(t) -
-              5 * Math.cos(2 * t) -
-              2 * Math.cos(3 * t) -
-              Math.cos(4 * t));
-          return [x, y];
-        };
-        const outline = parametricPoints(fn, 400, S * 0.02);
-        const targets = fillFromOutline(outline, n, S * 0.018);
-        return {
-          targets,
-          eyes: [
-            { x: -S * 0.12, y: -S * 0.12 },
-            { x: S * 0.12, y: -S * 0.12 },
-          ],
-          eyeSize: 1.4,
-        };
+        return buildTextSilhouetteLayout("(´∀`)", n, S, { kao: true });
       },
     },
-
-    /** 表情·圆：汉字拼出圆脸轮廓（非 emoji 堆叠） */
-    emoji_face_a: {
-      label: "表情·圆",
+    kao_sweat: {
+      label: "颜·汗",
       build(n, S) {
-        const targets = sampleSilhouette((ctx, s) => {
-          ctx.fillStyle = "#000";
-          ctx.beginPath();
-          ctx.arc(s / 2, s / 2 + s * 0.04, s * 0.34, 0, TAU);
-          ctx.fill();
-          ctx.globalCompositeOperation = "destination-out";
-          ctx.beginPath();
-          ctx.arc(s * 0.38, s * 0.46, s * 0.07, 0, TAU);
-          ctx.arc(s * 0.62, s * 0.46, s * 0.07, 0, TAU);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.ellipse(s / 2, s * 0.62, s * 0.12, s * 0.05, 0, 0, TAU);
-          ctx.fill();
-          ctx.globalCompositeOperation = "source-over";
-        }, S, n);
-        return {
-          targets,
-          eyes: [
-            { x: -S * 0.22, y: -S * 0.06 },
-            { x: S * 0.22, y: -S * 0.06 },
-          ],
-          eyeSize: 1.15,
-          charPalette: "喜怒哀乐眉眼口鼻圆团笑泪惊呆",
-        };
+        return buildTextSilhouetteLayout("(；´д`)", n, S, { kao: true });
       },
     },
-
-    /** 表情·笑：汉字拼笑脸轮廓 */
-    emoji_face_b: {
-      label: "表情·笑",
+    kao_cool: {
+      label: "颜·呆",
       build(n, S) {
-        const targets = sampleSilhouette((ctx, s) => {
-          ctx.fillStyle = "#000";
-          ctx.beginPath();
-          ctx.ellipse(s / 2, s / 2 + s * 0.05, s * 0.38, s * 0.3, 0, 0, TAU);
-          ctx.fill();
-          ctx.globalCompositeOperation = "destination-out";
-          ctx.beginPath();
-          ctx.ellipse(s * 0.36, s * 0.46, s * 0.07, s * 0.05, -0.2, 0, TAU);
-          ctx.ellipse(s * 0.64, s * 0.46, s * 0.07, s * 0.05, 0.2, 0, TAU);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.ellipse(s / 2, s * 0.62, s * 0.16, s * 0.08, 0, 0.2, Math.PI - 0.2);
-          ctx.fill();
-          ctx.globalCompositeOperation = "source-over";
-        }, S, n);
-        return {
-          targets,
-          eyes: [
-            { x: -S * 0.2, y: -S * 0.02 },
-            { x: S * 0.2, y: -S * 0.02 },
-          ],
-          eyeSize: 1.1,
-          charPalette: "嘻哈哈笑眯乐悦开眉弯嘴甜",
-        };
-      },
-    },
-
-    /** 表情·符号：汉字拼圆形符号云 */
-    emoji_face_c: {
-      label: "表情·符",
-      build(n, S) {
-        const targets = sampleSilhouette((ctx, s) => {
-          ctx.fillStyle = "#000";
-          ctx.beginPath();
-          ctx.arc(s / 2, s / 2, s * 0.35, 0, TAU);
-          ctx.fill();
-        }, S, n);
-        return {
-          targets,
-          eyes: [
-            { x: -S * 0.18, y: -S * 0.08 },
-            { x: S * 0.18, y: -S * 0.08 },
-          ],
-          eyeSize: 1.1,
-          charPalette: "赞心星火电光雷铃语叹号问号",
-        };
+        return buildTextSilhouetteLayout("(￣▽￣)", n, S, { kao: true });
       },
     },
 
@@ -1205,11 +1108,11 @@
       },
     },
 
-    /** 小字铺满大字笔画；具体字元由 buildFormLayoutData + macroChar / 文稿首字决定 */
+    /** 小字铺满大字笔画；字符串由 macroText / macroChar / 文稿首字 决定（见 buildFormLayoutData） */
     mega: {
       label: "巨字",
       build(n, S) {
-        return buildMegaGlyphLayout("字", n, S);
+        return buildTextSilhouetteLayout("字", n, S, {});
       },
     },
 
@@ -1372,7 +1275,10 @@
       form === "rose" ||
       form === "lemniscate" ||
       form === "fourier" ||
-      form === "mega"
+      form === "mega" ||
+      form === "kao_joy" ||
+      form === "kao_sweat" ||
+      form === "kao_cool"
     )
       return true;
     if (String(form).startsWith("digit_")) return true;
@@ -1394,7 +1300,7 @@
       };
     }
     if (name === "mega") {
-      return buildMegaGlyphLayout(self._pickMacroChar(), n, S);
+      return buildTextSilhouetteLayout(self._pickMacroDisplay(), n, S, {});
     }
     if (!FORMS[name]) return null;
     return FORMS[name].build(n, S);
@@ -1402,7 +1308,6 @@
 
   const FORM_ORDER = [
     "blob",
-    "cloud",
     "dragon",
     "cat",
     "fox",
@@ -1411,11 +1316,9 @@
     "koi",
     "butterfly",
     "flower",
-    "heart",
-    "star",
-    "emoji_face_a",
-    "emoji_face_b",
-    "emoji_face_c",
+    "kao_joy",
+    "kao_sweat",
+    "kao_cool",
     "mega",
     "fourier",
     "rose",
@@ -1509,6 +1412,11 @@
       this._clockMinuteSlot = -1;
       this._chronoSecondSlot = -1;
       this.macroChar = opts.macroChar || null;
+      /** 巨字/数字完整字符串（优先于 macroChar 单字） */
+      this.macroText =
+        opts.macroText != null && String(opts.macroText).trim()
+          ? String(opts.macroText).trim().slice(0, 48)
+          : null;
 
       this.glyphs = [];
       this.eyes = [
@@ -1701,6 +1609,7 @@
       this.ctx.setTransform(bw / w, 0, 0, bh / h, 0, 0);
       /** 逻辑坐标对齐到物理像素（canvas buffer 栅格），减轻亚像素发糊 */
       this._pxScale = bw / w;
+      this.center = { x: this.width / 2, y: this.height / 2 };
       // 身体参考尺寸：按短边
       this.size = Math.min(this.width, this.height) * 0.9;
       // 格距过小会导致 em 只有 3～4px，字「存在但看不见」
@@ -1709,7 +1618,12 @@
         this.gridCell = Math.max(this.gridCell, 11);
       }
       this.anchor = { x: this.center.x, y: this.center.y };
-      if (this.pos.x === 0 && this.pos.y === 0) {
+      if (this.viewMode === "script" || this.viewMode === "pet") {
+        this.pos.x = this.center.x;
+        this.pos.y = this.center.y;
+        this.vel.x = 0;
+        this.vel.y = 0;
+      } else if (this.pos.x === 0 && this.pos.y === 0) {
         this.pos.x = this.center.x;
         this.pos.y = this.center.y;
       }
@@ -1988,6 +1902,13 @@
       } else if (ady !== 0) {
         g.wgy += ady > 0 ? 1 : -1;
       }
+    }
+
+    _pickMacroDisplay() {
+      if (this.macroText && String(this.macroText).trim()) {
+        return String(this.macroText).trim().slice(0, 48);
+      }
+      return this._pickMacroChar();
     }
 
     _pickMacroChar() {
@@ -2591,7 +2512,7 @@
         this._applyMoodChars("annoyed", 1.8);
         this._rumbleAmp = Math.max(this._rumbleAmp || 0, 0.85);
         this._glyphFlash = Math.min(0.55, Math.max(this._glyphFlash || 0, 0.5));
-        const alt = ["cloud", "star", "heart", "butterfly", "flower", "dragon"];
+        const alt = ["butterfly", "flower", "dragon", "kao_joy", "kao_sweat", "fourier"];
         const pick = alt[Math.floor(Math.random() * alt.length)];
         if (FORMS[pick]) this.setForm(pick, true);
         this.annoyance = 0.45;

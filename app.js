@@ -31,7 +31,7 @@
   const params = new URL(location.href).searchParams;
   const skipIntro = params.get("skipIntro") === "1" || params.get("pet") === "1";
   const urlForm = params.get("form");
-  const urlMega = params.get("mega");
+  const urlMacroStr = (params.get("macroText") || params.get("mega") || "").trim();
   const scriptLinesFromUi = openingPreset
     ? openingPreset.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
     : [];
@@ -41,7 +41,7 @@
     initialViewMode: skipIntro ? "pet" : "intro",
     initialForm: urlForm && FORMS[urlForm] ? urlForm : undefined,
     scriptLines: scriptLinesFromUi.length ? scriptLinesFromUi : undefined,
-    macroChar: urlMega || undefined,
+    macroText: urlMacroStr ? urlMacroStr.slice(0, 48) : undefined,
     onFormChange(key) {
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
       syncUiMode();
@@ -65,6 +65,44 @@
   }
 
   syncUiMode();
+
+  const glyphShapeInput = document.getElementById("glyphShapeInput");
+  const glyphShapeBtn = document.getElementById("glyphShapeBtn");
+  if (glyphShapeInput && pet.macroText) {
+    glyphShapeInput.value = pet.macroText;
+  }
+
+  function applyGlyphShapeFromInput() {
+    if (!glyphShapeInput) return;
+    const v = glyphShapeInput.value.trim();
+    if (!v) {
+      toast("请先输入化身字形（大字、数字或短语）");
+      return;
+    }
+    pet.macroText = v.slice(0, 48);
+    if (pet.viewMode === "intro") {
+      toast("先点「呈」或「灵」进入画布后再试");
+      return;
+    }
+    if (pet.viewMode === "script") {
+      pet.awakenPet("mega", false);
+    } else {
+      pet.setForm("mega");
+    }
+    syncUiMode();
+    toast("已切换巨字形态");
+  }
+  if (glyphShapeBtn) {
+    glyphShapeBtn.addEventListener("click", applyGlyphShapeFromInput);
+  }
+  if (glyphShapeInput) {
+    glyphShapeInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        applyGlyphShapeFromInput();
+      }
+    });
+  }
 
   document.title =
     "字灵 · " +
@@ -616,6 +654,6 @@
 
   // ---------- 说明 ----------
   document.getElementById("infoBtn").addEventListener("click", () => {
-    toast("拖移 · 戳身边 · 双击觅食 · 躯体可多次写入 · ?form=clock / emoji_face_a / digit_0 / dragon");
+    toast("拖移 · 戳身边 · 双击觅食 · 躯体可多次写入 · ?form=clock / kao_joy / digit_0 / mega&macroText=2026");
   });
 })();
