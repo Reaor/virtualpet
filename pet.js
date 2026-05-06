@@ -1488,6 +1488,7 @@
       this.canvas = canvas;
       this.ctx = canvas.getContext("2d");
       this.DPR = Math.min(window.devicePixelRatio || 1, 3);
+      this._pxScale = this.DPR;
       this.width = 0;
       this.height = 0;
       this.center = { x: 0, y: 0 };
@@ -1698,11 +1699,12 @@
       this.canvas.style.height = h + "px";
 
       this.ctx.setTransform(bw / w, 0, 0, bh / h, 0, 0);
-      this.center = { x: this.width / 2, y: this.height / 2 };
+      /** 逻辑坐标对齐到物理像素（canvas buffer 栅格），减轻亚像素发糊 */
+      this._pxScale = bw / w;
       // 身体参考尺寸：按短边
       this.size = Math.min(this.width, this.height) * 0.9;
       // 格距过小会导致 em 只有 3～4px，字「存在但看不见」
-      this.gridCell = clamp(Math.round(this.size * 0.03), 8, 13);
+      this.gridCell = clamp(Math.round(this.size * 0.03), 9, 14);
       if (this.form === "script") {
         this.gridCell = Math.max(this.gridCell, 11);
       }
@@ -1716,6 +1718,11 @@
         if (this.morphGlyphToTarget) this._cancelMorph(false);
         this.setForm(this.form, true);
       }
+    }
+
+    _snapLogicalToDevice(v) {
+      const r = this._pxScale || this.DPR || 1;
+      return Math.round(v * r) / r;
     }
 
     _randomChar() {
@@ -3555,8 +3562,12 @@
         const crispForm =
           this.form === "script" || isLayoutLockedForm(this.form);
         const edge = g.edge;
-        const rx = this.gridUnity ? Math.round(g.x) : g.x;
-        const ry = this.gridUnity ? Math.round(g.y) : g.y;
+        let rx = this.gridUnity ? Math.round(g.x) : g.x;
+        let ry = this.gridUnity ? Math.round(g.y) : g.y;
+        if (this.gridUnity) {
+          rx = this._snapLogicalToDevice(rx);
+          ry = this._snapLogicalToDevice(ry);
+        }
         const roleMul =
           g.faceRole === "brow"
             ? lerp(1.05, 0.78, edge)
@@ -3578,6 +3589,7 @@
           if (size > capE) size = capE;
         }
         if (size < 7.5) size = 7.5;
+        if (this.gridUnity) size = Math.max(size, 8.5);
         const flashW = opts.flashWeight != null ? opts.flashWeight : 0.5;
         const flashBoost = 1 + Math.min(flash, 0.52) * flashW * 0.42;
         const edgeAlpha = crispForm ? lerp(0.99, 0.92, edge) : lerp(0.94, 0.42, edge);
@@ -3588,13 +3600,13 @@
           g.alpha;
         const fontMain =
           '"LXGW WenKai","LXGW WenKai Screen","Noto Serif SC","Noto Sans SC",serif';
+        const pxInt = Math.max(8, Math.round(size));
         const szLabel =
-          crispForm || this.gridUnity
-            ? `${Math.max(8, Math.round(size))}px`
-            : `${(Math.round(size * 10) / 10).toFixed(1)}px`;
+          crispForm || this.gridUnity ? `${pxInt}px` : `${(Math.round(size * 10) / 10).toFixed(1)}px`;
+        const fontPrefix = emojiLike ? "" : "600 ";
         ctx.font = emojiLike
           ? `${szLabel} ${this.emojiFontStack}, ${fontMain}`
-          : `${szLabel} ${fontMain}`;
+          : `${fontPrefix}${szLabel} ${fontMain}`;
         let fillStyle = null;
         let outlinePass = null;
         if (opts.color) {
@@ -3623,10 +3635,15 @@
           const cel = celRgbFromGlyph(g, light, t, this._fluidPhase || 0);
           const [or, og, ob] = cel.outlineRgb;
           const outlineA = alpha * (0.5 + cel.edgeMul * 0.38);
-          if (!g.faceRole && cel.edgeMul > 0.38) {
+          const px = this._pxScale || 1;
+          const useCelHalo =
+            !light &&
+            !g.faceRole &&
+            cel.edgeMul > 0.38;
+          if (useCelHalo) {
             outlinePass = {
               rgba: `rgba(${or},${og},${ob},${outlineA})`,
-              off: 1.05,
+              off: Math.max(0.45, 0.65 / Math.sqrt(px)),
             };
           }
           fillStyle = `rgba(${Math.round(cel.r)},${Math.round(cel.gg)},${Math.round(cel.b)},${alpha})`;
@@ -3637,7 +3654,9 @@
         ctx.shadowOffsetY = 0;
         ctx.shadowColor = "transparent";
         ctx.translate(rx, ry);
-        ctx.rotate(g.rot);
+        const snapRot =
+          this.gridUnity && !g.faceRole && Math.abs(g.rot) < 0.07 ? 0 : g.rot;
+        ctx.rotate(snapRot);
         if (outlinePass) {
           ctx.fillStyle = outlinePass.rgba;
           const o = outlinePass.off;
@@ -3660,8 +3679,8 @@
         ctx.restore();
       };
 
-      // 主躯体字：文稿形态关闭 cel 描边叠层，避免发糊
-      const useCelInk = !isLayoutLockedForm(this.form);
+      // 浅色 UI 下躯体用单层实色（关 cel 渐变），避免边缘半透明与叠层发糊；深色保留 cel + 细描边
+      const useCelInk = !isLayoutLockedForm(this.form) && !light;
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
         drawGlyph(g, { flashWeight: 0.45, cel: useCelInk });
@@ -3678,8 +3697,8 @@
             color: light
               ? `rgba(0, 122, 255, ${0.55 * g.alpha})`
               : `rgba(255, 160, 190, ${0.72 * g.alpha})`,
-            shadow: light ? "rgba(0, 122, 255, 0.2)" : "rgba(255, 120, 180, 0.35)",
-            shadowBlur: 8,
+            shadow: light ? undefined : "rgba(255, 120, 180, 0.35)",
+            shadowBlur: light ? 0 : 8,
             flashWeight: 0.4,
           });
         }
