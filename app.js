@@ -324,8 +324,8 @@
   }
   setTimeout(hideHint, 6000);
 
-  // ---------- 工具栏 ----------
-  document.querySelectorAll(".tool").forEach((btn) => {
+  // ---------- 侧栏：互动 + 快捷形态 ----------
+  document.querySelectorAll(".rail-tool").forEach((btn) => {
     btn.addEventListener("click", () => {
       const action = btn.dataset.action;
       if (action === "morph") {
@@ -349,6 +349,14 @@
         pet.shake();
         toast("抖擞精神");
       }
+    });
+  });
+
+  document.querySelectorAll(".rail-form").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.form;
+      if (!key || !FORMS[key]) return;
+      morphToForm(key);
     });
   });
 

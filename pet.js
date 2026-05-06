@@ -122,6 +122,18 @@
   const rand = (a, b) => a + Math.random() * (b - a);
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+  /** 文稿非空白字数（用于粒子数 ∝ 密度） */
+  function scriptNonSpaceCharCount(lines) {
+    if (!lines || !lines.length) return 0;
+    let n = 0;
+    for (const line of lines) {
+      for (const ch of Array.from(String(line || ""))) {
+        if (ch.trim()) n++;
+      }
+    }
+    return n;
+  }
+
   function hashShuffle(arr, seed) {
     // 稳定伪随机洗牌：换形时若粒子数不变，字序不乱窜
     const a = arr.slice();
@@ -339,8 +351,8 @@
     for (let i = 0; i < n; i++) {
       const p = slots[i % slots.length];
       targets.push({
-        x: p.x + rand(-cell * 0.06, cell * 0.06),
-        y: p.y + rand(-cell * 0.06, cell * 0.06),
+        x: p.x + rand(-cell * 0.02, cell * 0.02),
+        y: p.y + rand(-cell * 0.02, cell * 0.02),
       });
     }
     const maskDraw = (ctx, s) => {
@@ -1147,7 +1159,7 @@
     constructor(canvas, opts = {}) {
       this.canvas = canvas;
       this.ctx = canvas.getContext("2d");
-      this.DPR = Math.min(window.devicePixelRatio || 1, 2);
+      this.DPR = Math.min(window.devicePixelRatio || 1, 2.5);
       this.width = 0;
       this.height = 0;
       this.center = { x: 0, y: 0 };
@@ -1351,6 +1363,9 @@
       this.size = Math.min(this.width, this.height) * 0.9;
       // 格距过小会导致 em 只有 3～4px，字「存在但看不见」
       this.gridCell = clamp(Math.round(this.size * 0.03), 8, 13);
+      if (this.form === "script") {
+        this.gridCell = Math.max(this.gridCell, 11);
+      }
       this.anchor = { x: this.center.x, y: this.center.y };
       if (this.pos.x === 0 && this.pos.y === 0) {
         this.pos.x = this.center.x;
@@ -1413,6 +1428,9 @@
     setForm(name, silent, noEmitOnFormChange) {
       if (!FORMS[name]) return;
       if (this.morphGlyphToTarget) this._cancelMorph(false);
+      if (name === "script") {
+        this._resizeGlyphsForScriptLines(this.scriptLines);
+      }
       this.form = name;
       this.formStartTime = performance.now();
       if (name === "clock") this._clockMinuteSlot = -1;
@@ -1478,7 +1496,16 @@
       if (!(this.formData && this.formData.charPalette)) {
         this._reapplyBodyFromQueue();
       }
-      if (name === "script") this._applyScriptCharsFromLayout();
+      if (name === "script") {
+        this._syncGlyphsFromScriptLines();
+      } else if (
+        this.viewMode === "pet" &&
+        this.scriptLines &&
+        this.scriptLines.length &&
+        !(this.formData && this.formData.charPalette)
+      ) {
+        this._syncGlyphsFromScriptLines();
+      }
       if (this.gridSnapping) this._snapGlyphTargetsToGrid();
       this._resolveUniqueLocalGrid();
       this._applyGridTypography();
@@ -1535,17 +1562,33 @@
       }
     }
 
-    _applyScriptCharsFromLayout() {
+    _resizeGlyphsForScriptLines(lines) {
+      const nChar = scriptNonSpaceCharCount(lines);
+      if (nChar < 1) return;
+      const want = clamp(Math.round(nChar * 2.5), 72, 480);
+      if (want === this.glyphs.length) return;
+      this.particleCount = want;
+      this._initGlyphs();
+    }
+
+    /** 非眉眼粒子按 scriptLines 顺序循环赋字（文稿 / 字灵躯体一致） */
+    _syncGlyphsFromScriptLines() {
       const lines =
         this.scriptLines && this.scriptLines.length
           ? this.scriptLines
-          : ["山色有无中", "江流天地外", "云霞出海曙"];
+          : [];
+      if (!lines.length) return;
       const flat = lines.join("");
       const chars = Array.from(flat).filter((c) => c.trim());
+      if (!chars.length) return;
       const slots = this.glyphs.filter((g) => !g.faceRole);
       for (let i = 0; i < slots.length; i++) {
-        slots[i].char = chars[i % chars.length] || slots[i].char;
+        slots[i].char = chars[i % chars.length];
       }
+    }
+
+    _applyScriptCharsFromLayout() {
+      this._syncGlyphsFromScriptLines();
     }
 
     /**
@@ -1632,6 +1675,7 @@
         (preferredForm && FORMS[preferredForm] && preferredForm) ||
         this._petEntryForm ||
         "blob";
+      this._resizeGlyphsForScriptLines(this.scriptLines);
       this.viewMode = "pet";
       this.pos.x = this.center.x;
       this.pos.y = this.center.y;
@@ -2002,6 +2046,14 @@
       if (!this.gridUnity) {
         for (let i = 0; i < this.glyphs.length; i++) {
           this.glyphs[i].targetRot = rand(-0.18, 0.18);
+        }
+        return;
+      }
+      if (this.form === "script") {
+        const em = clamp(this.gridCell * 0.84, 12.5, 20);
+        for (const g of this.glyphs) {
+          g.targetRot = 0;
+          g.size = em * (0.96 + (1 - g.edge) * 0.08);
         }
         return;
       }
@@ -2510,10 +2562,10 @@
       }
     }
 
-    /** 画布内可移动边距：尽量贴近边缘，留出少量抗锯齿边即可 */
+    /** 画布内可移动边距：尽量贴近边缘 */
     _motionPad() {
       const half = (this.size || 320) * 0.5;
-      return Math.max(6, half * 0.08);
+      return Math.max(4, half * 0.025);
     }
 
     // 拖拽（世界坐标系）
@@ -2565,7 +2617,7 @@
 
     _update(dt, now) {
       const t = now / 1000;
-      this.breath = Math.sin(t * 1.3) * 0.06 + 1;
+      this.breath = this.form === "script" ? 1 : Math.sin(t * 1.3) * 0.06 + 1;
 
       if (this.viewMode === "intro") {
         for (const r of this.ripples) {
@@ -2666,7 +2718,8 @@
       }
       this.targetRotation = clamp(this.vel.x * 0.0005, -0.2, 0.2);
       this.rotation = lerp(this.rotation, this.targetRotation, 0.1);
-      this.scale = lerp(this.scale, this.targetScale * this.breath, 0.15);
+      const breathUse = this.form === "script" ? 1 : this.breath;
+      this.scale = lerp(this.scale, this.targetScale * breathUse, 0.15);
 
       this.annoyance = Math.max(0, this.annoyance - 0.22 * dt);
       if (t >= this._moodUntil && this._moodSwap.length) this._restoreMoodChars();
@@ -2787,7 +2840,12 @@
             wy += (g.wgy || 0) * cell;
           }
 
-          if (this.internalMotion && !g.faceRole) {
+          const scriptStill = this.form === "script";
+          if (
+            this.internalMotion &&
+            !g.faceRole &&
+            !scriptStill
+          ) {
             const pAmp =
               cell *
               0.11 *
@@ -2803,7 +2861,7 @@
               Math.cos(t * 0.33 + ph * 6.2) * pAmp * 0.35;
           }
 
-          if (waveAmp > 0.001) {
+          if (waveAmp > 0.001 && this.form !== "script") {
             const nx = wx * 0.017 + this._fluidPhase;
             const ny = wy * 0.015 - this._fluidPhase * 0.75;
             wx += Math.sin(nx + g.depth * 2.1) * waveAmp * 0.55;
@@ -3169,14 +3227,15 @@
         ctx.restore();
       };
 
-      // 主躯体字（单层绘制，减轻卡顿）
+      // 主躯体字：文稿形态关闭 cel 描边叠层，避免发糊
+      const useCelInk = this.form !== "script";
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
-        drawGlyph(g, { flashWeight: 0.55 });
+        drawGlyph(g, { flashWeight: 0.45, cel: useCelInk });
       }
 
-      // 朱砂点缀（略偏电粉，仍克制）
-      if (this.glyphs.length > 0) {
+      // 朱砂点缀（文稿形态跳过，避免叠影发糊）
+      if (this.glyphs.length > 0 && this.form !== "script") {
         const sorted = this._cinnabarIdx || this._pickCinnabar();
         for (let k = 0; k < sorted.length; k++) {
           const g = this.glyphs[sorted[k]];
