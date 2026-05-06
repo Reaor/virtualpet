@@ -2816,7 +2816,6 @@
 
           let tgx;
           let tgy;
-          const mT = this.morphGlyphToTarget && this.morphGlyphToTarget[gi];
           if (mT) {
             tgx = Math.round(mT.twx / cell);
             tgy = Math.round(mT.twy / cell);

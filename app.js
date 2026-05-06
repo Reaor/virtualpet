@@ -8,6 +8,7 @@
   // ---------- 初始化 ----------
   const canvas = document.getElementById("petCanvas");
   const stage = document.getElementById("stage");
+  const stageMain = document.getElementById("stageMain");
   const formLabel = document.getElementById("formLabel");
   const hint = document.getElementById("hint");
   const toastEl = document.getElementById("toast");
@@ -302,11 +303,14 @@
     downZone = "";
   }
 
-  stage.addEventListener("touchstart", onDown, { passive: false });
-  stage.addEventListener("touchmove", onMove, { passive: false });
-  stage.addEventListener("touchend", onUp, { passive: false });
-  stage.addEventListener("touchcancel", onCancel, { passive: false });
-  stage.addEventListener("mousedown", onDown);
+  const petHost = stageMain || stage;
+  if (petHost) {
+    petHost.addEventListener("touchstart", onDown, { passive: false });
+    petHost.addEventListener("touchmove", onMove, { passive: false });
+    petHost.addEventListener("touchend", onUp, { passive: false });
+    petHost.addEventListener("touchcancel", onCancel, { passive: false });
+    petHost.addEventListener("mousedown", onDown);
+  }
   window.addEventListener("mousemove", onMove);
   window.addEventListener("mouseup", onUp);
   window.addEventListener("blur", onCancel);
@@ -481,7 +485,7 @@
         z-index: 3;
         transition: opacity 0.4s ease, transform 0.4s ease;
       `;
-      stage.appendChild(el);
+      (stageMain || stage).appendChild(el);
       baits.push({ el, x: p.x, y: p.y, ch });
     }
     return baits;

@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.2.3" />
+  <meta name="ziling-build" content="3.2.4" />
   <title>字灵 · Zì Líng</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.2.3" />
+  <link rel="stylesheet" href="./styles.css?v=3.2.4" />
 </head>
 <body>
   <div class="app">
@@ -26,49 +26,48 @@
     </header>
 
     <section class="stage" id="stage">
-      <canvas id="petCanvas" aria-label="字灵画布"></canvas>
-
-      <div class="form-label" id="formLabel">软团</div>
-
-      <div class="hint" id="hint">长按字灵再拖可还原文稿 · 快连点画布有闪光 · 三连击觅食</div>
-    </section>
-
-    <!-- 文稿与工具栏在舞台外，避免叠层挡住画布与按钮命中 -->
-    <section class="controls-strip" aria-label="文稿与互动">
-      <div class="opening-panel" id="openingPanel">
-        <label class="opening-label" for="openingPreset">日程文稿（每行可标【已完成】/【未完成】）</label>
-        <textarea id="openingPreset" class="opening-textarea" rows="3" maxlength="400" spellcheck="false">山色有无中
-江流天地外
-云霞出海曙</textarea>
-        <div class="opening-actions">
-          <button type="button" class="opening-btn primary" id="btnPresentScript">呈现文稿</button>
-          <button type="button" class="opening-btn accent" id="btnAwakenPet">化为字灵</button>
-          <button type="button" class="opening-btn ghost" id="btnBackIntro">空白</button>
-          <button type="button" class="opening-btn ghost" id="btnRevertScript">拖回文稿</button>
-        </div>
-        <p class="opening-hint" id="openingHint">
-          字灵模式下：<strong>【已完成】</strong> / <code>[已完成]</code> / 行首 ✓ 会吞入躯体；<strong>【未完成】</strong>穿透 · 双击文稿化为字灵
-        </p>
+      <div class="stage-main" id="stageMain" aria-hidden="false">
+        <canvas id="petCanvas" aria-label="字灵画布"></canvas>
+        <div class="form-label" id="formLabel">软团</div>
+        <div class="hint" id="hint">长按字灵再拖可还原文稿 · 快连点画布有闪光 · 三连击觅食</div>
       </div>
 
-    <nav class="toolbar" role="toolbar" aria-label="互动">
-      <button class="tool" data-action="morph">
-        <span class="tool-glyph">变</span>
-        <span class="tool-label">换形</span>
-      </button>
-      <button class="tool" data-action="feed">
-        <span class="tool-glyph">觅</span>
-        <span class="tool-label">觅食</span>
-      </button>
-      <button class="tool" data-action="sleep">
-        <span class="tool-glyph">眠</span>
-        <span class="tool-label">小憩</span>
-      </button>
-      <button class="tool" data-action="shake">
-        <span class="tool-glyph">抖</span>
-        <span class="tool-label">抖擞</span>
-      </button>
-    </nav>
+      <div class="stage-dock" aria-label="文稿与互动">
+        <div class="opening-panel" id="openingPanel">
+          <label class="opening-label" for="openingPreset">日程文稿（呈现到上方画面 · 再点化为字灵）</label>
+          <textarea id="openingPreset" class="opening-textarea" rows="3" maxlength="400" spellcheck="false">山色有无中
+江流天地外
+云霞出海曙</textarea>
+          <div class="opening-actions">
+            <button type="button" class="opening-btn primary" id="btnPresentScript">呈现文稿</button>
+            <button type="button" class="opening-btn accent" id="btnAwakenPet">化为字灵</button>
+            <button type="button" class="opening-btn ghost" id="btnBackIntro">空白</button>
+            <button type="button" class="opening-btn ghost" id="btnRevertScript">拖回文稿</button>
+          </div>
+          <p class="opening-hint" id="openingHint">
+            先点<strong>呈现文稿</strong>，字出现在上方画面；再点<strong>化为字灵</strong>。字灵模式：<strong>【已完成】</strong>吞入 · <strong>【未完成】</strong>穿透 · 双击文稿可化灵
+          </p>
+        </div>
+
+        <nav class="toolbar" role="toolbar" aria-label="互动">
+          <button type="button" class="tool" data-action="morph">
+            <span class="tool-glyph">变</span>
+            <span class="tool-label">换形</span>
+          </button>
+          <button type="button" class="tool" data-action="feed">
+            <span class="tool-glyph">觅</span>
+            <span class="tool-label">觅食</span>
+          </button>
+          <button type="button" class="tool" data-action="sleep">
+            <span class="tool-glyph">眠</span>
+            <span class="tool-label">小憩</span>
+          </button>
+          <button type="button" class="tool" data-action="shake">
+            <span class="tool-glyph">抖</span>
+            <span class="tool-label">抖擞</span>
+          </button>
+        </nav>
+      </div>
     </section>
 
     <section class="import-row" aria-label="躯体字导入">
@@ -137,7 +136,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="./pet.js?v=3.2.3"></script>
-    <script src="./app.js?v=3.2.3"></script>
+    <script src="./pet.js?v=3.2.4"></script>
+    <script src="./app.js?v=3.2.4"></script>
 </body>
 </html>

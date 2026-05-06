@@ -121,18 +121,25 @@ body {
   transform: scale(0.96);
 }
 
-/* ---------- Stage：仅画布叠层，文稿已移出 ---------- */
+/* ---------- Stage：画布与底栏同一卡片（字呈现与字灵同区） ---------- */
 .stage {
   position: relative;
   width: 100%;
   flex: 1 1 auto;
-  min-height: min(78vh, 520px);
-  aspect-ratio: 1 / 0.86;
-  max-height: 78vh;
+  min-height: min(76vh, 540px);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-radius: var(--radius-lg);
   background: var(--bg-elevated);
-  overflow: hidden;
   box-shadow: var(--shadow-card), inset 0 0 0 1px var(--separator);
+}
+
+.stage-main {
+  flex: 1 1 58%;
+  min-height: 200px;
+  position: relative;
   touch-action: none;
 }
 
@@ -183,17 +190,32 @@ body {
   opacity: 0;
 }
 
-/* 文稿 + 工具栏：与画布分离，避免遮挡命中区 */
-.controls-strip {
+/* 底栏：文稿 + 工具栏，与画布同属 #stage */
+.stage-dock {
+  flex: 0 1 auto;
+  max-height: 46%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  z-index: 12;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  position: relative;
-  z-index: 30;
-  isolation: isolate;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--separator);
+  background: rgba(250, 250, 252, 0.92);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  touch-action: pan-y;
 }
 
-/* Opening: Apple 风分组卡片（毛玻璃 + 细描边） */
+/* 文稿 + 工具栏：与画布分离，避免遮挡命中区 */
+.controls-strip {
+  display: none;
+}
+
+/* Opening: 嵌在 stage-dock 内，不再绝对定位盖住画布 */
 .opening-panel {
   position: relative;
   width: 100%;
@@ -202,16 +224,16 @@ body {
   bottom: auto;
   max-width: none;
   margin: 0;
-  padding: 14px 16px 16px;
-  background: rgba(255, 255, 255, 0.78);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--separator);
-  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   pointer-events: auto;
 }
 .opening-label {
@@ -299,22 +321,20 @@ body {
   opacity: 0.82;
   transform: scale(0.98);
 }
-/* 字灵模式：压缩文稿区，把视觉重心留给上方画布 */
 .opening-panel.docked {
-  padding: 10px 12px 12px;
-  gap: 8px;
+  gap: 6px;
 }
 .opening-panel.docked .opening-textarea {
-  min-height: 48px;
-  font-size: 16px;
-  max-height: 120px;
+  min-height: 44px;
+  font-size: 15px;
+  max-height: 100px;
 }
 .opening-panel.docked .opening-hint {
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.35;
 }
 .opening-panel.docked .opening-label {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 /* ---------- Import row ---------- */
@@ -418,13 +438,14 @@ body {
   gap: 8px;
   padding: 4px;
   position: relative;
-  z-index: 31;
-  background: rgba(255, 255, 255, 0.72);
-  border-radius: var(--radius-lg);
+  z-index: 14;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: var(--radius-md);
   border: 1px solid var(--separator);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
-  backdrop-filter: saturate(180%) blur(16px);
-  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.04);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
 }
 
 .tool {
