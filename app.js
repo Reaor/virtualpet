@@ -310,6 +310,15 @@
     petHost.addEventListener("touchend", onUp, { passive: false });
     petHost.addEventListener("touchcancel", onCancel, { passive: false });
     petHost.addEventListener("mousedown", onDown);
+    petHost.addEventListener(
+      "wheel",
+      (e) => {
+        if (e.ctrlKey) return;
+        e.preventDefault();
+        window.scrollBy({ top: e.deltaY, left: 0, behavior: "auto" });
+      },
+      { passive: false }
+    );
   }
   window.addEventListener("mousemove", onMove);
   window.addEventListener("mouseup", onUp);

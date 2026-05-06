@@ -122,18 +122,6 @@
   const rand = (a, b) => a + Math.random() * (b - a);
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-  /** 文稿非空白字数（用于粒子数 ∝ 密度） */
-  function scriptNonSpaceCharCount(lines) {
-    if (!lines || !lines.length) return 0;
-    let n = 0;
-    for (const line of lines) {
-      for (const ch of Array.from(String(line || ""))) {
-        if (ch.trim()) n++;
-      }
-    }
-    return n;
-  }
-
   function hashShuffle(arr, seed) {
     // 稳定伪随机洗牌：换形时若粒子数不变，字序不乱窜
     const a = arr.slice();
@@ -330,29 +318,57 @@
     return [dot, dot, emp, dot, dot, emp, emp];
   }
 
+  function countScriptSlotsFromLines(lines) {
+    const cleaned = (lines || []).map((l) => String(l || "").trim()).filter(Boolean);
+    if (!cleaned.length) return 0;
+    let n = 0;
+    for (const line of cleaned) {
+      n += Array.from(line).length;
+    }
+    return Math.max(n, 1);
+  }
+
+  /**
+   * 文稿形态：每个可见字符对应唯一格子；仅当 n > 字数时整段向下复制新块，绝不叠在同一格。
+   */
   function buildScriptLayout(lines, n, S) {
     const cleaned = (lines || []).map((l) => String(l || "").trim()).filter(Boolean);
     const useLines = cleaned.length ? cleaned : ["山色有无中", "江流天地外", "云霞出海曙"];
-    const cell = clamp(Math.round(S * 0.048), 11, 22);
+    const cell = clamp(Math.round(S * 0.048), 12, 24);
     const slots = [];
     let flat = "";
     for (let li = 0; li < useLines.length; li++) {
       const chs = Array.from(useLines[li]);
       flat += useLines[li];
       const rowY = (li - (useLines.length - 1) / 2) * cell * 1.38;
+      const w = chs.length;
       for (let i = 0; i < chs.length; i++) {
         slots.push({
-          x: (i - (chs.length - 1) / 2) * cell,
+          x: (i - (w - 1) / 2) * cell,
           y: rowY,
         });
       }
     }
+    const L = slots.length;
     const targets = [];
-    for (let i = 0; i < n; i++) {
-      const p = slots[i % slots.length];
+    if (L === 0) {
+      for (let i = 0; i < Math.max(1, n); i++) {
+        targets.push({ x: 0, y: 0 });
+      }
+      return { targets, maskDraw: () => {}, flat: "", ordered: true };
+    }
+    const rowSpan =
+      useLines.length > 1
+        ? (useLines.length - 1) * cell * 1.38 + cell
+        : cell * 1.38;
+    const blockDy = rowSpan + cell * 0.42;
+    for (let k = 0; k < n; k++) {
+      const block = Math.floor(k / L);
+      const j = k % L;
+      const p = slots[j];
       targets.push({
-        x: p.x + rand(-cell * 0.02, cell * 0.02),
-        y: p.y + rand(-cell * 0.02, cell * 0.02),
+        x: p.x,
+        y: p.y + block * blockDy,
       });
     }
     const maskDraw = (ctx, s) => {
@@ -1159,7 +1175,7 @@
     constructor(canvas, opts = {}) {
       this.canvas = canvas;
       this.ctx = canvas.getContext("2d");
-      this.DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+      this.DPR = Math.min(window.devicePixelRatio || 1, 3);
       this.width = 0;
       this.height = 0;
       this.center = { x: 0, y: 0 };
@@ -1429,7 +1445,7 @@
       if (!FORMS[name]) return;
       if (this.morphGlyphToTarget) this._cancelMorph(false);
       if (name === "script") {
-        this._resizeGlyphsForScriptLines(this.scriptLines);
+        this._resizeGlyphsForScript(this.scriptLines, { mode: "script" });
       }
       this.form = name;
       this.formStartTime = performance.now();
@@ -1562,10 +1578,16 @@
       }
     }
 
-    _resizeGlyphsForScriptLines(lines) {
-      const nChar = scriptNonSpaceCharCount(lines);
-      if (nChar < 1) return;
-      const want = clamp(Math.round(nChar * 2.5), 72, 480);
+    _resizeGlyphsForScript(lines, opts) {
+      const mode = (opts && opts.mode) || "pet";
+      const slotN = countScriptSlotsFromLines(lines);
+      if (slotN < 1) return;
+      let want;
+      if (mode === "script") {
+        want = clamp(slotN, 1, 420);
+      } else {
+        want = clamp(Math.round(slotN * 2), Math.max(120, slotN), 480);
+      }
       if (want === this.glyphs.length) return;
       this.particleCount = want;
       this._initGlyphs();
@@ -1578,8 +1600,14 @@
           ? this.scriptLines
           : [];
       if (!lines.length) return;
-      const flat = lines.join("");
-      const chars = Array.from(flat).filter((c) => c.trim());
+      const cleaned = lines.map((l) => String(l || "").trim()).filter(Boolean);
+      if (!cleaned.length) return;
+      const chars = [];
+      for (const line of cleaned) {
+        for (const ch of Array.from(line)) {
+          chars.push(ch);
+        }
+      }
       if (!chars.length) return;
       const slots = this.glyphs.filter((g) => !g.faceRole);
       for (let i = 0; i < slots.length; i++) {
@@ -1675,7 +1703,7 @@
         (preferredForm && FORMS[preferredForm] && preferredForm) ||
         this._petEntryForm ||
         "blob";
-      this._resizeGlyphsForScriptLines(this.scriptLines);
+      this._resizeGlyphsForScript(this.scriptLines, { mode: "pet" });
       this.viewMode = "pet";
       this.pos.x = this.center.x;
       this.pos.y = this.center.y;
@@ -3057,23 +3085,25 @@
         sky.addColorStop(1, "#ebebf0");
         ctx.fillStyle = sky;
         ctx.fillRect(0, 0, W, H);
-        ctx.save();
-        ctx.strokeStyle = "rgba(0, 0, 0, 0.04)";
-        ctx.lineWidth = 1;
-        const gstep = 32;
-        for (let x = 0; x <= W; x += gstep) {
-          ctx.beginPath();
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x, H);
-          ctx.stroke();
+        if (this.form !== "script") {
+          ctx.save();
+          ctx.strokeStyle = "rgba(0, 0, 0, 0.04)";
+          ctx.lineWidth = 1;
+          const gstep = 32;
+          for (let x = 0; x <= W; x += gstep) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, H);
+            ctx.stroke();
+          }
+          for (let y = 0; y <= H; y += gstep) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(W, y);
+            ctx.stroke();
+          }
+          ctx.restore();
         }
-        for (let y = 0; y <= H; y += gstep) {
-          ctx.beginPath();
-          ctx.moveTo(0, y);
-          ctx.lineTo(W, y);
-          ctx.stroke();
-        }
-        ctx.restore();
       } else {
         const sky = ctx.createLinearGradient(0, 0, W, H);
         sky.addColorStop(0, "#0f1220");
@@ -3137,6 +3167,7 @@
       const flash = this._glyphFlash || 0;
 
       const drawGlyph = (g, opts) => {
+        const isScriptForm = this.form === "script";
         const edge = g.edge;
         const rx = this.gridUnity ? Math.round(g.x) : g.x;
         const ry = this.gridUnity ? Math.round(g.y) : g.y;
@@ -3145,11 +3176,13 @@
             ? lerp(1.05, 0.78, edge)
             : g.faceRole
               ? lerp(1.12, 0.88, edge)
-              : lerp(1.28, 0.72, edge);
+              : isScriptForm
+                ? 1
+                : lerp(1.28, 0.72, edge);
         const baseSize = g.size * this.scale * (opts.sizeMul || 1);
         let size = baseSize * roleMul;
         if (this.gridUnity && this.gridCell) {
-          const cap = this.gridCell * 0.88 * this.scale;
+          const cap = this.gridCell * (isScriptForm ? 0.92 : 0.88) * this.scale;
           if (size > cap) size = cap;
         }
         const ch0 = g.char && g.char.length ? g.char.codePointAt(0) : 0;
@@ -3161,16 +3194,18 @@
         if (size < 7.5) size = 7.5;
         const flashW = opts.flashWeight != null ? opts.flashWeight : 0.5;
         const flashBoost = 1 + Math.min(flash, 0.52) * flashW * 0.42;
+        const edgeAlpha = isScriptForm ? lerp(0.99, 0.92, edge) : lerp(0.94, 0.42, edge);
         const alpha =
           (opts.alphaMul != null ? opts.alphaMul : 1) *
           flashBoost *
-          lerp(0.94, 0.42, edge) *
+          edgeAlpha *
           g.alpha;
         const fontMain =
           '"LXGW WenKai","LXGW WenKai Screen","Noto Serif SC","Noto Sans SC",serif';
+        const szLabel = isScriptForm ? `${Math.round(size)}px` : `${size.toFixed(1)}px`;
         ctx.font = emojiLike
-          ? `${size.toFixed(1)}px ${this.emojiFontStack}, ${fontMain}`
-          : `${size.toFixed(1)}px ${fontMain}`;
+          ? `${szLabel} ${this.emojiFontStack}, ${fontMain}`
+          : `${szLabel} ${fontMain}`;
         let fillStyle = null;
         let outlinePass = null;
         if (opts.color) {

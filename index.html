@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.2.5" />
+  <meta name="ziling-build" content="3.2.6" />
   <title>字灵 · Zì Líng</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.2.5" />
+  <link rel="stylesheet" href="./styles.css?v=3.2.6" />
 </head>
 <body>
   <div class="app">
@@ -34,13 +34,52 @@
           <button type="button" class="rail-tool" data-action="shake" title="抖擞">抖</button>
         </nav>
         <div class="rail-divider" role="presentation"></div>
-        <div class="rail-forms" aria-label="快捷形态">
-          <span class="rail-forms-label">形</span>
-          <button type="button" class="rail-form" data-form="blob" title="软团">团</button>
-          <button type="button" class="rail-form" data-form="cat" title="猫">猫</button>
-          <button type="button" class="rail-form" data-form="dragon" title="龙">龙</button>
-          <button type="button" class="rail-form" data-form="clock" title="钟">钟</button>
-          <button type="button" class="rail-form" data-form="lissajous" title="线">线</button>
+        <div class="rail-groups" aria-label="形态分类">
+          <details class="rail-group" open>
+            <summary>软象</summary>
+            <div class="rail-group-btns">
+              <button type="button" class="rail-form compact" data-form="blob" title="软团">团</button>
+              <button type="button" class="rail-form compact" data-form="cloud" title="云">云</button>
+              <button type="button" class="rail-form compact" data-form="heart" title="心">心</button>
+              <button type="button" class="rail-form compact" data-form="star" title="星">星</button>
+            </div>
+          </details>
+          <details class="rail-group">
+            <summary>动物</summary>
+            <div class="rail-group-btns">
+              <button type="button" class="rail-form compact" data-form="cat" title="猫">猫</button>
+              <button type="button" class="rail-form compact" data-form="fox" title="狐">狐</button>
+              <button type="button" class="rail-form compact" data-form="rabbit" title="兔">兔</button>
+              <button type="button" class="rail-form compact" data-form="crane" title="鹤">鹤</button>
+              <button type="button" class="rail-form compact" data-form="koi" title="鲤">鲤</button>
+              <button type="button" class="rail-form compact" data-form="dragon" title="龙">龙</button>
+              <button type="button" class="rail-form compact" data-form="butterfly" title="蝶">蝶</button>
+            </div>
+          </details>
+          <details class="rail-group">
+            <summary>纹·时</summary>
+            <div class="rail-group-btns">
+              <button type="button" class="rail-form compact" data-form="lissajous" title="李萨如">纹</button>
+              <button type="button" class="rail-form compact" data-form="spiro" title="螺线">螺</button>
+              <button type="button" class="rail-form compact" data-form="flower" title="花">花</button>
+              <button type="button" class="rail-form compact" data-form="clock" title="钟">钟</button>
+            </div>
+          </details>
+          <details class="rail-group">
+            <summary>表情</summary>
+            <div class="rail-group-btns">
+              <button type="button" class="rail-form compact" data-form="emoji_face_a" title="表情甲">甲</button>
+              <button type="button" class="rail-form compact" data-form="emoji_face_b" title="表情乙">乙</button>
+              <button type="button" class="rail-form compact" data-form="emoji_face_c" title="表情丙">丙</button>
+            </div>
+          </details>
+          <details class="rail-group">
+            <summary>数字</summary>
+            <div class="rail-group-btns">
+              <button type="button" class="rail-form compact" data-form="digit_0" title="0">0</button>
+              <button type="button" class="rail-form compact" data-form="digit_8" title="8">8</button>
+            </div>
+          </details>
         </div>
       </aside>
 
@@ -67,7 +106,7 @@
 江流天地外
 云霞出海曙</textarea>
         <p class="opening-hint" id="openingHint">
-          字越多画布上字粒越密；字灵躯体循环使用上述字序。<strong>【已完成】</strong>吞入 · <strong>【未完成】</strong>穿透 · 侧栏 <strong>呈/灵/空/回</strong> 与旧按钮相同
+          左侧形态按类别展开；「呈」后画布字序与输入一致（不叠在同一格）。<strong>【已完成】</strong>吞入 · <strong>【未完成】</strong>穿透 · 侧栏 <strong>呈/灵/空/回</strong>
         </p>
       </div>
     </section>
@@ -138,7 +177,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="./pet.js?v=3.2.5"></script>
-  <script src="./app.js?v=3.2.5"></script>
+  <script src="./pet.js?v=3.2.6"></script>
+  <script src="./app.js?v=3.2.6"></script>
 </body>
 </html>
