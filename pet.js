@@ -123,6 +123,13 @@
     蔷: "rose",
     纽: "lemniscate",
     秒: "chrono",
+    触: "soft_ray",
+    须: "soft_curl",
+    母: "soft_medusa",
+    藻: "soft_curl",
+    舞: "kao_party",
+    气: "kao_angry",
+    爱: "kao_love",
   };
 
   // ---------- 工具 ---------- //
@@ -274,6 +281,44 @@
       });
     }
     return out;
+  }
+
+  /**
+   * 多向凸起软体轮廓（海星 / 触手团）：r(θ)=R₀+L·max(0,cos(Nθ))^p，再乘垂直缩放。
+   * ripple：边界低频调制，触须更「卷曲」。
+   */
+  function radialSoftBodyOutline(S, nArms, R0Mul, ampMul, pinchPow, aspectY, ripple) {
+    const R0 = S * R0Mul;
+    const L = S * ampMul;
+    const rip = ripple || 0;
+    const outline = [];
+    const steps = 520;
+    for (let j = 0; j < steps; j++) {
+      const t = (j / steps) * TAU;
+      const k = Math.max(0, Math.cos(nArms * t));
+      let r = R0 + L * Math.pow(k, pinchPow);
+      if (rip > 0) {
+        r *= 1 + rip * Math.sin((nArms * 2 + 3) * t + 0.7);
+      }
+      outline.push({ x: Math.cos(t) * r, y: Math.sin(t) * r * aspectY });
+    }
+    return outline;
+  }
+
+  function fillRadialSoftBodyMask(ctx, s, nArms, R0Mul, ampMul, pinchPow, aspectY, ripple) {
+    const outline = radialSoftBodyOutline(s, nArms, R0Mul, ampMul, pinchPow, aspectY, ripple);
+    const cx = s * 0.5;
+    const cy = s * 0.5;
+    ctx.beginPath();
+    for (let j = 0; j < outline.length; j++) {
+      const p = outline[j];
+      const x = cx + p.x;
+      const y = cy + p.y;
+      if (j === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
   }
 
   /** 低阶傅里叶闭合轮廓（类「视频关键帧」平滑有机外形，系数由 seed 固定） */
@@ -564,6 +609,107 @@
             ctx.closePath();
             ctx.fill();
           },
+        };
+      },
+    },
+
+    /** 径向触须团：cos₊^p 星形 + 轮廓 mask，适合软体「多触手」意象 */
+    soft_ray: {
+      label: "触须团",
+      build(n, S) {
+        const outline = radialSoftBodyOutline(S, 10, 0.1, 0.34, 0.4, 0.86, 0);
+        const targets = samplesOnOutlineLoop(outline, n, S * 0.012);
+        const R = S * 0.2;
+        return {
+          targets,
+          ordered: true,
+          eyes: [
+            { x: -R * 0.28, y: -R * 0.15 },
+            { x: R * 0.28, y: -R * 0.15 },
+          ],
+          eyeSize: 1.45,
+          maskDraw: (ctx, s) => {
+            ctx.fillStyle = "#000";
+            fillRadialSoftBodyMask(ctx, s, 10, 0.1, 0.34, 0.4, 0.86, 0);
+          },
+        };
+      },
+    },
+
+    /** 卷须：在径向触手上叠加边界 ripple（类 Fourier 描述子低频项） */
+    soft_curl: {
+      label: "卷须",
+      build(n, S) {
+        const outline = radialSoftBodyOutline(S, 7, 0.12, 0.36, 0.38, 0.9, 0.11);
+        const targets = samplesOnOutlineLoop(outline, n, S * 0.013);
+        const R = S * 0.2;
+        return {
+          targets,
+          ordered: true,
+          eyes: [
+            { x: -R * 0.26, y: -R * 0.12 },
+            { x: R * 0.26, y: -R * 0.12 },
+          ],
+          eyeSize: 1.4,
+          maskDraw: (ctx, s) => {
+            ctx.fillStyle = "#000";
+            fillRadialSoftBodyMask(ctx, s, 7, 0.12, 0.36, 0.38, 0.9, 0.11);
+          },
+        };
+      },
+    },
+
+    /** 水母：钟形伞 + 贝塞尔拖须（笔画栅格采样，非闭合径向式） */
+    soft_medusa: {
+      label: "水母",
+      build(n, S) {
+        const targets = sampleSilhouette((ctx, s) => {
+          const cx = s * 0.5;
+          const cy = s * 0.42;
+          ctx.fillStyle = "#000";
+          ctx.beginPath();
+          ctx.moveTo(cx - s * 0.22, cy + s * 0.06);
+          ctx.bezierCurveTo(
+            cx - s * 0.28,
+            cy - s * 0.2,
+            cx + s * 0.28,
+            cy - s * 0.2,
+            cx + s * 0.22,
+            cy + s * 0.06
+          );
+          ctx.quadraticCurveTo(cx, cy + s * 0.15, cx - s * 0.22, cy + s * 0.06);
+          ctx.fill();
+
+          ctx.strokeStyle = "#000";
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          const nt = 9;
+          for (let i = 0; i < nt; i++) {
+            const u = i / (nt - 1 || 1);
+            const ox = (u - 0.5) * 2;
+            const wob = 0.88 + 0.12 * Math.sin(i * 1.73);
+            ctx.beginPath();
+            ctx.lineWidth = s * 0.036 * wob;
+            ctx.moveTo(cx + ox * s * 0.08, cy + s * 0.08);
+            ctx.bezierCurveTo(
+              cx + ox * s * 0.26,
+              cy + s * 0.22,
+              cx + ox * s * 0.18,
+              cy + s * 0.36,
+              cx + ox * s * 0.24,
+              cy + s * 0.5 * wob
+            );
+            ctx.stroke();
+          }
+        }, S, n);
+        const R = S * 0.18;
+        return {
+          targets,
+          eyes: [
+            { x: -R * 0.35, y: -R * 0.55 },
+            { x: R * 0.35, y: -R * 0.55 },
+          ],
+          eyeSize: 1.25,
         };
       },
     },
@@ -931,6 +1077,42 @@
         return buildTextSilhouetteLayout("(￣▽￣)", n, S, { kao: true });
       },
     },
+    kao_party: {
+      label: "颜·舞",
+      build(n, S) {
+        return buildTextSilhouetteLayout("＼(^o^)／", n, S, { kao: true });
+      },
+    },
+    kao_angry: {
+      label: "颜·气",
+      build(n, S) {
+        return buildTextSilhouetteLayout("(╬﹏╬)", n, S, { kao: true });
+      },
+    },
+    kao_love: {
+      label: "颜·爱",
+      build(n, S) {
+        return buildTextSilhouetteLayout("(♡‿♡)", n, S, { kao: true });
+      },
+    },
+    kao_sleep: {
+      label: "颜·眠",
+      build(n, S) {
+        return buildTextSilhouetteLayout("(－ω－)zZ", n, S, { kao: true });
+      },
+    },
+    kao_spark: {
+      label: "颜·闪",
+      build(n, S) {
+        return buildTextSilhouetteLayout("(☆▽☆)", n, S, { kao: true });
+      },
+    },
+    kao_shrug: {
+      label: "颜·摊",
+      build(n, S) {
+        return buildTextSilhouetteLayout("¯\\_(ツ)_/¯", n, S, { kao: true });
+      },
+    },
 
     clock: {
       label: "计时",
@@ -1275,12 +1457,10 @@
       form === "rose" ||
       form === "lemniscate" ||
       form === "fourier" ||
-      form === "mega" ||
-      form === "kao_joy" ||
-      form === "kao_sweat" ||
-      form === "kao_cool"
+      form === "mega"
     )
       return true;
+    if (String(form).startsWith("kao_")) return true;
     if (String(form).startsWith("digit_")) return true;
     return false;
   }
@@ -1308,6 +1488,9 @@
 
   const FORM_ORDER = [
     "blob",
+    "soft_ray",
+    "soft_curl",
+    "soft_medusa",
     "dragon",
     "cat",
     "fox",
@@ -1319,6 +1502,12 @@
     "kao_joy",
     "kao_sweat",
     "kao_cool",
+    "kao_party",
+    "kao_angry",
+    "kao_love",
+    "kao_sleep",
+    "kao_spark",
+    "kao_shrug",
     "mega",
     "fourier",
     "rose",
@@ -2512,7 +2701,16 @@
         this._applyMoodChars("annoyed", 1.8);
         this._rumbleAmp = Math.max(this._rumbleAmp || 0, 0.85);
         this._glyphFlash = Math.min(0.55, Math.max(this._glyphFlash || 0, 0.5));
-        const alt = ["butterfly", "flower", "dragon", "kao_joy", "kao_sweat", "fourier"];
+        const alt = [
+          "soft_ray",
+          "soft_curl",
+          "butterfly",
+          "flower",
+          "dragon",
+          "kao_party",
+          "kao_spark",
+          "fourier",
+        ];
         const pick = alt[Math.floor(Math.random() * alt.length)];
         if (FORMS[pick]) this.setForm(pick, true);
         this.annoyance = 0.45;

@@ -654,6 +654,6 @@
 
   // ---------- 说明 ----------
   document.getElementById("infoBtn").addEventListener("click", () => {
-    toast("拖移 · 戳身边 · 双击觅食 · 躯体可多次写入 · ?form=clock / kao_joy / digit_0 / mega&macroText=2026");
+    toast("拖移 · 戳身边 · 双击觅食 · 躯体可多次写入 · ?form=soft_ray / kao_party / digit_0 / mega&macroText=2026");
   });
 })();
