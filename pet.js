@@ -653,11 +653,13 @@
   /** 按笔画覆盖面积估算巨字所需小字粒子数 */
   function suggestMegaGlyphParticleCount(displayText, S) {
     const draw = createMacroTextDraw(displayText, { noStroke: true });
-    const shellMax = 4;
-    const px = countSilhouetteBandPixels(draw, S, 336, shellMax);
-    if (px < 48) return 110;
-    const density = 0.38;
-    return clamp(Math.round(px * density), 72, 480);
+    const shellMax = 3;
+    const px = countSilhouetteBandPixels(draw, S, 400, shellMax);
+    if (px < 40) return 68;
+    const cellEst = clamp(Math.round(S * 0.037), 10, 15);
+    const slotFootprint = cellEst * cellEst * 0.17;
+    const n = Math.floor((px * 0.72) / Math.max(slotFootprint, 0.95));
+    return clamp(Math.max(n, 48), 48, 300);
   }
 
   /**
@@ -680,7 +682,11 @@
         jitterScale: o.jitterScale != null ? o.jitterScale : 0.01,
       });
       if (o.spreadMin != null && targets.length > 1) {
-        spreadTargets2D(targets, o.spreadMin, 3);
+        spreadTargets2D(
+          targets,
+          o.spreadMin,
+          o.spreadPasses != null ? o.spreadPasses : 4
+        );
       }
     } else {
       targets = sampleSilhouette(draw, S, n, {
@@ -803,13 +809,13 @@
   function buildScriptLayout(lines, n, S) {
     const cleaned = (lines || []).map((l) => String(l || "").trim()).filter(Boolean);
     const useLines = cleaned.length ? cleaned : ["山色有无中", "江流天地外", "云霞出海曙"];
-    const cell = clamp(Math.round(S * 0.048), 12, 24);
+    const cell = clamp(Math.round(S * 0.052), 13, 26);
     const slots = [];
     let flat = "";
     for (let li = 0; li < useLines.length; li++) {
       const chs = Array.from(useLines[li]);
       flat += useLines[li];
-      const rowY = (li - (useLines.length - 1) / 2) * cell * 1.38;
+      const rowY = (li - (useLines.length - 1) / 2) * cell * 1.42;
       const w = chs.length;
       for (let i = 0; i < chs.length; i++) {
         slots.push({
@@ -828,9 +834,9 @@
     }
     const rowSpan =
       useLines.length > 1
-        ? (useLines.length - 1) * cell * 1.38 + cell
-        : cell * 1.38;
-    const blockDy = rowSpan + cell * 0.42;
+        ? (useLines.length - 1) * cell * 1.42 + cell
+        : cell * 1.42;
+    const blockDy = rowSpan + cell * 0.44;
     for (let k = 0; k < n; k++) {
       const block = Math.floor(k / L);
       const j = k % L;
@@ -846,7 +852,7 @@
       ctx.fillStyle = "#000";
       for (let li = 0; li < useLines.length; li++) {
         const chs = Array.from(useLines[li]);
-        const cy = s * 0.5 + (li - (useLines.length - 1) / 2) * c * 1.38;
+        const cy = s * 0.5 + (li - (useLines.length - 1) / 2) * c * 1.42;
         for (let i = 0; i < chs.length; i++) {
           const cx = s * 0.5 + (i - (chs.length - 1) / 2) * c;
           ctx.fillRect(cx - c * 0.48, cy - c * 0.48, c * 0.96, c * 0.96);
@@ -1801,8 +1807,10 @@
       return buildTextSilhouetteLayout(self._pickMacroDisplay(), n, S, {
         shellSample: true,
         noStroke: true,
-        shellMax: 4,
-        spreadMin: S * 0.022,
+        shellMax: 3,
+        spreadMin: S * 0.034,
+        spreadPasses: 6,
+        jitterScale: 0.006,
       });
     }
     if (!FORMS[name]) return null;
@@ -2067,6 +2075,7 @@
       this.pathMode =
         opts.pathMode !== undefined ? opts.pathMode : "wander";
       this._nextWanderPick = 0;
+      this._huarongNextAt = 0;
 
       /** 拖拽：每字滞后锚点（有序中的乱） */
       this.dragLagEnabled = opts.dragLag !== false;
@@ -2157,7 +2166,7 @@
       this.size = Math.min(this.width, this.height) * 0.9;
       // 文稿格距必须与 buildScriptLayout 内 cell 一致，否则吸附后行列会乱
       if (this.form === "script") {
-        this.gridCell = clamp(Math.round(this.size * 0.048), 12, 24);
+        this.gridCell = clamp(Math.round(this.size * 0.052), 13, 26);
       } else {
         this.gridCell = clamp(Math.round(this.size * 0.03), 9, 14);
       }
@@ -2235,10 +2244,10 @@
       if (this.morphGlyphToTarget) this._cancelMorph(false);
       const S = this.size;
       if (name === "script") {
-        this.gridCell = clamp(Math.round(S * 0.048), 12, 24);
+        this.gridCell = clamp(Math.round(S * 0.052), 13, 26);
         this._resizeGlyphsForScript(this.scriptLines, { mode: "script" });
       } else if (name === "mega") {
-        this.gridCell = clamp(Math.round(S * 0.035), 10, 16);
+        this.gridCell = clamp(Math.round(S * 0.037), 11, 16);
       } else {
         this.gridCell = clamp(Math.round(S * 0.03), 9, 14);
       }
@@ -2466,6 +2475,7 @@
     _separateOverlappingGridGlyphs() {
       if (!this.gridSnapping || !this.gridMarch) return;
       if (this.form === "script") return;
+      if (this.dragging) return;
       const cell = this.gridCell;
       if (!cell) return;
       const bx = this.pos.x;
@@ -2524,6 +2534,86 @@
           if (!occ.has(found.nk)) occ.set(found.nk, []);
           occ.get(found.nk).push(gi);
         }
+      }
+    }
+
+    /**
+     * 华容道式邻格互换：在保持整体形态的前提下，让内部字沿格交换位置（不用于 script / 计时 / 拖拽中）。
+     */
+    _tryHuarongAdjacentSwaps(now) {
+      if (!this.gridMarch || !this.gridSnapping) return;
+      if (this.dragging || this.morphGlyphToTarget) return;
+      if (this.viewMode !== "pet" || this.form === "script") return;
+      if (isMotionLayoutLockedForm(this.form)) return;
+      if (now < this._huarongNextAt) return;
+      this._huarongNextAt = now + 260 + Math.random() * 320;
+
+      const bx = this.pos.x;
+      const by = this.pos.y;
+      const cos = Math.cos(this.rotation);
+      const sin = Math.sin(this.rotation);
+      const flip = this.facingFlip || 1;
+      const useMask = this._maskPack && this._maskPack.grid;
+
+      const bodyIdx = [];
+      for (let i = 0; i < this.glyphs.length; i++) {
+        if (!this.glyphs[i].faceRole) bodyIdx.push(i);
+      }
+      if (bodyIdx.length < 2) return;
+
+      const dirs = [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ];
+      const swapPair = (a, b) => {
+        const keys = [
+          "tx",
+          "ty",
+          "baseTx",
+          "baseTy",
+          "char",
+          "mgx",
+          "mgy",
+          "x",
+          "y",
+          "edge",
+        ];
+        for (const k of keys) {
+          const t = a[k];
+          a[k] = b[k];
+          b[k] = t;
+        }
+      };
+
+      for (let attempt = 0; attempt < 14; attempt++) {
+        const ia = bodyIdx[Math.floor(Math.random() * bodyIdx.length)];
+        const gA = this.glyphs[ia];
+        const d = dirs[Math.floor(Math.random() * dirs.length)];
+        const ngx = gA.mgx + d[0];
+        const ngy = gA.mgy + d[1];
+        let ib = -1;
+        for (const j of bodyIdx) {
+          if (j === ia) continue;
+          const gB = this.glyphs[j];
+          if (gB.mgx === ngx && gB.mgy === ngy) {
+            ib = j;
+            break;
+          }
+        }
+        if (ib < 0) continue;
+        const gB = this.glyphs[ib];
+        if (useMask) {
+          if (
+            !this._worldCellWalkable(gA.mgx, gA.mgy, bx, by, cos, sin, flip) ||
+            !this._worldCellWalkable(gB.mgx, gB.mgy, bx, by, cos, sin, flip)
+          ) {
+            continue;
+          }
+        }
+        swapPair(gA, gB);
+        return;
       }
     }
 
@@ -3768,12 +3858,13 @@
         const dvx = this.dragging ? this.dragVel.x : 0;
         const dvy = this.dragging ? this.dragVel.y : 0;
         for (const g of this.glyphs) {
-          const rate = 4 + g.lagK * 6;
+          const rateBase = 4 + g.lagK * 6;
+          const rate = this.dragging ? 20 + g.lagK * 26 : rateBase;
           const sp = 1 - Math.exp(-rate * dt);
           g.lagX = lerp(g.lagX, bx, sp);
           g.lagY = lerp(g.lagY, by, sp);
           if (this.dragging) {
-            const imp = 0.03 * g.lagK * (g.faceRole ? 0.35 : 1);
+            const imp = 0.022 * g.lagK * (g.faceRole ? 0.35 : 1);
             g.lagX += dvx * imp;
             g.lagY += dvy * imp;
           }
@@ -3827,10 +3918,8 @@
 
           const txl = g.tx * flip;
           const tyl = g.ty;
-          const lbx = this.dragLagEnabled ? g.lagX : bx;
-          const lby = this.dragLagEnabled ? g.lagY : by;
-          let wx = lbx + (txl * cos - tyl * sin);
-          let wy = lby + (txl * sin + tyl * cos);
+          let wx = bx + (txl * cos - tyl * sin);
+          let wy = by + (txl * sin + tyl * cos);
 
           const mT = this.morphGlyphToTarget && this.morphGlyphToTarget[gi];
           if (
@@ -3920,6 +4009,7 @@
         }
 
         this._separateOverlappingGridGlyphs();
+        this._tryHuarongAdjacentSwaps(now);
 
         if (this.morphGlyphToTarget) {
           let all = true;
@@ -3954,10 +4044,8 @@
         for (const g of this.glyphs) {
           const txl = g.tx * flip;
           const tyl = g.ty;
-          const lbx = this.dragLagEnabled ? g.lagX : bx;
-          const lby = this.dragLagEnabled ? g.lagY : by;
-          let wx = lbx + (txl * cos - tyl * sin);
-          let wy = lby + (txl * sin + tyl * cos);
+          let wx = bx + (txl * cos - tyl * sin);
+          let wy = by + (txl * sin + tyl * cos);
           if (
             !g.faceRole &&
             this.viewMode === "pet" &&
@@ -4166,6 +4254,10 @@
           rx = this._snapLogicalToDevice(rx);
           ry = this._snapLogicalToDevice(ry);
         }
+        if (this.dragging && this.dragLagEnabled && !g.faceRole) {
+          rx += (g.lagX - this.pos.x) * 0.38;
+          ry += (g.lagY - this.pos.y) * 0.38;
+        }
         const roleMul =
           g.faceRole === "brow"
             ? lerp(1.05, 0.78, edge)
@@ -4237,30 +4329,34 @@
           )},${clamp(Math.round(bb * ek), 0, 255)},${alpha})`;
         } else if (!g.faceRole && (this.bodyColorMode || 0) > 0) {
           const cm = this.bodyColorMode || 0;
-          const breath = 0.5 + 0.5 * Math.sin(t * 2.65 + (g.depth || 0) * 1.35);
+          const breath = 0.5 + 0.5 * Math.sin(t * 2.35 + (g.depth || 0) * 1.55);
           const by0 = this.pos.y;
           const bx0 = this.pos.x;
-          const Sref = Math.max(this.size * 0.5, 110);
+          const Sref = Math.max(this.size * 0.48, 105);
           let u = 0.5;
           if (cm === 1) {
             const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
-            u = clamp(ny * 0.42 + breath * 0.58, 0, 1);
+            u = clamp(ny * 0.32 + breath * 0.68, 0, 1);
           } else if (cm === 2) {
             const d = clamp(Math.hypot(g.x - bx0, g.y - by0) / Sref, 0, 1);
-            u = clamp(d * 0.5 + breath * 0.5, 0, 1);
+            u = clamp(d * 0.42 + breath * 0.58, 0, 1);
           } else if (cm === 3) {
             const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
-            u = clamp(ny + Math.sin(t * 2.2 + (g.depth || 0)) * 0.14, 0, 1);
+            u = clamp(
+              ny * 0.35 + breath * 0.65 + Math.sin(t * 2.05 + (g.depth || 0)) * 0.2,
+              0,
+              1
+            );
           }
           if (light) {
-            const inkR = Math.round(lerp(14, 128, u));
-            const inkG = Math.round(lerp(18, 132, u));
-            const inkB = Math.round(lerp(28, 142, u));
+            const inkR = Math.round(lerp(6, 152, u));
+            const inkG = Math.round(lerp(10, 158, u));
+            const inkB = Math.round(lerp(18, 168, u));
             fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
           } else {
-            const inkR = Math.round(lerp(252, 88, u));
-            const inkG = Math.round(lerp(254, 130, u));
-            const inkB = Math.round(lerp(255, 188, u));
+            const inkR = Math.round(lerp(255, 72, u));
+            const inkG = Math.round(lerp(255, 118, u));
+            const inkB = Math.round(lerp(255, 178, u));
             fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
           }
         } else if (opts.cel === false) {
@@ -4502,19 +4598,19 @@
       if (gm <= 0) return 1;
       const ph = (g.depth || 0) * 4.2 + (g.patrolSeed || 0);
       let m = 1;
-      if (gm === 1) m = 0.78 + 0.22 * Math.sin(t * 2.1 + ph * 0.31);
-      else if (gm === 2) m = 0.72 + 0.28 * Math.sin(t * 1.85 + g.y * 0.019);
+      if (gm === 1) m = 0.62 + 0.38 * Math.sin(t * 2.1 + ph * 0.31);
+      else if (gm === 2) m = 0.55 + 0.45 * Math.sin(t * 1.85 + g.y * 0.022);
       else if (gm === 3)
         m =
-          0.74 +
-          0.26 *
+          0.58 +
+          0.42 *
             Math.sin(
               t * 2.35 +
-                Math.hypot(g.x - this.pos.x, g.y - this.pos.y) * 0.011
+                Math.hypot(g.x - this.pos.x, g.y - this.pos.y) * 0.013
             );
-      else if (gm === 4) m = 0.62 + 0.38 * Math.sin(t * 4.05 + ph + g.tx * 0.021);
-      else if (gm === 5) m = Math.sin(t * 6.8) > 0.1 ? 1.09 : 0.8;
-      return clamp(m, 0.52, 1.12);
+      else if (gm === 4) m = 0.48 + 0.52 * Math.sin(t * 4.05 + ph + g.tx * 0.024);
+      else if (gm === 5) m = Math.sin(t * 6.8) > 0.1 ? 1.18 : 0.62;
+      return clamp(m, 0.38, 1.28);
     }
 
     setBodyTint(hex) {

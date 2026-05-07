@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.8.1** 起）。  
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.9.0** 起）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
@@ -126,6 +126,15 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 | 颜色色板 | **已完成** | `bodyTintHex` + 弹层色块 + `<input type="color">` |
 | 浮光律动 | **已完成** | `glowMode` 0～5，`drawGlyph` 透明度乘子 `_glowAlphaMul` |
 | 回稿与拖动混淆 | **已完成（3.8.1）** | 长按蓄满仅 **武装**；**松手**才还原；位移 **>8px** 取消武装并进入拖动 |
+
+### 1.20 侧栏加宽 · 拖拽跟手 · 渐变可见 · 华容道（3.9.0）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 左侧按钮区向左扩展 | **已完成** | `.rail-left` **108px**；待机 **3 列**网格，紧凑按钮高度统一 |
+| 部分字拖拽不跟随 | **已完成** | 格点目标 **始终**用 `bx/by`（`pos`）；`lagX/lagY` 仅用于 **绘制偏移** + 更快拖曳收敛 |
+| 颜色/浮光渐变不明显 | **已完成** | `bodyColorMode` 墨色 **跨度加大** + breath 权重；`_glowAlphaMul` **振幅与 clamp** 加宽 |
+| 叠字、巨字、内部交换 | **部分加强** | 拖曳中 **不跑** `_separateOverlappingGridGlyphs`；`_tryHuarongAdjacentSwaps` **邻格互换**；巨字 `slotFootprint`↑、`buildScriptLayout` 与 mask **1.42** 对齐 |
 
 ---
 
