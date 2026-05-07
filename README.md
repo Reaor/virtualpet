@@ -10,6 +10,8 @@
 
 **需求与迭代对照**见仓库根目录 [`PLAN.md`](./PLAN.md)（含完成度、未做项与版本号约定）。
 
+**代码目录导览**（模块加载顺序、后续拆文件建议）见 [`docs/ZILING_LAYOUT.txt`](./docs/ZILING_LAYOUT.txt)；画布活动区碰撞逻辑在 [`js/ziling/play-bounds.js`](./js/ziling/play-bounds.js)。
+
 ## 如何查看效果
 
 ### 在线演示（GitHub Pages）

@@ -5,10 +5,59 @@
  * 形态是一个函数：给定一块尺寸 S，返回 N 个目标点 + 两只眼睛位置。
  * 形态定义使用离屏 canvas 画出剪影，再均匀采样填充像素得到目标点；
  * 数学曲线（心、花、蝶）则直接参数化计算，更精确。
+ *
+ * 依赖：`js/ziling/play-bounds.js` 先于本文件加载（`window.ZiLingPlayBounds`）。
+ * 目录说明：`docs/ZILING_LAYOUT.txt`
  */
 
 (function () {
   "use strict";
+
+  const PB =
+    typeof window !== "undefined" && window.ZiLingPlayBounds
+      ? window.ZiLingPlayBounds
+      : {
+          inset(w, h) {
+            return Math.max(1, Math.min(w, h) * 0.006);
+          },
+          resolve(pos, vel, bounds, r, restitution) {
+            const rest = restitution == null ? 0.38 : restitution;
+            let nx = 0;
+            let ny = 0;
+            let hit = false;
+            if (pos.x < bounds.minX + r) {
+              pos.x = bounds.minX + r;
+              if (vel.x < 0) {
+                vel.x *= -rest;
+                nx = 1;
+                hit = true;
+              }
+            } else if (pos.x > bounds.maxX - r) {
+              pos.x = bounds.maxX - r;
+              if (vel.x > 0) {
+                vel.x *= -rest;
+                nx = -1;
+                hit = true;
+              }
+            }
+            if (pos.y < bounds.minY + r) {
+              pos.y = bounds.minY + r;
+              if (vel.y < 0) {
+                vel.y *= -rest;
+                ny = 1;
+                hit = true;
+              }
+            } else if (pos.y > bounds.maxY - r) {
+              pos.y = bounds.maxY - r;
+              if (vel.y > 0) {
+                vel.y *= -rest;
+                ny = -1;
+                hit = true;
+              }
+            }
+            return hit ? { nx, ny } : null;
+          },
+        };
 
   // ---------- 字池（默认字符集，会被吞字事件扩充） ----------
   const DEFAULT_POOL =
@@ -653,7 +702,7 @@
   /** 按笔画覆盖面积估算巨字所需小字粒子数 */
   function suggestMegaGlyphParticleCount(displayText, S) {
     const draw = createMacroTextDraw(displayText, { noStroke: true });
-    const shellMax = 3;
+    const shellMax = 4;
     const px = countSilhouetteBandPixels(draw, S, 400, shellMax);
     if (px < 40) return 68;
     const cellEst = clamp(Math.round(S * 0.037), 10, 15);
@@ -785,6 +834,30 @@
       });
     }
     return out;
+  }
+
+  /** 点阵行 → maskDraw，与 rowsToTargets 同一几何（cellRel = cell/s） */
+  function digitRowsMaskDraw(rows, cellRel) {
+    return (ctx, s) => {
+      const h = rows.length;
+      const w = rows[0] ? rows[0].length : 0;
+      if (!w || !h) return;
+      const cell = s * cellRel;
+      const cx = s * 0.5;
+      const cy = s * 0.52;
+      ctx.fillStyle = "#000";
+      for (let y = 0; y < h; y++) {
+        const row = rows[y] || "";
+        for (let x = 0; x < row.length; x++) {
+          if (row[x] === "1") {
+            const px = cx + (x - w / 2 + 0.5) * cell;
+            const py = cy + (y - h / 2 + 0.5) * cell;
+            const hw = cell * 0.42;
+            ctx.fillRect(px - hw, py - hw, hw * 2, hw * 2);
+          }
+        }
+      }
+    };
   }
 
   function colonRows() {
@@ -1100,8 +1173,9 @@
           1,
           mergeDigitRows(digitPattern5x7(mm[0]), 1, digitPattern5x7(mm[1]))
         );
-        const cell = S * 0.042;
-        const targets = rowsToTargets(rows, cell, n, 0.035);
+        const cellRel = 0.046;
+        const cell = S * cellRel;
+        const targets = rowsToTargets(rows, cell, n, 0.026);
         return {
           targets,
           ordered: true,
@@ -1110,6 +1184,7 @@
             { x: S * 0.25, y: -S * 0.32 },
           ],
           eyeSize: 1,
+          maskDraw: digitRowsMaskDraw(rows, cellRel),
         };
       },
     },
@@ -1249,8 +1324,9 @@
         );
         const rowSec = mergeDigitRows(digitPattern5x7(ss[0]), 1, digitPattern5x7(ss[1]));
         const rows = stackDigitRowBlocks(rowHM, rowSec, 2);
-        const cell = S * 0.032;
-        const targets = rowsToTargets(rows, cell, n, 0.032);
+        const cellRel = 0.036;
+        const cell = S * cellRel;
+        const targets = rowsToTargets(rows, cell, n, 0.024);
         return {
           targets,
           ordered: true,
@@ -1259,6 +1335,7 @@
             { x: S * 0.22, y: -S * 0.36 },
           ],
           eyeSize: 0.92,
+          maskDraw: digitRowsMaskDraw(rows, cellRel),
         };
       },
     },
@@ -1807,10 +1884,10 @@
       return buildTextSilhouetteLayout(self._pickMacroDisplay(), n, S, {
         shellSample: true,
         noStroke: true,
-        shellMax: 3,
-        spreadMin: S * 0.034,
+        shellMax: 4,
+        spreadMin: S * 0.03,
         spreadPasses: 6,
-        jitterScale: 0.006,
+        jitterScale: 0.005,
       });
     }
     if (!FORMS[name]) return null;
@@ -2076,6 +2153,7 @@
         opts.pathMode !== undefined ? opts.pathMode : "wander";
       this._nextWanderPick = 0;
       this._huarongNextAt = 0;
+      this._lastWallFxAt = 0;
 
       /** 拖拽：每字滞后锚点（有序中的乱） */
       this.dragLagEnabled = opts.dragLag !== false;
@@ -2248,6 +2326,10 @@
         this._resizeGlyphsForScript(this.scriptLines, { mode: "script" });
       } else if (name === "mega") {
         this.gridCell = clamp(Math.round(S * 0.037), 11, 16);
+      } else if (name === "clock") {
+        this.gridCell = clamp(Math.round(S * 0.046), 12, 20);
+      } else if (name === "chrono") {
+        this.gridCell = clamp(Math.round(S * 0.036), 10, 16);
       } else {
         this.gridCell = clamp(Math.round(S * 0.03), 9, 14);
       }
@@ -3601,10 +3683,71 @@
       }
     }
 
-    /** 画布内可移动边距：尽量贴近边缘 */
-    _motionPad() {
-      const half = (this.size || 320) * 0.5;
-      return Math.max(4, half * 0.025);
+    /** 画布内活动区（几乎贴边，由 play-bounds 统一缩进） */
+    _playBounds() {
+      const inset = PB.inset(this.width, this.height);
+      return {
+        minX: inset,
+        maxX: this.width - inset,
+        minY: inset,
+        maxY: this.height - inset,
+      };
+    }
+
+    /** 整体碰撞半径：保证大字灵也不会穿出画布 */
+    _bodyClampRadius() {
+      const w = this.width;
+      const h = this.height;
+      const ins = PB.inset(w, h);
+      const pr = this.pointerInnerRadius();
+      const cap = Math.min(w, h) * 0.44;
+      let rHi = Math.min(w, h) * 0.5 - ins - 2;
+      rHi = Math.max(rHi, 10);
+      let r = Math.min(pr, cap);
+      r = Math.min(r, rHi);
+      return clamp(Math.max(r, 10), 10, rHi);
+    }
+
+    _wallShatter(nx, ny) {
+      const cell = this.gridCell || 12;
+      const push = cell * (1.4 + Math.random() * 1.8);
+      for (const g of this.glyphs) {
+        if (g.faceRole) continue;
+        g._tapScatterT = 0.32;
+        g._tapScatterT0 = 0.32;
+        g._tapScatterOX = (nx || (Math.random() - 0.5) * 0.4) * push;
+        g._tapScatterOY = (ny || (Math.random() - 0.5) * 0.4) * push;
+      }
+      this._rumbleAmp = Math.min(0.5, (this._rumbleAmp || 0) + 0.22);
+      this._glyphFlash = Math.min(0.42, (this._glyphFlash || 0) + 0.16);
+      for (let k = 0; k < 5; k++) {
+        this.ripples.push({
+          x: this.pos.x + rand(-this.size * 0.12, this.size * 0.12),
+          y: this.pos.y + rand(-this.size * 0.1, this.size * 0.1),
+          r: 8 + k * 5,
+          alpha: 0.22 + k * 0.05,
+        });
+      }
+    }
+
+    _applyPlayfieldBounds(dt, now) {
+      const b = this._playBounds();
+      const r = this._bodyClampRadius();
+      if (this.dragging) {
+        this.pos.x = clamp(this.pos.x, b.minX + r, b.maxX - r);
+        this.pos.y = clamp(this.pos.y, b.minY + r, b.maxY - r);
+        return;
+      }
+      const hit = PB.resolve(this.pos, this.vel, b, r, 0.4);
+      if (hit && now - this._lastWallFxAt > 160) {
+        const nLen = Math.hypot(hit.nx, hit.ny);
+        this._lastWallFxAt = now;
+        if (nLen > 0.01) {
+          this._wallShatter(hit.nx, hit.ny);
+        } else {
+          this._wallShatter(0, 0);
+        }
+      }
     }
 
     /** 交互命中：按当前字形包围球估计，避免巨字/扁形时「点不中拖不动」 */
@@ -3637,12 +3780,17 @@
       this._dragPrevPos = { x: this.pos.x, y: this.pos.y };
       this.dragVel = { x: 0, y: 0 };
       this.setExpression("shy");
+      for (const g of this.glyphs) {
+        g.lagX = this.pos.x;
+        g.lagY = this.pos.y;
+      }
     }
     dragTo(x, y) {
       if (!this.dragging) return;
-      const pad = this._motionPad();
-      const nx = clamp(x + this.dragOffset.x, pad, this.width - pad);
-      const ny = clamp(y + this.dragOffset.y, pad, this.height - pad);
+      const b = this._playBounds();
+      const r = this._bodyClampRadius();
+      const nx = clamp(x + this.dragOffset.x, b.minX + r, b.maxX - r);
+      const ny = clamp(y + this.dragOffset.y, b.minY + r, b.maxY - r);
       if (this._dragPrevPos) {
         this.dragVel.x = nx - this._dragPrevPos.x;
         this.dragVel.y = ny - this._dragPrevPos.y;
@@ -3746,6 +3894,13 @@
         }
       }
 
+      if (this.viewMode === "pet" && !this.dragging && this.mode !== "feeding") {
+        const b = this._playBounds();
+        const ar = this._bodyClampRadius() * 0.42;
+        this.anchor.x = clamp(this.anchor.x, b.minX + ar, b.maxX - ar);
+        this.anchor.y = clamp(this.anchor.y, b.minY + ar, b.maxY - ar);
+      }
+
       if (this.viewMode === "script") {
         this.anchor.x = this.center.x;
         this.anchor.y = this.center.y;
@@ -3766,11 +3921,7 @@
       }
       this.pos.x += this.vel.x * dt;
       this.pos.y += this.vel.y * dt;
-      if (!this.dragging) {
-        const pad = this._motionPad();
-        this.pos.x = clamp(this.pos.x, pad, this.width - pad);
-        this.pos.y = clamp(this.pos.y, pad, this.height - pad);
-      }
+      this._applyPlayfieldBounds(dt, now);
 
       if (
         this.form === "clock" &&
@@ -3905,6 +4056,7 @@
           1,
           Math.min(4, Math.round((this.gridMarchSpeed || 2) * dt * 6))
         );
+        const crispMotion = isGridLayoutImmutableForm(this.form);
 
         for (let gi = 0; gi < this.glyphs.length; gi++) {
           const g = this.glyphs[gi];
@@ -3939,25 +4091,47 @@
             !isMotionLayoutLockedForm(this.form)
           ) {
             const pAmp =
-              cell *
-              0.072 *
-              (this._patrolAmp || 1) *
-              (g.patrolAmpMul || 1) *
-              (this.dragging ? 1.35 : 1);
-            const ph = g.patrolSeed || 0;
-            wx +=
-              Math.sin(t * 0.52 + ph * 2.1) * pAmp * 0.62 +
-              Math.sin(t * 0.29 + ph * 5.4) * pAmp * 0.38;
-            wy +=
-              Math.cos(t * 0.47 + ph * 3.7) * pAmp * 0.58 +
-              Math.cos(t * 0.33 + ph * 6.2) * pAmp * 0.35;
+              cell * 0.072 * (this._patrolAmp || 1) * (this.dragging ? 1.15 : 1);
+            if (crispMotion) {
+              const breath = Math.sin(t * 0.86);
+              const sway = Math.cos(t * 0.63);
+              const ang = g.tx * 0.012 + g.ty * 0.01;
+              const m = 0.52 + 0.48 * Math.sin(ang * 3.1 + t * 0.38);
+              wx +=
+                (breath * Math.cos(ang) + sway * 0.34 * Math.sin(ang)) *
+                pAmp *
+                0.44 *
+                m;
+              wy +=
+                (sway * Math.sin(ang) - breath * 0.34 * Math.cos(ang)) *
+                pAmp *
+                0.44 *
+                m;
+            } else {
+              const pAmpFull = pAmp * (g.patrolAmpMul || 1);
+              const ph = g.patrolSeed || 0;
+              wx +=
+                Math.sin(t * 0.52 + ph * 2.1) * pAmpFull * 0.62 +
+                Math.sin(t * 0.29 + ph * 5.4) * pAmpFull * 0.38;
+              wy +=
+                Math.cos(t * 0.47 + ph * 3.7) * pAmpFull * 0.58 +
+                Math.cos(t * 0.33 + ph * 6.2) * pAmpFull * 0.35;
+            }
           }
 
           if (waveAmpEff > 0.001 && !isMotionLayoutLockedForm(this.form)) {
-            const nx = wx * 0.017 + this._fluidPhase;
-            const ny = wy * 0.015 - this._fluidPhase * 0.75;
-            wx += Math.sin(nx + g.depth * 2.1) * waveAmpEff * 0.55;
-            wy += Math.cos(ny + g.depth * 1.5) * waveAmpEff * 0.48;
+            if (crispMotion) {
+              const ph = this._fluidPhase;
+              wx +=
+                Math.sin(t * 0.95 + ph + g.tx * 0.008) * waveAmpEff * 0.24;
+              wy +=
+                Math.cos(t * 0.88 - ph * 0.65 + g.ty * 0.008) * waveAmpEff * 0.22;
+            } else {
+              const nx = wx * 0.017 + this._fluidPhase;
+              const ny = wy * 0.015 - this._fluidPhase * 0.75;
+              wx += Math.sin(nx + g.depth * 2.1) * waveAmpEff * 0.55;
+              wy += Math.cos(ny + g.depth * 1.5) * waveAmpEff * 0.48;
+            }
           }
           const rx = rumble ? Math.sin(t * 26 + g.depth * 15) * rumble : 0;
           const ry = rumble ? Math.cos(t * 24 + g.depth * 13) * rumble : 0;
@@ -4200,27 +4374,6 @@
         ctx.restore();
       }
 
-      const shadowR = this.size * 0.28;
-      const grd = ctx.createRadialGradient(
-        this.pos.x,
-        this.pos.y + 4,
-        shadowR * 0.08,
-        this.pos.x,
-        this.pos.y + 4,
-        shadowR
-      );
-      if (light) {
-        grd.addColorStop(0, "rgba(0, 122, 255, 0.06)");
-        grd.addColorStop(0.5, "rgba(0, 0, 0, 0.02)");
-        grd.addColorStop(1, "rgba(0, 0, 0, 0)");
-      } else {
-        grd.addColorStop(0, "rgba(120, 100, 255, 0.14)");
-        grd.addColorStop(0.55, "rgba(80, 140, 220, 0.06)");
-        grd.addColorStop(1, "rgba(0, 0, 0, 0)");
-      }
-      ctx.fillStyle = grd;
-      ctx.fillRect(0, 0, W, H);
-
       ctx.save();
       ctx.lineWidth = 1.2;
       for (const r of this.ripples) {
@@ -4253,10 +4406,6 @@
         if (this.gridUnity) {
           rx = this._snapLogicalToDevice(rx);
           ry = this._snapLogicalToDevice(ry);
-        }
-        if (this.dragging && this.dragLagEnabled && !g.faceRole) {
-          rx += (g.lagX - this.pos.x) * 0.38;
-          ry += (g.lagY - this.pos.y) * 0.38;
         }
         const roleMul =
           g.faceRole === "brow"
@@ -4420,6 +4569,24 @@
         ctx.fillText(g.char, 0, 0);
         ctx.restore();
       };
+
+      // 清晰形态：淡显轮廓 mask，帮助辨认计时/巨字/曲线整体字形
+      if (
+        this.viewMode === "pet" &&
+        this.formData &&
+        typeof this.formData.maskDraw === "function" &&
+        isGridLayoutImmutableForm(this.form)
+      ) {
+        ctx.save();
+        ctx.translate(this.pos.x, this.pos.y);
+        ctx.rotate(this.rotation);
+        ctx.globalAlpha = light ? 0.06 : 0.075;
+        ctx.fillStyle = light ? "#0a1020" : "#e8eeff";
+        try {
+          this.formData.maskDraw(ctx, this.size);
+        } catch (_) {}
+        ctx.restore();
+      }
 
       // 自定义墨色场开启时关闭 cel，保证整块渐变一致
       const useCelInk =
