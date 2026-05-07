@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.10.0** 起）。  
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.10.1** 起）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
@@ -141,9 +141,16 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 | 子需求 | 状态 | 说明 |
 |--------|------|------|
 | 降低后续改动成本 / 省 token | **部分完成** | `docs/ZILING_LAYOUT.txt` 说明加载顺序；`js/ziling/play-bounds.js` 抽离边界逻辑 |
-| 计时/巨字辨识度 | **加强** | `clock`/`chrono` **digitRowsMaskDraw** + **gridCell 与点阵 cell 对齐**；巨字 **shellMax 4**；immutable 形态 **mask 淡显** + **统一相位** 体内波 |
+| 计时/巨字辨识度 | **加强** | `clock`/`chrono` **digitRowsMaskDraw** + **gridCell 对齐**；巨字 **shellMax 4**；immutable **统一相位** 体内波（**mask 仅离屏 walk，不画在画布**） |
 | 拖拽色团与字灵偏离 | **已处理** | 去掉 `pos` 处 **径向渐变**；去掉 **绘制 lag 偏移**；`beginDrag` 同步 **lag=pos** |
 | 活动范围与撞边 | **已完成** | `_playBounds` 近贴边；`_bodyClampRadius`；`PB.resolve` 反弹；`_wallShatter` 碎散 + 涟漪 |
+
+### 1.22 撤销剪影叠绘 · 减轻形体叠字（3.10.1）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| mask 剪影透出为「水印大字」 | **已修复** | 删除 `_render` 中对 `formData.maskDraw` 的淡显绘制 |
+| 形体组成字重叠 | **减轻** | `spreadTargets2D` 推力↑；巨字 spread/格距/粒子数↓；`_separateOverlappingGridGlyphs` mask 下 **双遍** + **更大搜索半径** |
 
 ---
 

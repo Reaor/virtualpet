@@ -370,7 +370,7 @@
           const dsq = dx * dx + dy * dy;
           if (dsq >= minDSq || dsq < 1e-10) continue;
           const dlen = Math.sqrt(dsq);
-          const push = (minD - dlen) * 0.52;
+          const push = (minD - dlen) * 0.68;
           dx /= dlen;
           dy /= dlen;
           points[i].x -= dx * push;
@@ -705,10 +705,10 @@
     const shellMax = 4;
     const px = countSilhouetteBandPixels(draw, S, 400, shellMax);
     if (px < 40) return 68;
-    const cellEst = clamp(Math.round(S * 0.037), 10, 15);
-    const slotFootprint = cellEst * cellEst * 0.17;
-    const n = Math.floor((px * 0.72) / Math.max(slotFootprint, 0.95));
-    return clamp(Math.max(n, 48), 48, 300);
+    const cellEst = clamp(Math.round(S * 0.04), 11, 17);
+    const slotFootprint = cellEst * cellEst * 0.24;
+    const n = Math.floor((px * 0.58) / Math.max(slotFootprint, 0.95));
+    return clamp(Math.max(n, 40), 40, 260);
   }
 
   /**
@@ -1885,9 +1885,9 @@
         shellSample: true,
         noStroke: true,
         shellMax: 4,
-        spreadMin: S * 0.03,
-        spreadPasses: 6,
-        jitterScale: 0.005,
+        spreadMin: S * 0.042,
+        spreadPasses: 9,
+        jitterScale: 0.004,
       });
     }
     if (!FORMS[name]) return null;
@@ -2325,7 +2325,7 @@
         this.gridCell = clamp(Math.round(S * 0.052), 13, 26);
         this._resizeGlyphsForScript(this.scriptLines, { mode: "script" });
       } else if (name === "mega") {
-        this.gridCell = clamp(Math.round(S * 0.037), 11, 16);
+        this.gridCell = clamp(Math.round(S * 0.04), 12, 18);
       } else if (name === "clock") {
         this.gridCell = clamp(Math.round(S * 0.046), 12, 20);
       } else if (name === "chrono") {
@@ -2566,55 +2566,60 @@
       const cos = Math.cos(this.rotation);
       const sin = Math.sin(this.rotation);
       const useMask = this._maskPack && this._maskPack.grid;
+      const rMax = useMask ? 34 : 22;
+      const passes = useMask ? 2 : 1;
       const key = (gx, gy) => `${gx},${gy}`;
-      const occ = new Map();
-      for (let i = 0; i < this.glyphs.length; i++) {
-        const g = this.glyphs[i];
-        if (g.faceRole) continue;
-        const k = key(g.mgx, g.mgy);
-        if (!occ.has(k)) occ.set(k, []);
-        occ.get(k).push(i);
-      }
-      for (const [, idxs] of occ) {
-        if (idxs.length < 2) continue;
-        for (let j = 1; j < idxs.length; j++) {
-          const gi = idxs[j];
-          const g = this.glyphs[gi];
-          const gx = g.mgx;
-          const gy = g.mgy;
-          let found = null;
-          for (let r = 1; r < 20 && !found; r++) {
-            for (let dx = -r; dx <= r && !found; dx++) {
-              for (let dy = -r; dy <= r && !found; dy++) {
-                if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-                const nx = gx + dx;
-                const ny = gy + dy;
-                const nk = key(nx, ny);
-                const list = occ.get(nk);
-                if (list && list.length) continue;
-                if (
-                  useMask &&
-                  !this._worldCellWalkable(nx, ny, bx, by, cos, sin, flip)
-                ) {
-                  continue;
+
+      for (let pass = 0; pass < passes; pass++) {
+        const occ = new Map();
+        for (let i = 0; i < this.glyphs.length; i++) {
+          const g = this.glyphs[i];
+          if (g.faceRole) continue;
+          const k = key(g.mgx, g.mgy);
+          if (!occ.has(k)) occ.set(k, []);
+          occ.get(k).push(i);
+        }
+        for (const [, idxs] of occ) {
+          if (idxs.length < 2) continue;
+          for (let j = 1; j < idxs.length; j++) {
+            const gi = idxs[j];
+            const g = this.glyphs[gi];
+            const gx = g.mgx;
+            const gy = g.mgy;
+            let found = null;
+            for (let r = 1; r < rMax && !found; r++) {
+              for (let dx = -r; dx <= r && !found; dx++) {
+                for (let dy = -r; dy <= r && !found; dy++) {
+                  if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+                  const nx = gx + dx;
+                  const ny = gy + dy;
+                  const nk = key(nx, ny);
+                  const list = occ.get(nk);
+                  if (list && list.length) continue;
+                  if (
+                    useMask &&
+                    !this._worldCellWalkable(nx, ny, bx, by, cos, sin, flip)
+                  ) {
+                    continue;
+                  }
+                  found = { nx, ny, nk };
                 }
-                found = { nx, ny, nk };
               }
             }
+            if (!found) continue;
+            const oldK = key(gx, gy);
+            const oldList = occ.get(oldK);
+            if (oldList) {
+              const ix = oldList.indexOf(gi);
+              if (ix >= 0) oldList.splice(ix, 1);
+            }
+            g.mgx = found.nx;
+            g.mgy = found.ny;
+            g.x = g.mgx * cell;
+            g.y = g.mgy * cell;
+            if (!occ.has(found.nk)) occ.set(found.nk, []);
+            occ.get(found.nk).push(gi);
           }
-          if (!found) continue;
-          const oldK = key(gx, gy);
-          const oldList = occ.get(oldK);
-          if (oldList) {
-            const ix = oldList.indexOf(gi);
-            if (ix >= 0) oldList.splice(ix, 1);
-          }
-          g.mgx = found.nx;
-          g.mgy = found.ny;
-          g.x = g.mgx * cell;
-          g.y = g.mgy * cell;
-          if (!occ.has(found.nk)) occ.set(found.nk, []);
-          occ.get(found.nk).push(gi);
         }
       }
     }
@@ -4569,24 +4574,6 @@
         ctx.fillText(g.char, 0, 0);
         ctx.restore();
       };
-
-      // 清晰形态：淡显轮廓 mask，帮助辨认计时/巨字/曲线整体字形
-      if (
-        this.viewMode === "pet" &&
-        this.formData &&
-        typeof this.formData.maskDraw === "function" &&
-        isGridLayoutImmutableForm(this.form)
-      ) {
-        ctx.save();
-        ctx.translate(this.pos.x, this.pos.y);
-        ctx.rotate(this.rotation);
-        ctx.globalAlpha = light ? 0.06 : 0.075;
-        ctx.fillStyle = light ? "#0a1020" : "#e8eeff";
-        try {
-          this.formData.maskDraw(ctx, this.size);
-        } catch (_) {}
-        ctx.restore();
-      }
 
       // 自定义墨色场开启时关闭 cel，保证整块渐变一致
       const useCelInk =
