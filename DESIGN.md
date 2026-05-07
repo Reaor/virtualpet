@@ -54,7 +54,7 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.6.1**：**文稿格距**与 `buildScriptLayout` 统一（`setForm`/`_resize` 同步）；**布局锁定形态**跳过格点去重；**墨色**对比与 `sin` 呼吸加强，默认单层墨亦带轻脉动；**巨字**按剪影像素面积 **`suggestMegaGlyphParticleCount`** 自适应粒子数。 |
+| 最新 | **3.7.0**：**巨字**改为笔画**壳层采样**（`sampleSilhouetteShell`）+ 可选 `noStroke` 避免填心；**形态锁定**拆分为 **`isMotionLayoutLockedForm`**（仅文稿/计时/数字禁游走）与 **`isGridLayoutImmutableForm`**（巨字/颜文字/曲线等保持轮廓几何但允许格点华容道式移动）；**剪影 mask** 上流体波纹衰减；**点击**统一 `scatterTapBurst` 散开反馈；**长按**直接 `revertToScript`；**拖拽**用 `pointerInnerRadius` 扩大命中。 |
 | 先前 | **3.6.0**：去动物、关镜像、墨色场、去重、巨字 stroke 等。 |
 | 先前 | **3.3.2**：画布整数 CSS 与 buffer 对齐 DPR。 |
 | 先前 | 已完成/未完成行级吞食与穿透；`gh-pages` 与 `main` 同步策略；cel 层次与旋迹形态等。 |

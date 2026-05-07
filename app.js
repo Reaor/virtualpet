@@ -232,9 +232,9 @@
   /** inner pet | mid nuis | far */
   let downZone = "";
   let dragPhase = "none";
-  let longRevertArmed = false;
   let longPressTimer = null;
-  const LONG_PRESS_MS = 420;
+  let longPressDidRevert = false;
+  const LONG_PRESS_MS = 500;
   const DRAG_THRESHOLD = 6;
 
   function clearLongPressTimer() {
@@ -245,9 +245,13 @@
   }
 
   function zoneAt(canvasPos) {
+    const innerR =
+      pet.pointerInnerRadius && typeof pet.pointerInnerRadius === "function"
+        ? pet.pointerInnerRadius()
+        : pet.size * 0.32;
     const d = Math.hypot(canvasPos.x - pet.pos.x, canvasPos.y - pet.pos.y);
-    if (d < pet.size * 0.3) return "inner";
-    if (d < pet.size * 0.48) return "mid";
+    if (d < innerR) return "inner";
+    if (d < innerR * 1.52) return "mid";
     return "far";
   }
 
@@ -259,13 +263,24 @@
     moved = false;
     downZone = zoneAt(p);
     dragPhase = "none";
-    longRevertArmed = false;
+    longPressDidRevert = false;
     clearLongPressTimer();
 
     if (pet.viewMode === "pet" && downZone === "inner") {
       dragPhase = "pending";
       longPressTimer = setTimeout(() => {
-        longRevertArmed = true;
+        if (
+          !moved &&
+          pet.viewMode === "pet" &&
+          downZone === "inner" &&
+          pet.scriptLines &&
+          pet.scriptLines.length
+        ) {
+          pet.revertToScript(false);
+          longPressDidRevert = true;
+          dragPhase = "none";
+          clearLongPressTimer();
+        }
       }, LONG_PRESS_MS);
     } else if (downZone === "mid") {
       pet.nuisTap();
@@ -287,13 +302,12 @@
       pet.viewMode === "pet" &&
       Math.hypot(p.x - downPos.x, p.y - downPos.y) > DRAG_THRESHOLD
     ) {
-      if (longRevertArmed) {
-        pet.markRevertAfterDrag(true);
-      }
       pet.beginDrag(downPos.x, downPos.y);
-      dragPhase = "dragging";
-      clearLongPressTimer();
-      pet.dragTo(p.x, p.y);
+      if (pet.dragging) {
+        dragPhase = "dragging";
+        clearLongPressTimer();
+        pet.dragTo(p.x, p.y);
+      }
       return;
     }
     if (pet.dragging) pet.dragTo(p.x, p.y);
@@ -304,6 +318,16 @@
     const now = performance.now();
     const dt = now - downTime;
     clearLongPressTimer();
+
+    if (longPressDidRevert) {
+      longPressDidRevert = false;
+      downPos = null;
+      moved = false;
+      dragPhase = "none";
+      downZone = "";
+      tapChainCount = 0;
+      return;
+    }
 
     if (pet.dragging) pet.endDrag();
 

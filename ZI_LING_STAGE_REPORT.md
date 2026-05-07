@@ -66,7 +66,7 @@ flowchart LR
 | **文稿 ↔ 字灵 同源** | 同一 `scriptLines` 驱动呈现与躯体字序，保证「这一段话」身份一致。 | 任何「外部写入」应通过 **`setScriptLines` + 同步躯体** 的单一入口，避免双源数据。 |
 | **浅色 Apple 式 UI** | 与「宣纸古风」区分，贴近日程类 App 的系统感。 | 嵌入宿主 App 时，**主题色 / 圆角 / 安全区** 建议由宿主 CSS 变量或壳层覆盖。 |
 | **纯前端零打包** | 降低嵌入成本（WebView 直接 `file://` 或远程 URL），便于热更新。 | 后端能力通过 **HTTP API + 壳层注入** 接入，不把业务绑死在构建链上。 |
-| **可扩展形态库** | `FORMS` + `buildFormLayoutData` 模式支持脚本字、巨字、计时、曲线等。 | 新形态需考虑 **布局锁定**（`isLayoutLockedForm`）是否参与游走/波纹，避免「名不副实」。 |
+| **可扩展形态库** | `FORMS` + `buildFormLayoutData` 模式支持脚本字、巨字、计时、曲线等。 | 新形态需标注 **`isMotionLayoutLockedForm`**（是否禁单字游走）与 **`isGridLayoutImmutableForm`**（是否禁螺旋挤占目标点），避免轮廓被破坏或读数被打散。 |
 | **清晰度管线** | Canvas 与 DPR、亚像素、叠层绘制直接影响「字糊」体验。 | 新绘制逻辑应复用 **`_snapLogicalToDevice`**、浅色躯体单层墨等约定（见 `DESIGN.md` §2.4）。 |
 
 **矛盾处理**：以 [`DESIGN.md`](./DESIGN.md) 为准——**时间上更晚的决策覆盖更早冲突**。
