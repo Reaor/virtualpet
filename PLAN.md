@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.6.1** 起）。  
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.8.0** 起）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
@@ -58,7 +58,7 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 |--------|------|------|
 | 视频/动画中的轮廓与层次（设计记录） | **设计记录** | 赛璐璐/描边常见做法：顶光 + 硬分阶阴影 + **外轮廓**（inverted hull / 壳层挤出），如 [Cel 描边教程](https://danielilett.com/2019-06-15-tut2-4-edge-outline/)、[轮廓与笔压感](https://mooatoon.com/en/docs/TutorialLegacy/5.0-5.3/AddAdvancedRenderingFeaturesToCharacters/ControlOutline-5.3)。字灵侧用 `celRgbFromGlyph` 做明度分带 + 边缘部首字加描。 |
 | 持续输入、双击文稿化字灵 | **已完成** | `textarea` 的 `input/change` 同步 `setScriptLines`；**双击** 与「化为字灵」同效 |
-| 长按后拖回文稿 | **已完成** | 字灵 **inner** 区：先长按再拖则松手 `revertToScript`；**拖回文稿** 按钮同效 |
+| 长按后拖回文稿 | **改版（3.7.0）** | **inner** 区 **长按约 500ms** 直接 `revertToScript`（无需再拖）；拖拽松手不再单独触发「拖回」 |
 | 连续轻点画布 | **已完成** | `tapInteractionBurst`：涟漪与闪光随链长增强；**第三次轻点** 触发觅食 |
 | 抽象几何 | **已完成** | **`spiro`（旋迹）**：内旋轮线 + `maskDraw` |
 
@@ -106,11 +106,29 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 | 回空白 | **已完成** | `enterIntroMode` 清空已吞食指纹 Set |
 | 底部「写入」 | **已完成** | 多行按行分类；无标记的纯文本仍走旧「贴外圈」 |
 
+### 1.18 巨字壳层 · 华容道游走 · 全形态点击散开 / 长按回稿（3.7.0）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 巨字糊、填心、重叠 | **已完成** | `sampleSilhouetteShell` + `noStroke` 巨字绘制；`spreadTargets2D`；格点去重在 **mask 内** 螺旋；`mega` 专用 `gridCell` |
+| 凑形后字不走动 | **已完成** | 与 **文稿/计时/数字** 分离：`isMotionLayoutLockedForm` 仅约束后者；巨字/颜文字/曲线允许 `wgx/wgy`、internalMotion |
+| 无法拖、点无散开 | **已完成** | `pointerInnerRadius`；`scatterTapBurst`（含 `nuisTap` / `tapInteractionBurst`）；拖拽 `lagK` 冲量略加强 |
+| 长按回原本段落 | **已完成** | `app.js` 定时 `revertToScript` + `longPressDidRevert` 防误触连点 |
+
+### 1.19 待机曲线侧栏 · 字色 · 浮光（3.8.0）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 去掉侧栏数字/巨字 | **已完成** | 巨字/数字走「形」与 `?macroText=`；`digit_*` / `mega` 仍可通过 URL |
+| 软团+纹路 → 待机状态 | **已完成** | `STANDBY_MATH_ORDER` **34** 键；侧栏① 起序，悬停看全名 |
+| 计时独立 | **已完成** | 「钟」「秒」自成分组 |
+| 数十种数学曲线 | **已完成** | `registerStandbyMathForms`：李萨如变体、蔷薇瓣数、旋轮线、心脏线/蝶形/超椭圆等 |
+| 颜色色板 | **已完成** | `bodyTintHex` + 弹层色块 + `<input type="color">` |
+| 浮光律动 | **已完成** | `glowMode` 0～5，`drawGlyph` 透明度乘子 `_glowAlphaMul` |
+
 ---
 
 | 优先级 | 项 | 说明 |
-|--------|----|------|
-| P1 | **轮廓内更紧** | 对剪影采样点做 **K 均值 / 条带排序**，让字序沿轮廓或填充更「密实」 |
 | P1 | **觅食/睡眠「像动物」** | 觅食锚点路径用 **低曲率折线**；睡眠时整体缩放到卧姿剪影或降低 `patrolAmp` |
 | P2 | **格路径平滑** | 每段格移动 **ease**（短插值）或 **最少弯折** 分配，减少锯齿感 |
 | P2 | **计时形态秒级可选** | 当前为 **分**刷新；可加 `clock_sec` 或 URL 参数控制刷新与显示 |
