@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.9.0** 起）。  
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.10.0** 起）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
@@ -135,6 +135,15 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 | 部分字拖拽不跟随 | **已完成** | 格点目标 **始终**用 `bx/by`（`pos`）；`lagX/lagY` 仅用于 **绘制偏移** + 更快拖曳收敛 |
 | 颜色/浮光渐变不明显 | **已完成** | `bodyColorMode` 墨色 **跨度加大** + breath 权重；`_glowAlphaMul` **振幅与 clamp** 加宽 |
 | 叠字、巨字、内部交换 | **部分加强** | 拖曳中 **不跑** `_separateOverlappingGridGlyphs`；`_tryHuarongAdjacentSwaps` **邻格互换**；巨字 `slotFootprint`↑、`buildScriptLayout` 与 mask **1.42** 对齐 |
+
+### 1.21 目录拆分 · 轮廓辨识度 · 去拖拽色团 · 全幅边界撞碎（3.10.0）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 降低后续改动成本 / 省 token | **部分完成** | `docs/ZILING_LAYOUT.txt` 说明加载顺序；`js/ziling/play-bounds.js` 抽离边界逻辑 |
+| 计时/巨字辨识度 | **加强** | `clock`/`chrono` **digitRowsMaskDraw** + **gridCell 与点阵 cell 对齐**；巨字 **shellMax 4**；immutable 形态 **mask 淡显** + **统一相位** 体内波 |
+| 拖拽色团与字灵偏离 | **已处理** | 去掉 `pos` 处 **径向渐变**；去掉 **绘制 lag 偏移**；`beginDrag` 同步 **lag=pos** |
+| 活动范围与撞边 | **已完成** | `_playBounds` 近贴边；`_bodyClampRadius`；`PB.resolve` 反弹；`_wallShatter` 碎散 + 涟漪 |
 
 ---
 
