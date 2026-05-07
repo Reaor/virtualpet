@@ -1,54 +1,48 @@
 /**
- * 字灵活动区边界：画布内碰撞夹紧 + 速度反弹（供 pet.js 调用）。
- * 加载顺序：本文件须在 pet.js 之前。
+ * 字灵活动区边界：夹紧 + 速度反弹（供 pet.js 调用）。
+ * 贴边即视为碰撞（即使速度为 0 也会给 kick），避免「卡墙无反馈」。
  */
 (function (global) {
   "use strict";
+
+  const DEFAULT_KICK = 115;
 
   function inset(w, h) {
     return Math.max(1, Math.min(w, h) * 0.006);
   }
 
   /**
-   * 将 pos 限制在轴对齐框内，使距边至少 r；若越界则按 restitution 反弹 vel 分量。
-   * @returns {{ nx: number, ny: number } | null} 法线大致方向（用于撞边特效）
+   * @returns {{ nx: number, ny: number } | null}
    */
-  function resolve(pos, vel, bounds, r, restitution) {
+  function resolve(pos, vel, bounds, r, restitution, kickSpeed) {
+    const rest = restitution == null ? 0.42 : restitution;
+    const kick = kickSpeed == null ? DEFAULT_KICK : kickSpeed;
     let nx = 0;
     let ny = 0;
     let hit = false;
-    const rest = restitution == null ? 0.38 : restitution;
 
     if (pos.x < bounds.minX + r) {
       pos.x = bounds.minX + r;
-      if (vel.x < 0) {
-        vel.x *= -rest;
-        nx = 1;
-        hit = true;
-      }
+      nx = 1;
+      hit = true;
+      vel.x = Math.max(vel.x * -rest, kick);
     } else if (pos.x > bounds.maxX - r) {
       pos.x = bounds.maxX - r;
-      if (vel.x > 0) {
-        vel.x *= -rest;
-        nx = -1;
-        hit = true;
-      }
+      nx = -1;
+      hit = true;
+      vel.x = Math.min(vel.x * -rest, -kick);
     }
 
     if (pos.y < bounds.minY + r) {
       pos.y = bounds.minY + r;
-      if (vel.y < 0) {
-        vel.y *= -rest;
-        ny = 1;
-        hit = true;
-      }
+      ny = 1;
+      hit = true;
+      vel.y = Math.max(vel.y * -rest, kick);
     } else if (pos.y > bounds.maxY - r) {
       pos.y = bounds.maxY - r;
-      if (vel.y > 0) {
-        vel.y *= -rest;
-        ny = -1;
-        hit = true;
-      }
+      ny = -1;
+      hit = true;
+      vel.y = Math.min(vel.y * -rest, -kick);
     }
 
     return hit ? { nx, ny } : null;

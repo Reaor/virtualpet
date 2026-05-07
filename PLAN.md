@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.10.0** 起）。  
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.11.0** 起）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
@@ -141,9 +141,19 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 | 子需求 | 状态 | 说明 |
 |--------|------|------|
 | 降低后续改动成本 / 省 token | **部分完成** | `docs/ZILING_LAYOUT.txt` 说明加载顺序；`js/ziling/play-bounds.js` 抽离边界逻辑 |
-| 计时/巨字辨识度 | **加强** | `clock`/`chrono` **digitRowsMaskDraw** + **gridCell 与点阵 cell 对齐**；巨字 **shellMax 4**；immutable 形态 **mask 淡显** + **统一相位** 体内波 |
+| 计时/巨字辨识度 | **加强** | `clock`/`chrono` **digitRowsMaskDraw** + **gridCell 对齐**；巨字 **shellMax 4**；immutable **统一相位** 体内波（**mask 仅离屏 walk，不画在画布**） |
 | 拖拽色团与字灵偏离 | **已处理** | 去掉 `pos` 处 **径向渐变**；去掉 **绘制 lag 偏移**；`beginDrag` 同步 **lag=pos** |
 | 活动范围与撞边 | **已完成** | `_playBounds` 近贴边；`_bodyClampRadius`；`PB.resolve` 反弹；`_wallShatter` 碎散 + 涟漪 |
+
+### 1.23 撞墙溃散 · 巨字间距 · 涟漪收敛 · 运动速度 · 开发者标题（3.11.0）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 限制框架碰撞与溃散 | **加强** | `ZiLingPlayBounds.resolve` 贴边即 hit + **kick**；非拖拽撞墙 `_wallShatter`；**拖拽**顶虚线框也溃散 |
+| 巨字重叠 / 自适应 | **加强** | `enforceTargetsMinSpacing`；`suggestMegaGlyphParticleCount` 更保守；spread/gridCell 上调 |
+| 形状轮廓漂浮 | **减轻** | 涟漪扩张/透明度/条数上限；绘制时随半径衰减 alpha |
+| 每字运动速度调节 | **已完成** | `glyphMotionSpeed` + 侧栏 **速** |
+| 网页标题 | **已完成** | `<title>` 与副标题注明 **开发者页控制台** |
 
 ---
 
