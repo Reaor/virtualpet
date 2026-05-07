@@ -125,6 +125,7 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 | 数十种数学曲线 | **已完成** | `registerStandbyMathForms`：李萨如变体、蔷薇瓣数、旋轮线、心脏线/蝶形/超椭圆等 |
 | 颜色色板 | **已完成** | `bodyTintHex` + 弹层色块 + `<input type="color">` |
 | 浮光律动 | **已完成** | `glowMode` 0～5，`drawGlyph` 透明度乘子 `_glowAlphaMul` |
+| 回稿与拖动混淆 | **已完成（3.8.1）** | 长按蓄满仅 **武装**；**松手**才还原；位移 **>8px** 取消武装并进入拖动 |
 
 ---
 
