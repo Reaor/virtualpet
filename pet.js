@@ -195,6 +195,27 @@
     return points.slice(0, count);
   }
 
+  /** 统计剪影不透明像素数（用于巨字粒子数自适应） */
+  function countSilhouetteFillPixels(drawFn, S, cap) {
+    const sampleS = Math.min(Math.round(S), cap || 336);
+    const scale = sampleS / S;
+    const c = document.createElement("canvas");
+    c.width = sampleS;
+    c.height = sampleS;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.clearRect(0, 0, sampleS, sampleS);
+    ctx.save();
+    ctx.scale(scale, scale);
+    drawFn(ctx, S);
+    ctx.restore();
+    const img = ctx.getImageData(0, 0, sampleS, sampleS).data;
+    let n = 0;
+    for (let i = 3; i < img.length; i += 4) {
+      if (img[i] > 128) n++;
+    }
+    return n;
+  }
+
   /** 与剪影相同的缩放栅格，用于轮廓内可走判定（alpha > 128） */
   function rasterizeMask(drawFn, S) {
     const cap = 280;
@@ -370,21 +391,20 @@
     '"LXGW WenKai","Noto Sans SC","Noto Sans CJK SC","Segoe UI Symbol",sans-serif';
 
   /**
-   * 小字粒子铺满任意字符串的笔画轮廓（与 sampleSilhouette 同源栅格采样）。
-   * opts.kao：颜文字专用字体栈；否则无 CJK 时用等宽（数字/ASCII），有汉字用-serif。
+   * 巨字/剪影用：与 buildTextSilhouetteLayout 完全一致的绘制逻辑（供采样与像素计数复用）。
    */
-  function buildTextSilhouetteLayout(raw, n, S, opts) {
+  function createMacroTextDraw(raw, drawOpts) {
+    const doa = drawOpts || {};
     const text = String(raw || "字").trim() || "字";
-    const kao = opts && opts.kao;
-    const forceMono = opts && opts.mono;
+    const kao = doa.kao;
+    const forceMono = doa.mono;
     const hasHan = /[\u3400-\u9fff\uf900-\ufadf]/.test(text);
     const fontStack = kao
       ? FONT_SILHOUETTE_KAO
       : forceMono || !hasHan
         ? FONT_SILHOUETTE_MONO
         : FONT_SILHOUETTE_SERIF;
-
-    const draw = (ctx, s) => {
+    return (ctx, s) => {
       ctx.fillStyle = "#000";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -409,6 +429,24 @@
       }
       ctx.fillText(text, cx, cy);
     };
+  }
+
+  /** 按笔画覆盖面积估算巨字所需小字粒子数 */
+  function suggestMegaGlyphParticleCount(displayText, S) {
+    const draw = createMacroTextDraw(displayText, {});
+    const px = countSilhouetteFillPixels(draw, S, 336);
+    if (px < 120) return 140;
+    const density = 0.105;
+    return clamp(Math.round(px * density), 96, 560);
+  }
+
+  /**
+   * 小字粒子铺满任意字符串的笔画轮廓（与 sampleSilhouette 同源栅格采样）。
+   * opts.kao：颜文字专用字体栈；否则无 CJK 时用等宽（数字/ASCII），有汉字用-serif。
+   */
+  function buildTextSilhouetteLayout(raw, n, S, opts) {
+    const draw = createMacroTextDraw(raw, opts || {});
+    const kao = opts && opts.kao;
     const targets = sampleSilhouette(draw, S, n, {
       cap: 336,
       jitterScale: kao ? 0.05 : 0.035,
@@ -1490,10 +1528,11 @@
       this.center = { x: this.width / 2, y: this.height / 2 };
       // 身体参考尺寸：按短边
       this.size = Math.min(this.width, this.height) * 0.9;
-      // 格距过小会导致 em 只有 3～4px，字「存在但看不见」
-      this.gridCell = clamp(Math.round(this.size * 0.03), 9, 14);
+      // 文稿格距必须与 buildScriptLayout 内 cell 一致，否则吸附后行列会乱
       if (this.form === "script") {
-        this.gridCell = Math.max(this.gridCell, 11);
+        this.gridCell = clamp(Math.round(this.size * 0.048), 12, 24);
+      } else {
+        this.gridCell = clamp(Math.round(this.size * 0.03), 9, 14);
       }
       this.anchor = { x: this.center.x, y: this.center.y };
       if (this.viewMode === "script" || this.viewMode === "pet") {
@@ -1567,10 +1606,20 @@
     setForm(name, silent, noEmitOnFormChange) {
       if (!FORMS[name]) return;
       if (this.morphGlyphToTarget) this._cancelMorph(false);
-      if (name === "script") {
-        this._resizeGlyphsForScript(this.scriptLines, { mode: "script" });
-      }
       const S = this.size;
+      if (name === "script") {
+        this.gridCell = clamp(Math.round(S * 0.048), 12, 24);
+        this._resizeGlyphsForScript(this.scriptLines, { mode: "script" });
+      } else {
+        this.gridCell = clamp(Math.round(S * 0.03), 9, 14);
+      }
+      if (name === "mega") {
+        const want = suggestMegaGlyphParticleCount(this._pickMacroDisplay(), S);
+        if (want !== this.glyphs.length) {
+          this.particleCount = want;
+          this._initGlyphs();
+        }
+      }
       const data = buildFormLayoutData(this, name, this.particleCount, S);
       if (!data || !data.targets || !data.targets.length) return;
       this.form = name;
@@ -1787,6 +1836,7 @@
      */
     _separateOverlappingGridGlyphs() {
       if (!this.gridSnapping || !this.gridMarch) return;
+      if (isLayoutLockedForm(this.form)) return;
       const cell = this.gridCell;
       if (!cell) return;
       const key = (gx, gy) => `${gx},${gy}`;
@@ -3482,41 +3532,44 @@
           }
         } else if (!g.faceRole && (this.bodyColorMode || 0) > 0) {
           const cm = this.bodyColorMode || 0;
-          const breath = Math.sin(t * 1.12 + (g.depth || 0) * 0.55) * 0.5 + 0.5;
+          const breath = 0.5 + 0.5 * Math.sin(t * 2.65 + (g.depth || 0) * 1.35);
           const by0 = this.pos.y;
           const bx0 = this.pos.x;
-          const Sref = Math.max(this.size * 0.52, 120);
+          const Sref = Math.max(this.size * 0.5, 110);
           let u = 0.5;
           if (cm === 1) {
             const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
-            u = clamp(ny * 0.62 + breath * 0.38, 0, 1);
+            u = clamp(ny * 0.42 + breath * 0.58, 0, 1);
           } else if (cm === 2) {
             const d = clamp(Math.hypot(g.x - bx0, g.y - by0) / Sref, 0, 1);
-            u = clamp(d * 0.72 + breath * 0.28, 0, 1);
+            u = clamp(d * 0.5 + breath * 0.5, 0, 1);
           } else if (cm === 3) {
-            u = clamp((g.y - by0) / Sref + 0.5, 0, 1);
+            const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
+            u = clamp(ny + Math.sin(t * 2.2 + (g.depth || 0)) * 0.14, 0, 1);
           }
           if (light) {
-            const inkR = Math.round(lerp(26, 98, u));
-            const inkG = Math.round(lerp(28, 108, u));
-            const inkB = Math.round(lerp(36, 118, u));
+            const inkR = Math.round(lerp(14, 128, u));
+            const inkG = Math.round(lerp(18, 132, u));
+            const inkB = Math.round(lerp(28, 142, u));
             fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
           } else {
-            const inkR = Math.round(lerp(242, 115, u));
-            const inkG = Math.round(lerp(250, 152, u));
-            const inkB = Math.round(lerp(255, 200, u));
+            const inkR = Math.round(lerp(252, 88, u));
+            const inkG = Math.round(lerp(254, 130, u));
+            const inkB = Math.round(lerp(255, 188, u));
             fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
           }
         } else if (opts.cel === false) {
+          const pulse = Math.sin(t * 2.25 + (g.depth || 0) * 2.8) * 0.1;
+          const edgeUse = clamp(edge + pulse, 0, 1);
           if (light) {
-            const inkR = Math.round(lerp(28, 100, edge));
-            const inkG = Math.round(lerp(28, 110, edge));
-            const inkB = Math.round(lerp(34, 120, edge));
+            const inkR = Math.round(lerp(22, 108, edgeUse));
+            const inkG = Math.round(lerp(24, 118, edgeUse));
+            const inkB = Math.round(lerp(30, 128, edgeUse));
             fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
           } else {
-            const inkR = Math.round(lerp(240, 110, edge));
-            const inkG = Math.round(lerp(248, 160, edge));
-            const inkB = Math.round(lerp(255, 210, edge));
+            const inkR = Math.round(lerp(248, 100, edgeUse));
+            const inkG = Math.round(lerp(252, 148, edgeUse));
+            const inkB = Math.round(lerp(255, 198, edgeUse));
             fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
           }
         } else {

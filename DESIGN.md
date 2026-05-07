@@ -54,8 +54,8 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.6.0**：**去除动物形态**；**禁用 facingFlip 镜像**（`flip` 恒为 1）；**墨色场** `bodyColorMode` + 侧栏「色」四态循环；**格点去重** `_separateOverlappingGridGlyphs`；**巨字**剪影更高 cap、更小 jitter、`strokeText` 加厚笔画；默认 **关眉眼层与朱砂**（`faceLayerMode`/`spotAccent` 显式开启）；略提高非锁定形态 **游走/体内巡逻** 频率。 |
-| 先前 | **3.5.0**：软体触须与水母形态；颜文字扩展等。 |
+| 最新 | **3.6.1**：**文稿格距**与 `buildScriptLayout` 统一（`setForm`/`_resize` 同步）；**布局锁定形态**跳过格点去重；**墨色**对比与 `sin` 呼吸加强，默认单层墨亦带轻脉动；**巨字**按剪影像素面积 **`suggestMegaGlyphParticleCount`** 自适应粒子数。 |
+| 先前 | **3.6.0**：去动物、关镜像、墨色场、去重、巨字 stroke 等。 |
 | 先前 | **3.3.2**：画布整数 CSS 与 buffer 对齐 DPR。 |
 | 先前 | 已完成/未完成行级吞食与穿透；`gh-pages` 与 `main` 同步策略；cel 层次与旋迹形态等。 |
 
