@@ -392,7 +392,7 @@
           const dsq = dx * dx + dy * dy;
           if (dsq >= minDSq || dsq < 1e-12) continue;
           const dlen = Math.sqrt(dsq);
-          const push = (minD - dlen) * 0.5;
+          const push = (minD - dlen) * 0.78;
           dx /= dlen;
           dy /= dlen;
           points[i].x -= dx * push;
@@ -726,11 +726,11 @@
     const draw = createMacroTextDraw(displayText, { noStroke: true });
     const shellMax = 4;
     const px = countSilhouetteBandPixels(draw, S, 400, shellMax);
-    if (px < 40) return 68;
-    const cellEst = clamp(Math.round(S * 0.042), 11, 18);
-    const slotFootprint = cellEst * cellEst * 0.34;
-    const n = Math.floor((px * 0.42) / Math.max(slotFootprint, 0.95));
-    return clamp(Math.max(n, 28), 28, 200);
+    if (px < 40) return 56;
+    const cellEst = clamp(Math.round(S * 0.044), 12, 19);
+    const slotFootprint = cellEst * cellEst * 0.5;
+    const n = Math.floor((px * 0.36) / Math.max(slotFootprint, 1.1));
+    return clamp(Math.max(n, 24), 24, 160);
   }
 
   /**
@@ -1910,15 +1910,19 @@
       };
     }
     if (name === "mega") {
+      const gc =
+        self.gridCell != null
+          ? self.gridCell
+          : clamp(Math.round(S * 0.042), 13, 19);
       return buildTextSilhouetteLayout(self._pickMacroDisplay(), n, S, {
         shellSample: true,
         noStroke: true,
         shellMax: 4,
-        spreadMin: S * 0.05,
-        spreadPasses: 11,
-        jitterScale: 0.003,
-        enforceSpacing: S * 0.046,
-        enforceSpacingPasses: 10,
+        spreadMin: Math.max(S * 0.056, gc * 1.08),
+        spreadPasses: 14,
+        jitterScale: 0.0025,
+        enforceSpacing: Math.max(S * 0.058, gc * 1.18),
+        enforceSpacingPasses: 16,
       });
     }
     if (!FORMS[name]) return null;
@@ -2111,6 +2115,8 @@
 
       // 鼠标/触摸交互
       this.ripples = []; // {x,y,r,alpha}
+      /** URL ?dev=1 或 opts：显示活动区虚线框（默认关，避免「漂浮轮廓」观感） */
+      this.showPlayfieldGuide = opts.showPlayfieldGuide === true;
       this.dragging = false;
       this.dragOffset = { x: 0, y: 0 };
       this.pointerPos = null;
@@ -2601,8 +2607,9 @@
       const cos = Math.cos(this.rotation);
       const sin = Math.sin(this.rotation);
       const useMask = this._maskPack && this._maskPack.grid;
-      const rMax = useMask ? 34 : 22;
-      const passes = useMask ? 2 : 1;
+      const mega = this.form === "mega";
+      const rMax = mega ? 56 : useMask ? 34 : 22;
+      const passes = mega ? 3 : useMask ? 2 : 1;
       const key = (gx, gy) => `${gx},${gy}`;
 
       for (let pass = 0; pass < passes; pass++) {
@@ -2668,7 +2675,12 @@
       if (this.viewMode !== "pet" || this.form === "script") return;
       if (isMotionLayoutLockedForm(this.form)) return;
       if (now < this._huarongNextAt) return;
-      this._huarongNextAt = now + 260 + Math.random() * 320;
+      const gmsH = clamp(
+        this.glyphMotionSpeed != null ? this.glyphMotionSpeed : 1,
+        0.25,
+        2.5
+      );
+      this._huarongNextAt = now + (260 + Math.random() * 320) / gmsH;
 
       const bx = this.pos.x;
       const by = this.pos.y;
@@ -3625,7 +3637,9 @@
 
     // 加一个触点涟漪
     pulse(x, y) {
-      this.ripples.push({ x, y, r: 4, alpha: 0.42 });
+      if (this.viewMode === "intro") {
+        this.ripples.push({ x, y, r: 4, alpha: 0.42 });
+      }
     }
 
     // 觅食路径：传入一组世界坐标目标点（按顺序访问），每到一个触发 callback
@@ -3706,13 +3720,15 @@
       const n = Math.min(6, Math.max(1, Math.floor(chain) || 1));
       this._rumbleAmp = Math.min(0.52, (this._rumbleAmp || 0) + 0.06 * n);
       this._glyphFlash = Math.min(0.48, (this._glyphFlash || 0) + 0.08 * n);
-      for (let k = 0; k < Math.min(4, 2 + n); k++) {
-        this.ripples.push({
-          x: this.pos.x + rand(-this.size * 0.12, this.size * 0.12),
-          y: this.pos.y + rand(-this.size * 0.1, this.size * 0.1),
-          r: 3 + k * 2,
-          alpha: 0.28 + n * 0.04,
-        });
+      if (this.viewMode === "intro") {
+        for (let k = 0; k < Math.min(4, 2 + n); k++) {
+          this.ripples.push({
+            x: this.pos.x + rand(-this.size * 0.12, this.size * 0.12),
+            y: this.pos.y + rand(-this.size * 0.1, this.size * 0.1),
+            r: 3 + k * 2,
+            alpha: 0.28 + n * 0.04,
+          });
+        }
       }
       if (n >= 3) {
         this._glyphFlash = Math.min(0.55, (this._glyphFlash || 0) + 0.2);
@@ -3750,26 +3766,18 @@
 
     _wallShatter(nx, ny) {
       const cell = this.gridCell || 12;
-      const push = cell * (2.4 + Math.random() * 2.8);
+      const push = cell * (2.9 + Math.random() * 3.2);
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
-        g._tapScatterT = 0.52;
-        g._tapScatterT0 = 0.52;
+        g._tapScatterT = 0.62;
+        g._tapScatterT0 = 0.62;
         const fx = nx || rand(-0.5, 0.5);
         const fy = ny || rand(-0.5, 0.5);
-        g._tapScatterOX = fx * push + rand(-cell * 0.4, cell * 0.4);
-        g._tapScatterOY = fy * push + rand(-cell * 0.4, cell * 0.4);
+        g._tapScatterOX = fx * push + rand(-cell * 0.45, cell * 0.45);
+        g._tapScatterOY = fy * push + rand(-cell * 0.45, cell * 0.45);
       }
-      this._rumbleAmp = Math.min(0.58, (this._rumbleAmp || 0) + 0.28);
-      this._glyphFlash = Math.min(0.48, (this._glyphFlash || 0) + 0.2);
-      for (let k = 0; k < 3; k++) {
-        this.ripples.push({
-          x: this.pos.x + rand(-cell * 1.5, cell * 1.5),
-          y: this.pos.y + rand(-cell * 1.2, cell * 1.2),
-          r: 3 + k * 2,
-          alpha: 0.32,
-        });
-      }
+      this._rumbleAmp = Math.min(0.62, (this._rumbleAmp || 0) + 0.34);
+      this._glyphFlash = Math.min(0.52, (this._glyphFlash || 0) + 0.24);
     }
 
     _applyPlayfieldBounds(dt, now) {
@@ -3780,10 +3788,15 @@
         this.pos.y = clamp(this.pos.y, b.minY + r, b.maxY - r);
         return;
       }
-      const hit = PB.resolve(this.pos, this.vel, b, r, 0.38, 135);
-      if (hit && now - this._lastWallFxAt > 75) {
+      const hit = PB.resolve(this.pos, this.vel, b, r, 0.38, 155);
+      if (hit && now - this._lastWallFxAt > 55) {
         this._lastWallFxAt = now;
         this._wallShatter(hit.nx, hit.ny);
+        const tx = -hit.ny;
+        const ty = hit.nx;
+        const sk = 28 * (0.85 + Math.random() * 0.55);
+        this.vel.x += tx * sk * dt;
+        this.vel.y += ty * sk * dt;
       }
     }
 
@@ -3895,6 +3908,10 @@
         return;
       }
 
+      if (this.viewMode !== "intro") {
+        this.ripples.length = 0;
+      }
+
       // 觅食路径必须与拖拽解耦：否则手指在画布外松开时 dragging 一直为 true，会永久卡住
       if (this.mode === "feeding") {
         if (this.feedTargetWorld) {
@@ -3933,7 +3950,7 @@
               this.center.y +
               Math.cos(this.idleAngle * 0.38) * this.height * s * 0.92;
           } else {
-            this.idleAngle += dt * 0.35;
+            this.idleAngle += dt * 0.35 * gms;
             const ax =
               this.center.x +
               Math.sin(this.idleAngle * 0.7) * this.width * 0.3 +
@@ -3953,7 +3970,9 @@
 
       if (this.viewMode === "pet" && !this.dragging && this.mode !== "feeding") {
         const b = this._playBounds();
-        const ar = this._bodyClampRadius() * 0.42;
+        const rBody = this._bodyClampRadius();
+        const margin = Math.max(1, Math.min(this.width, this.height) * 0.002);
+        const ar = Math.max(rBody - margin, 8);
         this.anchor.x = clamp(this.anchor.x, b.minX + ar, b.maxX - ar);
         this.anchor.y = clamp(this.anchor.y, b.minY + ar, b.maxY - ar);
       }
@@ -3966,8 +3985,9 @@
       }
       if (!this.dragging) {
         const layoutLocked = isMotionLayoutLockedForm(this.form);
-        const k = this.mode === "feeding" ? 14 : layoutLocked ? 2.85 : 3.5;
-        const damp = this.mode === "feeding" ? 4 : layoutLocked ? 2.75 : 2.2;
+        const gmsVel = layoutLocked ? 1 : 0.82 + 0.26 * gms;
+        const k = (this.mode === "feeding" ? 14 : layoutLocked ? 2.85 : 3.5) * gmsVel;
+        const damp = (this.mode === "feeding" ? 4 : layoutLocked ? 2.75 : 2.2) / gmsVel;
         const ax = (this.anchor.x - this.pos.x) * k - this.vel.x * damp;
         const ay = (this.anchor.y - this.pos.y) * k - this.vel.y * damp;
         this.vel.x += ax * dt;
@@ -4263,10 +4283,12 @@
         }
       } else {
         const fMul = (this.fluidStrength || 0) * 0.001 + 1;
+        const gmsSpring = 0.88 + 0.22 * gms;
         const springK =
           (this.mode === "feeding" ? 52 : 24) *
           fMul *
-          (1 + (this._layoutSettle || 0) * 0.45);
+          (1 + (this._layoutSettle || 0) * 0.45) *
+          gmsSpring;
         const damping =
           (this.mode === "feeding" ? 6.2 : 4.8) *
           (1 + (this._layoutSettle || 0) * 0.3);
@@ -4346,18 +4368,20 @@
         }
       }
 
-      // 涟漪：限制扩张半径，避免整屏「漂浮线圈」
+      // 涟漪：仅 intro 使用；字灵/文稿模式不绘制扩张线圈，避免「漂浮形状轮廓」
       const rippleCap = Math.min(this.width, this.height) * 0.26;
-      for (const r of this.ripples) {
-        r.r += 62 * dt * gms;
-        r.alpha -= 1.45 * dt;
-        if (r.r > rippleCap) r.alpha -= 2.4 * dt;
-      }
-      this.ripples = this.ripples.filter(
-        (r) => r.alpha > 0 && r.r < rippleCap * 1.08
-      );
-      if (this.ripples.length > 22) {
-        this.ripples = this.ripples.slice(-22);
+      if (this.viewMode === "intro") {
+        for (const r of this.ripples) {
+          r.r += 62 * dt * gms;
+          r.alpha -= 1.45 * dt;
+          if (r.r > rippleCap) r.alpha -= 2.4 * dt;
+        }
+        this.ripples = this.ripples.filter(
+          (r) => r.alpha > 0 && r.r < rippleCap * 1.08
+        );
+        if (this.ripples.length > 22) {
+          this.ripples = this.ripples.slice(-22);
+        }
       }
 
       // 飞来的字：弹簧到宠物中心，到了就合并
@@ -4442,7 +4466,7 @@
         ctx.restore();
       }
 
-      if (this.viewMode === "pet") {
+      if (this.showPlayfieldGuide && this.viewMode === "pet") {
         const box = this._playBounds();
         const rw = box.maxX - box.minX;
         const rh = box.maxY - box.minY;
@@ -4457,21 +4481,23 @@
         ctx.restore();
       }
 
-      ctx.save();
-      ctx.lineWidth = 1.2;
-      const rippleCapR = Math.min(W, H) * 0.26;
-      for (const r of this.ripples) {
-        const fall = 1 - Math.min(1, (r.r / rippleCapR) * 0.85) * 0.55;
-        const a = r.alpha * fall;
-        if (a < 0.03) continue;
-        ctx.strokeStyle = light
-          ? `rgba(0, 122, 255, ${a * 0.22})`
-          : `rgba(180, 210, 255, ${a * 0.28})`;
-        ctx.beginPath();
-        ctx.arc(r.x, r.y, r.r, 0, TAU);
-        ctx.stroke();
+      if (this.viewMode === "intro") {
+        ctx.save();
+        ctx.lineWidth = 1.2;
+        const rippleCapR = Math.min(W, H) * 0.26;
+        for (const r of this.ripples) {
+          const fall = 1 - Math.min(1, (r.r / rippleCapR) * 0.85) * 0.55;
+          const a = r.alpha * fall;
+          if (a < 0.03) continue;
+          ctx.strokeStyle = light
+            ? `rgba(0, 122, 255, ${a * 0.22})`
+            : `rgba(180, 210, 255, ${a * 0.28})`;
+          ctx.beginPath();
+          ctx.arc(r.x, r.y, r.r, 0, TAU);
+          ctx.stroke();
+        }
+        ctx.restore();
       }
-      ctx.restore();
 
       if (this.viewMode === "intro") return;
 
@@ -4860,7 +4886,7 @@
 
     /** 侧栏「速」：循环体内运动速度挡位 */
     cycleGlyphMotionSpeed() {
-      const tiers = [0.45, 0.7, 1, 1.35, 1.75, 2.2];
+      const tiers = [0.4, 0.65, 1, 1.45, 1.9, 2.35];
       let i = tiers.indexOf(this.glyphMotionSpeed);
       if (i < 0) {
         let best = 0;

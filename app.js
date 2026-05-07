@@ -29,6 +29,7 @@
   const btnRevertScript = document.getElementById("btnRevertScript");
 
   const params = new URL(location.href).searchParams;
+  const devHud = params.get("dev") === "1";
   const skipIntro = params.get("skipIntro") === "1" || params.get("pet") === "1";
   const urlForm = params.get("form");
   const urlMacroStr = (params.get("macroText") || params.get("mega") || "").trim();
@@ -42,6 +43,7 @@
     initialForm: urlForm && FORMS[urlForm] ? urlForm : undefined,
     scriptLines: scriptLinesFromUi.length ? scriptLinesFromUi : undefined,
     macroText: urlMacroStr ? urlMacroStr.slice(0, 48) : undefined,
+    showPlayfieldGuide: devHud,
     onFormChange(key) {
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
       syncUiMode();
@@ -534,14 +536,9 @@
         toast(gl[pet.glowMode | 0] || "浮光");
       } else if (action === "speed") {
         const v = pet.cycleGlyphMotionSpeed();
-        toast(`运动速度 ×${v.toFixed(2)}（体内格移/波纹）`);
-        if (pet.mode === "sleep") {
-          pet.sleep(false);
-          toast("醒了");
-        } else {
-          pet.sleep(true);
-          toast("小憩 · 晚安");
-        }
+        toast(
+          `运动速度 ×${v.toFixed(2)}（格移、游走、流体、巡逻与华容道交换）`
+        );
       } else if (action === "shake") {
         pet.shake();
         toast("抖擞精神");
