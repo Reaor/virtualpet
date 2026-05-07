@@ -256,9 +256,12 @@
   let downZone = "";
   let dragPhase = "none";
   let longPressTimer = null;
-  let longPressDidRevert = false;
-  const LONG_PRESS_MS = 500;
-  const DRAG_THRESHOLD = 6;
+  /** 长按蓄满后松手才回文稿（避免与拖动同时触发） */
+  let revertArmOnRelease = false;
+  /** 是否已超过拖动阈值：超过则取消「松手回稿」意图 */
+  let exceededDragThreshold = false;
+  const LONG_PRESS_MS = 580;
+  const DRAG_THRESHOLD = 8;
 
   function clearLongPressTimer() {
     if (longPressTimer) {
@@ -286,23 +289,23 @@
     moved = false;
     downZone = zoneAt(p);
     dragPhase = "none";
-    longPressDidRevert = false;
+    revertArmOnRelease = false;
+    exceededDragThreshold = false;
     clearLongPressTimer();
 
     if (pet.viewMode === "pet" && downZone === "inner") {
       dragPhase = "pending";
       longPressTimer = setTimeout(() => {
+        longPressTimer = null;
         if (
-          !moved &&
+          !exceededDragThreshold &&
           pet.viewMode === "pet" &&
           downZone === "inner" &&
           pet.scriptLines &&
           pet.scriptLines.length
         ) {
-          pet.revertToScript(false);
-          longPressDidRevert = true;
-          dragPhase = "none";
-          clearLongPressTimer();
+          revertArmOnRelease = true;
+          toast("松手还原文稿");
         }
       }, LONG_PRESS_MS);
     } else if (downZone === "mid") {
@@ -318,15 +321,21 @@
     if (!downPos) return;
     if (e.cancelable) e.preventDefault();
     const p = getPos(e);
-    if (Math.hypot(p.x - downPos.x, p.y - downPos.y) > 4) moved = true;
+    const dist = Math.hypot(p.x - downPos.x, p.y - downPos.y);
+    if (dist > 4) moved = true;
+    if (dist > DRAG_THRESHOLD) {
+      exceededDragThreshold = true;
+      if (revertArmOnRelease) revertArmOnRelease = false;
+    }
 
     if (
       dragPhase === "pending" &&
       pet.viewMode === "pet" &&
-      Math.hypot(p.x - downPos.x, p.y - downPos.y) > DRAG_THRESHOLD
+      dist > DRAG_THRESHOLD
     ) {
       pet.beginDrag(downPos.x, downPos.y);
       if (pet.dragging) {
+        revertArmOnRelease = false;
         dragPhase = "dragging";
         clearLongPressTimer();
         pet.dragTo(p.x, p.y);
@@ -342,15 +351,27 @@
     const dt = now - downTime;
     clearLongPressTimer();
 
-    if (longPressDidRevert) {
-      longPressDidRevert = false;
+    if (
+      revertArmOnRelease &&
+      !exceededDragThreshold &&
+      !pet.dragging &&
+      dragPhase !== "dragging" &&
+      pet.viewMode === "pet" &&
+      pet.scriptLines &&
+      pet.scriptLines.length
+    ) {
+      pet.revertToScript(false);
+      toast("已回到文稿");
+      revertArmOnRelease = false;
       downPos = null;
       moved = false;
       dragPhase = "none";
       downZone = "";
       tapChainCount = 0;
+      exceededDragThreshold = false;
       return;
     }
+    revertArmOnRelease = false;
 
     if (pet.dragging) pet.endDrag();
 
@@ -379,10 +400,13 @@
     moved = false;
     dragPhase = "none";
     downZone = "";
+    exceededDragThreshold = false;
   }
 
   function onCancel(e) {
     clearLongPressTimer();
+    revertArmOnRelease = false;
+    exceededDragThreshold = false;
     if (pet.dragging) pet.endDrag();
     downPos = null;
     moved = false;
