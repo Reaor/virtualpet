@@ -532,7 +532,9 @@
           "心跳",
         ];
         toast(gl[pet.glowMode | 0] || "浮光");
-      } else if (action === "sleep") {
+      } else if (action === "speed") {
+        const v = pet.cycleGlyphMotionSpeed();
+        toast(`运动速度 ×${v.toFixed(2)}（体内格移/波纹）`);
         if (pet.mode === "sleep") {
           pet.sleep(false);
           toast("醒了");

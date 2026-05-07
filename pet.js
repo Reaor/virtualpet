@@ -20,40 +20,33 @@
           inset(w, h) {
             return Math.max(1, Math.min(w, h) * 0.006);
           },
-          resolve(pos, vel, bounds, r, restitution) {
-            const rest = restitution == null ? 0.38 : restitution;
+          resolve(pos, vel, bounds, r, restitution, kickSpeed) {
+            const rest = restitution == null ? 0.42 : restitution;
+            const kick = kickSpeed == null ? 115 : kickSpeed;
             let nx = 0;
             let ny = 0;
             let hit = false;
             if (pos.x < bounds.minX + r) {
               pos.x = bounds.minX + r;
-              if (vel.x < 0) {
-                vel.x *= -rest;
-                nx = 1;
-                hit = true;
-              }
+              nx = 1;
+              hit = true;
+              vel.x = Math.max(vel.x * -rest, kick);
             } else if (pos.x > bounds.maxX - r) {
               pos.x = bounds.maxX - r;
-              if (vel.x > 0) {
-                vel.x *= -rest;
-                nx = -1;
-                hit = true;
-              }
+              nx = -1;
+              hit = true;
+              vel.x = Math.min(vel.x * -rest, -kick);
             }
             if (pos.y < bounds.minY + r) {
               pos.y = bounds.minY + r;
-              if (vel.y < 0) {
-                vel.y *= -rest;
-                ny = 1;
-                hit = true;
-              }
+              ny = 1;
+              hit = true;
+              vel.y = Math.max(vel.y * -rest, kick);
             } else if (pos.y > bounds.maxY - r) {
               pos.y = bounds.maxY - r;
-              if (vel.y > 0) {
-                vel.y *= -rest;
-                ny = -1;
-                hit = true;
-              }
+              ny = -1;
+              hit = true;
+              vel.y = Math.min(vel.y * -rest, -kick);
             }
             return hit ? { nx, ny } : null;
           },
@@ -371,6 +364,35 @@
           if (dsq >= minDSq || dsq < 1e-10) continue;
           const dlen = Math.sqrt(dsq);
           const push = (minD - dlen) * 0.68;
+          dx /= dlen;
+          dy /= dlen;
+          points[i].x -= dx * push;
+          points[i].y -= dy * push;
+          points[j].x += dx * push;
+          points[j].y += dy * push;
+        }
+      }
+    }
+  }
+
+  /** 巨字等：在 spread 后再强制最小间距（减轻笔画带内重叠） */
+  function enforceTargetsMinSpacing(points, minD, passes) {
+    if (!points || points.length < 2 || minD <= 0) return;
+    const minDSq = minD * minD;
+    const P = Math.max(1, passes | 0);
+    for (let p = 0; p < P; p++) {
+      for (let i = 0; i < points.length; i++) {
+        for (let j = i + 1; j < points.length; j++) {
+          const ax = points[i].x;
+          const ay = points[i].y;
+          const bx = points[j].x;
+          const by = points[j].y;
+          let dx = bx - ax;
+          let dy = by - ay;
+          const dsq = dx * dx + dy * dy;
+          if (dsq >= minDSq || dsq < 1e-12) continue;
+          const dlen = Math.sqrt(dsq);
+          const push = (minD - dlen) * 0.5;
           dx /= dlen;
           dy /= dlen;
           points[i].x -= dx * push;
@@ -705,10 +727,10 @@
     const shellMax = 4;
     const px = countSilhouetteBandPixels(draw, S, 400, shellMax);
     if (px < 40) return 68;
-    const cellEst = clamp(Math.round(S * 0.04), 11, 17);
-    const slotFootprint = cellEst * cellEst * 0.24;
-    const n = Math.floor((px * 0.58) / Math.max(slotFootprint, 0.95));
-    return clamp(Math.max(n, 40), 40, 260);
+    const cellEst = clamp(Math.round(S * 0.042), 11, 18);
+    const slotFootprint = cellEst * cellEst * 0.34;
+    const n = Math.floor((px * 0.42) / Math.max(slotFootprint, 0.95));
+    return clamp(Math.max(n, 28), 28, 200);
   }
 
   /**
@@ -735,6 +757,13 @@
           targets,
           o.spreadMin,
           o.spreadPasses != null ? o.spreadPasses : 4
+        );
+      }
+      if (o.enforceSpacing != null && targets.length > 1) {
+        enforceTargetsMinSpacing(
+          targets,
+          o.enforceSpacing,
+          o.enforceSpacingPasses != null ? o.enforceSpacingPasses : 8
         );
       }
     } else {
@@ -1885,9 +1914,11 @@
         shellSample: true,
         noStroke: true,
         shellMax: 4,
-        spreadMin: S * 0.042,
-        spreadPasses: 9,
-        jitterScale: 0.004,
+        spreadMin: S * 0.05,
+        spreadPasses: 11,
+        jitterScale: 0.003,
+        enforceSpacing: S * 0.046,
+        enforceSpacingPasses: 10,
       });
     }
     if (!FORMS[name]) return null;
@@ -2109,7 +2140,11 @@
       this.gridMarch = opts.gridMarch !== false;
       /** 沿格线移动速度（格/秒） */
       this.gridMarchSpeed = opts.gridMarchSpeed != null ? opts.gridMarchSpeed : 2;
-
+      /** 每字体内运动总倍率（格移、波纹、巡逻） */
+      this.glyphMotionSpeed =
+        opts.glyphMotionSpeed != null
+          ? clamp(+opts.glyphMotionSpeed, 0.25, 2.5)
+          : 1;
       /** 吞字后对形态的偏好（多字命中同一形会提高概率） */
       this.formDigestBias = {};
       this.formDigestBiasDecay = 0.12; // per second
@@ -2325,7 +2360,7 @@
         this.gridCell = clamp(Math.round(S * 0.052), 13, 26);
         this._resizeGlyphsForScript(this.scriptLines, { mode: "script" });
       } else if (name === "mega") {
-        this.gridCell = clamp(Math.round(S * 0.04), 12, 18);
+        this.gridCell = clamp(Math.round(S * 0.042), 13, 19);
       } else if (name === "clock") {
         this.gridCell = clamp(Math.round(S * 0.046), 12, 20);
       } else if (name === "chrono") {
@@ -3590,7 +3625,7 @@
 
     // 加一个触点涟漪
     pulse(x, y) {
-      this.ripples.push({ x, y, r: 6, alpha: 0.55 });
+      this.ripples.push({ x, y, r: 4, alpha: 0.42 });
     }
 
     // 觅食路径：传入一组世界坐标目标点（按顺序访问），每到一个触发 callback
@@ -3671,12 +3706,12 @@
       const n = Math.min(6, Math.max(1, Math.floor(chain) || 1));
       this._rumbleAmp = Math.min(0.52, (this._rumbleAmp || 0) + 0.06 * n);
       this._glyphFlash = Math.min(0.48, (this._glyphFlash || 0) + 0.08 * n);
-      for (let k = 0; k < 3 + n; k++) {
+      for (let k = 0; k < Math.min(4, 2 + n); k++) {
         this.ripples.push({
-          x: this.pos.x + rand(-this.size * 0.22, this.size * 0.22),
-          y: this.pos.y + rand(-this.size * 0.18, this.size * 0.18),
-          r: 5 + n * 2,
-          alpha: 0.35 + n * 0.05,
+          x: this.pos.x + rand(-this.size * 0.12, this.size * 0.12),
+          y: this.pos.y + rand(-this.size * 0.1, this.size * 0.1),
+          r: 3 + k * 2,
+          alpha: 0.28 + n * 0.04,
         });
       }
       if (n >= 3) {
@@ -3715,22 +3750,24 @@
 
     _wallShatter(nx, ny) {
       const cell = this.gridCell || 12;
-      const push = cell * (1.4 + Math.random() * 1.8);
+      const push = cell * (2.4 + Math.random() * 2.8);
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
-        g._tapScatterT = 0.32;
-        g._tapScatterT0 = 0.32;
-        g._tapScatterOX = (nx || (Math.random() - 0.5) * 0.4) * push;
-        g._tapScatterOY = (ny || (Math.random() - 0.5) * 0.4) * push;
+        g._tapScatterT = 0.52;
+        g._tapScatterT0 = 0.52;
+        const fx = nx || rand(-0.5, 0.5);
+        const fy = ny || rand(-0.5, 0.5);
+        g._tapScatterOX = fx * push + rand(-cell * 0.4, cell * 0.4);
+        g._tapScatterOY = fy * push + rand(-cell * 0.4, cell * 0.4);
       }
-      this._rumbleAmp = Math.min(0.5, (this._rumbleAmp || 0) + 0.22);
-      this._glyphFlash = Math.min(0.42, (this._glyphFlash || 0) + 0.16);
-      for (let k = 0; k < 5; k++) {
+      this._rumbleAmp = Math.min(0.58, (this._rumbleAmp || 0) + 0.28);
+      this._glyphFlash = Math.min(0.48, (this._glyphFlash || 0) + 0.2);
+      for (let k = 0; k < 3; k++) {
         this.ripples.push({
-          x: this.pos.x + rand(-this.size * 0.12, this.size * 0.12),
-          y: this.pos.y + rand(-this.size * 0.1, this.size * 0.1),
-          r: 8 + k * 5,
-          alpha: 0.22 + k * 0.05,
+          x: this.pos.x + rand(-cell * 1.5, cell * 1.5),
+          y: this.pos.y + rand(-cell * 1.2, cell * 1.2),
+          r: 3 + k * 2,
+          alpha: 0.32,
         });
       }
     }
@@ -3743,15 +3780,10 @@
         this.pos.y = clamp(this.pos.y, b.minY + r, b.maxY - r);
         return;
       }
-      const hit = PB.resolve(this.pos, this.vel, b, r, 0.4);
-      if (hit && now - this._lastWallFxAt > 160) {
-        const nLen = Math.hypot(hit.nx, hit.ny);
+      const hit = PB.resolve(this.pos, this.vel, b, r, 0.38, 135);
+      if (hit && now - this._lastWallFxAt > 75) {
         this._lastWallFxAt = now;
-        if (nLen > 0.01) {
-          this._wallShatter(hit.nx, hit.ny);
-        } else {
-          this._wallShatter(0, 0);
-        }
+        this._wallShatter(hit.nx, hit.ny);
       }
     }
 
@@ -3794,8 +3826,23 @@
       if (!this.dragging) return;
       const b = this._playBounds();
       const r = this._bodyClampRadius();
-      const nx = clamp(x + this.dragOffset.x, b.minX + r, b.maxX - r);
-      const ny = clamp(y + this.dragOffset.y, b.minY + r, b.maxY - r);
+      const wantX = x + this.dragOffset.x;
+      const wantY = y + this.dragOffset.y;
+      const nx = clamp(wantX, b.minX + r, b.maxX - r);
+      const ny = clamp(wantY, b.minY + r, b.maxY - r);
+      const nowMs = typeof performance !== "undefined" ? performance.now() : Date.now();
+      if (nowMs - this._lastWallFxAt > 70) {
+        let wnx = 0;
+        let wny = 0;
+        if (wantX < b.minX + r - 0.5) wnx = 1;
+        else if (wantX > b.maxX - r + 0.5) wnx = -1;
+        if (wantY < b.minY + r - 0.5) wny = 1;
+        else if (wantY > b.maxY - r + 0.5) wny = -1;
+        if (wnx !== 0 || wny !== 0) {
+          this._lastWallFxAt = nowMs;
+          this._wallShatter(wnx, wny);
+        }
+      }
       if (this._dragPrevPos) {
         this.dragVel.x = nx - this._dragPrevPos.x;
         this.dragVel.y = ny - this._dragPrevPos.y;
@@ -3830,16 +3877,21 @@
 
     _update(dt, now) {
       const t = now / 1000;
+      const gms = clamp(this.glyphMotionSpeed != null ? this.glyphMotionSpeed : 1, 0.25, 2.5);
       this.breath = isMotionLayoutLockedForm(this.form)
         ? 1
         : Math.sin(t * 1.05) * 0.032 + 1;
 
       if (this.viewMode === "intro") {
+        const capR = Math.min(this.width, this.height) * 0.22;
         for (const r of this.ripples) {
-          r.r += 160 * dt;
-          r.alpha -= 0.9 * dt;
+          r.r += 55 * dt * gms;
+          r.alpha -= 1.5 * dt;
+          if (r.r > capR) r.alpha -= 2.2 * dt;
         }
-        this.ripples = this.ripples.filter((r) => r.alpha > 0);
+        this.ripples = this.ripples.filter(
+          (r) => r.alpha > 0 && r.r < capR * 1.05
+        );
         return;
       }
 
@@ -3995,11 +4047,11 @@
         this.form !== "script"
       ) {
         if (t >= this._nextWanderPick) {
-          this._nextWanderPick = t + rand(0.28, 0.82);
+          this._nextWanderPick = t + rand(0.28, 0.82) / gms;
           for (const g of this.glyphs) {
             if (g.faceRole || isMotionLayoutLockedForm(this.form)) continue;
             if (t >= g.wanderNextAt) {
-              g.wanderNextAt = t + rand(0.5, 1.75);
+              g.wanderNextAt = t + rand(0.5, 1.75) / gms;
               this._pickWanderDelta(g, bx, by, cos, sin, flip);
             }
           }
@@ -4053,13 +4105,13 @@
       const waveAmp = (this.fluidStrength || 0) * cell * 0.09;
       const maskFluidMul =
         this._maskPack && this._maskPack.grid ? 0.16 : 1;
-      const waveAmpEff = waveAmp * maskFluidMul;
-      this._fluidPhase += dt * 0.48;
+      const waveAmpEff = waveAmp * maskFluidMul * gms;
+      this._fluidPhase += dt * 0.48 * gms;
 
       if (this.gridMarch && this.gridSnapping) {
         const stepBudget = Math.max(
           1,
-          Math.min(4, Math.round((this.gridMarchSpeed || 2) * dt * 6))
+          Math.min(6, Math.round((this.gridMarchSpeed || 2) * gms * dt * 6))
         );
         const crispMotion = isGridLayoutImmutableForm(this.form);
 
@@ -4096,7 +4148,11 @@
             !isMotionLayoutLockedForm(this.form)
           ) {
             const pAmp =
-              cell * 0.072 * (this._patrolAmp || 1) * (this.dragging ? 1.15 : 1);
+              cell *
+              0.072 *
+              (this._patrolAmp || 1) *
+              (this.dragging ? 1.15 : 1) *
+              gms;
             if (crispMotion) {
               const breath = Math.sin(t * 0.86);
               const sway = Math.cos(t * 0.63);
@@ -4216,9 +4272,9 @@
           (1 + (this._layoutSettle || 0) * 0.3);
         const rumble2 = (this._rumbleAmp || 0) * cell * 0.1;
         const waveAmp2 = (this.fluidStrength || 0) * cell * 0.11;
-        const waveAmp2Eff = waveAmp2 * maskFluidMul;
+        const waveAmp2Eff = waveAmp2 * maskFluidMul * gms;
 
-        this._fluidPhase += dt * 0.52;
+        this._fluidPhase += dt * 0.52 * gms;
 
         for (const g of this.glyphs) {
           const txl = g.tx * flip;
@@ -4290,12 +4346,19 @@
         }
       }
 
-      // 涟漪
+      // 涟漪：限制扩张半径，避免整屏「漂浮线圈」
+      const rippleCap = Math.min(this.width, this.height) * 0.26;
       for (const r of this.ripples) {
-        r.r += 160 * dt;
-        r.alpha -= 0.9 * dt;
+        r.r += 62 * dt * gms;
+        r.alpha -= 1.45 * dt;
+        if (r.r > rippleCap) r.alpha -= 2.4 * dt;
       }
-      this.ripples = this.ripples.filter((r) => r.alpha > 0);
+      this.ripples = this.ripples.filter(
+        (r) => r.alpha > 0 && r.r < rippleCap * 1.08
+      );
+      if (this.ripples.length > 22) {
+        this.ripples = this.ripples.slice(-22);
+      }
 
       // 飞来的字：弹簧到宠物中心，到了就合并
       for (const f of this.flyingGlyphs) {
@@ -4379,12 +4442,31 @@
         ctx.restore();
       }
 
+      if (this.viewMode === "pet") {
+        const box = this._playBounds();
+        const rw = box.maxX - box.minX;
+        const rh = box.maxY - box.minY;
+        ctx.save();
+        ctx.strokeStyle = light
+          ? "rgba(0, 122, 255, 0.2)"
+          : "rgba(130, 170, 255, 0.18)";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(box.minX + 0.5, box.minY + 0.5, rw - 1, rh - 1);
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+
       ctx.save();
       ctx.lineWidth = 1.2;
+      const rippleCapR = Math.min(W, H) * 0.26;
       for (const r of this.ripples) {
+        const fall = 1 - Math.min(1, (r.r / rippleCapR) * 0.85) * 0.55;
+        const a = r.alpha * fall;
+        if (a < 0.03) continue;
         ctx.strokeStyle = light
-          ? `rgba(0, 122, 255, ${r.alpha * 0.35})`
-          : `rgba(180, 210, 255, ${r.alpha * 0.45})`;
+          ? `rgba(0, 122, 255, ${a * 0.22})`
+          : `rgba(180, 210, 255, ${a * 0.28})`;
         ctx.beginPath();
         ctx.arc(r.x, r.y, r.r, 0, TAU);
         ctx.stroke();
@@ -4774,6 +4856,26 @@
       }
       const s = String(hex).trim();
       this.bodyTintHex = /^#[0-9A-Fa-f]{6}$/.test(s) ? s : this.bodyTintHex;
+    }
+
+    /** 侧栏「速」：循环体内运动速度挡位 */
+    cycleGlyphMotionSpeed() {
+      const tiers = [0.45, 0.7, 1, 1.35, 1.75, 2.2];
+      let i = tiers.indexOf(this.glyphMotionSpeed);
+      if (i < 0) {
+        let best = 0;
+        let bd = Infinity;
+        for (let k = 0; k < tiers.length; k++) {
+          const d = Math.abs(tiers[k] - (this.glyphMotionSpeed || 1));
+          if (d < bd) {
+            bd = d;
+            best = k;
+          }
+        }
+        i = best;
+      }
+      this.glyphMotionSpeed = tiers[(i + 1) % tiers.length];
+      return this.glyphMotionSpeed;
     }
 
     cycleGlowMode() {
