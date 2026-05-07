@@ -238,6 +238,117 @@ body {
   padding-bottom: 5px;
 }
 
+.rail-group-btns.rail-standby-scroll {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  max-height: min(44vh, 400px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.rail-group-hint {
+  font-size: 8px;
+  font-weight: 500;
+  color: var(--label);
+  opacity: 0.88;
+  margin: 0 0 5px;
+  line-height: 1.4;
+}
+
+.tint-popover {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.22);
+  padding: 16px;
+}
+
+.tint-popover[hidden] {
+  display: none;
+}
+
+.tint-popover-card {
+  width: min(340px, 100%);
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--separator);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+  padding: 12px 14px 14px;
+}
+
+.tint-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.tint-popover-close {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--label);
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+
+.tint-popover-close:active {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.tint-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.swatch {
+  aspect-ratio: 1;
+  border-radius: 10px;
+  border: 2px solid var(--separator);
+  cursor: pointer;
+  min-height: 44px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.swatch-reset {
+  grid-column: span 2;
+  aspect-ratio: auto;
+  min-height: 40px;
+}
+
+.swatch:active {
+  transform: scale(0.96);
+}
+
+.tint-custom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label);
+}
+
+.tint-custom input[type="color"] {
+  width: 48px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 0;
+}
+
 .rail-form.compact {
   min-height: 30px;
   font-size: 13px;

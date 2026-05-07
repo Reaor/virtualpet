@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.7.0" />
+  <meta name="ziling-build" content="3.8.0" />
   <title>字灵 · Zì Líng</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.7.0" />
+  <link rel="stylesheet" href="./styles.css?v=3.8.0" />
 </head>
 <body>
   <div class="app">
@@ -30,38 +30,24 @@
         <nav class="rail-tools" role="toolbar" aria-label="互动">
           <button type="button" class="rail-tool" data-action="morph" title="换形">变</button>
           <button type="button" class="rail-tool" data-action="feed" title="觅食">觅</button>
-          <button type="button" class="rail-tool" data-action="ink" title="躯体墨色渐变">色</button>
+          <button type="button" class="rail-tool" data-action="ink" title="躯体墨色渐变">墨</button>
+          <button type="button" class="rail-tool" data-action="tint" title="字体颜色">颜</button>
+          <button type="button" class="rail-tool" data-action="glow" title="浮光律动">浮</button>
           <button type="button" class="rail-tool" data-action="sleep" title="小憩">眠</button>
           <button type="button" class="rail-tool" data-action="shake" title="抖擞">抖</button>
         </nav>
         <div class="rail-divider" role="presentation"></div>
-        <div class="rail-groups" aria-label="形态分类">
+        <div class="rail-groups" id="railGroups" aria-label="形态分类">
           <details class="rail-group" open>
-            <summary>软象</summary>
-            <div class="rail-group-btns">
-              <button type="button" class="rail-form compact" data-form="blob" title="软团">团</button>
-              <button type="button" class="rail-form compact" data-form="soft_ray" title="径向触须团">须</button>
-              <button type="button" class="rail-form compact" data-form="soft_curl" title="卷须软体">卷</button>
-              <button type="button" class="rail-form compact" data-form="soft_medusa" title="水母伞与拖须">母</button>
-            </div>
+            <summary>待机状态</summary>
+            <p class="rail-group-hint">① 起为软团；数字序悬停看全名 · 李萨如/蔷薇/旋轮/经典闭曲线等</p>
+            <div class="rail-group-btns rail-standby-scroll" id="railStandbyBtns"></div>
           </details>
           <details class="rail-group">
-            <summary>纹·时</summary>
+            <summary>计时</summary>
             <div class="rail-group-btns">
-              <button type="button" class="rail-form compact" data-form="lissajous" title="李萨如">纹</button>
-              <button type="button" class="rail-form compact" data-form="spiro" title="螺线">螺</button>
-              <button type="button" class="rail-form compact" data-form="flower" title="花">花</button>
               <button type="button" class="rail-form compact" data-form="clock" title="时分">钟</button>
               <button type="button" class="rail-form compact" data-form="chrono" title="时分秒">秒</button>
-            </div>
-          </details>
-          <details class="rail-group">
-            <summary>曲线·巨字</summary>
-            <div class="rail-group-btns">
-              <button type="button" class="rail-form compact" data-form="fourier" title="傅里叶轮廓">傅</button>
-              <button type="button" class="rail-form compact" data-form="rose" title="蔷薇线">蔷</button>
-              <button type="button" class="rail-form compact" data-form="lemniscate" title="双纽线">纽</button>
-              <button type="button" class="rail-form compact" data-form="mega" title="小字拼大字">巨</button>
             </div>
           </details>
           <details class="rail-group">
@@ -76,13 +62,6 @@
               <button type="button" class="rail-form compact" data-form="kao_sleep" title="颜·眠">眠</button>
               <button type="button" class="rail-form compact" data-form="kao_spark" title="颜·闪">闪</button>
               <button type="button" class="rail-form compact" data-form="kao_shrug" title="颜·摊">摊</button>
-            </div>
-          </details>
-          <details class="rail-group">
-            <summary>数字</summary>
-            <div class="rail-group-btns">
-              <button type="button" class="rail-form compact" data-form="digit_0" title="0">0</button>
-              <button type="button" class="rail-form compact" data-form="digit_8" title="8">8</button>
             </div>
           </details>
         </div>
@@ -122,7 +101,7 @@
         id="glyphShapeInput"
         class="import-input"
         maxlength="48"
-        placeholder="化身字形：一字、一词或数字（如 春 / 2026 / 休）— 点「形」应用到巨字形态"
+        placeholder="大字/数字/词（如 春、2026）— 点「形」切换巨字；亦可用 URL ?macroText="
         autocomplete="off"
       />
       <button type="button" class="import-btn" id="glyphShapeBtn">形</button>
@@ -182,7 +161,7 @@
       </article>
 
       <div class="panel-footnote">
-        点击卡片中的字可喂食 · URL：<code>?form=soft_ray</code> 触须团 · <code>?form=kao_party</code> 颜文字 · <code>?form=chrono</code> 秒级计时 · <code>?form=mega&amp;macroText=2026</code> 巨字 · <code>?form=fourier</code> 傅里叶形
+        点击卡片中的字可喂食 · URL：<code>?form=cv_butterfly</code> 蝶形线 · <code>?form=kao_party</code> 颜文字 · <code>?form=chrono</code> 计时 · <code>?macroText=2026</code> 巨字/数字 · <code>?form=liss_75</code> 待机曲线
       </div>
     </section>
 
@@ -194,7 +173,34 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="./pet.js?v=3.7.0"></script>
-  <script src="./app.js?v=3.7.0"></script>
+  <div id="tintPopover" class="tint-popover" hidden>
+    <div class="tint-popover-card">
+      <div class="tint-popover-head">
+        <span>字体颜色</span>
+        <button type="button" class="tint-popover-close" id="tintPopoverClose" aria-label="关闭">×</button>
+      </div>
+      <div class="tint-swatches" id="tintSwatches">
+        <button type="button" class="swatch swatch-reset" data-tint="" title="跟随主题默认">默认</button>
+        <button type="button" class="swatch" data-tint="#1c1c1e" style="background:#1c1c1e" title="墨黑"></button>
+        <button type="button" class="swatch" data-tint="#3d2c1f" style="background:#3d2c1f" title="褐墨"></button>
+        <button type="button" class="swatch" data-tint="#0a4d3c" style="background:#0a4d3c" title="松绿"></button>
+        <button type="button" class="swatch" data-tint="#1e3a5f" style="background:#1e3a5f" title="靛青"></button>
+        <button type="button" class="swatch" data-tint="#5c1a33" style="background:#5c1a33" title="胭脂"></button>
+        <button type="button" class="swatch" data-tint="#6b3fa0" style="background:#6b3fa0" title="藤紫"></button>
+        <button type="button" class="swatch" data-tint="#b45309" style="background:#b45309" title="琥珀"></button>
+        <button type="button" class="swatch" data-tint="#0d9488" style="background:#0d9488" title="青玉"></button>
+        <button type="button" class="swatch" data-tint="#be123c" style="background:#be123c" title="朱红"></button>
+        <button type="button" class="swatch" data-tint="#4d7c0f" style="background:#4d7c0f" title="苔绿"></button>
+        <button type="button" class="swatch" data-tint="#4338ca" style="background:#4338ca" title="宝蓝"></button>
+      </div>
+      <label class="tint-custom">
+        <span>自选</span>
+        <input type="color" id="tintColorPicker" value="#1c1c1e" />
+      </label>
+    </div>
+  </div>
+
+  <script src="./pet.js?v=3.8.0"></script>
+  <script src="./app.js?v=3.8.0"></script>
 </body>
 </html>

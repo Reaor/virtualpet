@@ -54,7 +54,7 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.7.0**：**巨字**改为笔画**壳层采样**（`sampleSilhouetteShell`）+ 可选 `noStroke` 避免填心；**形态锁定**拆分为 **`isMotionLayoutLockedForm`**（仅文稿/计时/数字禁游走）与 **`isGridLayoutImmutableForm`**（巨字/颜文字/曲线等保持轮廓几何但允许格点华容道式移动）；**剪影 mask** 上流体波纹衰减；**点击**统一 `scatterTapBurst` 散开反馈；**长按**直接 `revertToScript`；**拖拽**用 `pointerInnerRadius` 扩大命中。 |
+| 最新 | **3.8.0**：侧栏 **待机状态** 合并软团与数十种**数学曲线**（`STANDBY_MATH_ORDER` 动态生成按钮，① 起序）；**计时**独立分组；**巨字/数字**仅从输入框+`形` 或 URL；**墨/颜/浮**：墨色场、**`bodyTintHex` 色板+自选**、**`glowMode` 浮光浓淡律动**（6 态）。 |
 | 先前 | **3.6.0**：去动物、关镜像、墨色场、去重、巨字 stroke 等。 |
 | 先前 | **3.3.2**：画布整数 CSS 与 buffer 对齐 DPR。 |
 | 先前 | 已完成/未完成行级吞食与穿透；`gh-pages` 与 `main` 同步策略；cel 层次与旋迹形态等。 |

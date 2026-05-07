@@ -94,8 +94,8 @@
 
   /** 字池中出现某字时给形态的「饮食偏好」累积 */
   const CHAR_FORM_BIAS = {
-    鱼: "soft_medusa",
-    鲤: "soft_medusa",
+    鱼: "tro_ep_a",
+    鲤: "tro_ep_a",
     花: "flower",
     蝶: "flower",
     网: "kao_cool",
@@ -104,7 +104,7 @@
     绘: "kao_sweat",
     时: "clock",
     钟: "clock",
-    数: "digit_8",
+    数: "mega",
     龙: "fourier",
     云: "blob",
     心: "blob",
@@ -123,10 +123,10 @@
     蔷: "rose",
     纽: "lemniscate",
     秒: "chrono",
-    触: "soft_ray",
-    须: "soft_curl",
-    母: "soft_medusa",
-    藻: "soft_curl",
+    触: "cv_gear",
+    须: "tro_hyp_a",
+    母: "tro_ep_b",
+    藻: "cv_butterfly",
     舞: "kao_party",
     气: "kao_angry",
     爱: "kao_love",
@@ -1393,6 +1393,344 @@
     },
   };
 
+  /** 待机数学曲线：李萨如变体、蔷薇瓣数、内外旋轮线、经典平面闭曲线 */
+  (function registerStandbyMathForms() {
+    const eyePair = (S) => [
+      { x: -S * 0.1, y: -S * 0.22 },
+      { x: S * 0.1, y: -S * 0.22 },
+    ];
+
+    function lissajousMaskDraw(ctx, s, a, b, ph, cycles, Rm) {
+      const cx = s * 0.5;
+      const cy = s * 0.52;
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = s * 0.09;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      const steps = 300;
+      for (let k = 0; k <= steps; k++) {
+        const u = (k / steps) * TAU * cycles;
+        const x = cx + Math.sin(a * u + ph) * Rm;
+        const y = cy + Math.sin(b * u) * Rm * 0.92;
+        if (k === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    function addLissajous(id, label, a, b, ph, cycles = 2) {
+      FORMS[id] = {
+        label,
+        build(n, S) {
+          const R = S * 0.34;
+          const targets = [];
+          for (let i = 0; i < n; i++) {
+            const u = (i / Math.max(n, 1)) * TAU * cycles;
+            targets.push({
+              x: Math.sin(a * u + ph) * R,
+              y: Math.sin(b * u) * R * 0.92,
+            });
+          }
+          return {
+            targets,
+            ordered: true,
+            eyes: eyePair(S),
+            eyeSize: 1.22,
+            maskDraw: (ctx, s) =>
+              lissajousMaskDraw(ctx, s, a, b, ph, cycles, s * 0.34),
+          };
+        },
+      };
+    }
+
+    function addRoseK(id, label, k) {
+      const steps = 480;
+      FORMS[id] = {
+        label,
+        build(n, S) {
+          const R = S * 0.34;
+          const outline = [];
+          for (let j = 0; j < steps; j++) {
+            const t = (j / steps) * TAU;
+            const rk = R * Math.cos(k * t);
+            outline.push({
+              x: rk * Math.cos(t),
+              y: rk * Math.sin(t) * 0.92,
+            });
+          }
+          const targets = samplesOnOutlineLoop(outline, n, S * 0.012);
+          return {
+            targets,
+            ordered: true,
+            eyes: eyePair(S),
+            eyeSize: 1.18,
+            maskDraw: (ctx, s) => {
+              const Rm = s * 0.34;
+              ctx.fillStyle = "#000";
+              ctx.beginPath();
+              for (let j = 0; j <= steps; j++) {
+                const t = (j / steps) * TAU;
+                const rk = Rm * Math.cos(k * t);
+                const x = s * 0.5 + rk * Math.cos(t);
+                const y = s * 0.52 + rk * Math.sin(t) * 0.92;
+                if (j === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+              }
+              ctx.closePath();
+              ctx.fill();
+            },
+          };
+        },
+      };
+    }
+
+    function addTrochoid(id, label, Rf, rf, df, epi, turns = 3) {
+      FORMS[id] = {
+        label,
+        build(n, S) {
+          const R = S * Rf;
+          const r = S * rf;
+          const d = S * df;
+          const targets = [];
+          const span = TAU * turns;
+          for (let i = 0; i < n; i++) {
+            const t = (i / Math.max(n, 1)) * span;
+            let x;
+            let y;
+            if (epi) {
+              x = (R + r) * Math.cos(t) - d * Math.cos(((R + r) / r) * t);
+              y = (R + r) * Math.sin(t) - d * Math.sin(((R + r) / r) * t);
+            } else {
+              x = (R - r) * Math.cos(t) + d * Math.cos(((R - r) / r) * t);
+              y = (R - r) * Math.sin(t) - d * Math.sin(((R - r) / r) * t);
+            }
+            targets.push({ x, y: y * 0.92 });
+          }
+          return {
+            targets,
+            ordered: true,
+            eyes: eyePair(S),
+            eyeSize: 1.15,
+            maskDraw: (ctx, s) => {
+              const Rk = s * Rf;
+              const rk = s * rf;
+              const dk = s * df;
+              ctx.strokeStyle = "#000";
+              ctx.lineWidth = s * 0.085;
+              ctx.lineCap = "round";
+              ctx.lineJoin = "round";
+              ctx.beginPath();
+              const steps = Math.round(240 * turns);
+              for (let k = 0; k <= steps; k++) {
+                const t = (k / steps) * span;
+                let x;
+                let y;
+                if (epi) {
+                  x =
+                    s * 0.5 +
+                    (Rk + rk) * Math.cos(t) -
+                    dk * Math.cos(((Rk + rk) / rk) * t);
+                  y =
+                    s * 0.52 +
+                    (Rk + rk) * Math.sin(t) -
+                    dk * Math.sin(((Rk + rk) / rk) * t);
+                } else {
+                  x =
+                    s * 0.5 +
+                    (Rk - rk) * Math.cos(t) +
+                    dk * Math.cos(((Rk - rk) / rk) * t);
+                  y =
+                    s * 0.52 +
+                    (Rk - rk) * Math.sin(t) -
+                    dk * Math.sin(((Rk - rk) / rk) * t);
+                }
+                if (k === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+              }
+              ctx.stroke();
+            },
+          };
+        },
+      };
+    }
+
+    function addPolarLoop(id, label, rFn, steps = 640) {
+      FORMS[id] = {
+        label,
+        build(n, S) {
+          const R = S * 0.34;
+          const outline = [];
+          for (let j = 0; j < steps; j++) {
+            const t = (j / steps) * TAU;
+            const rp = rFn(t);
+            outline.push({
+              x: rp * Math.cos(t) * R,
+              y: rp * Math.sin(t) * R * 0.92,
+            });
+          }
+          const targets = samplesOnOutlineLoop(outline, n, S * 0.012);
+          return {
+            targets,
+            ordered: true,
+            eyes: eyePair(S),
+            eyeSize: 1.15,
+            maskDraw: (ctx, s) => {
+              const Rm = s * 0.34;
+              ctx.fillStyle = "#000";
+              ctx.beginPath();
+              for (let j = 0; j <= steps; j++) {
+                const t = (j / steps) * TAU;
+                const rp = rFn(t) * Rm;
+                const x = s * 0.5 + rp * Math.cos(t);
+                const y = s * 0.52 + rp * Math.sin(t) * 0.92;
+                if (j === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+              }
+              ctx.closePath();
+              ctx.fill();
+            },
+          };
+        },
+      };
+    }
+
+    function addParamLoop(id, label, xyFn, steps = 560) {
+      FORMS[id] = {
+        label,
+        build(n, S) {
+          const R = S * 0.34;
+          const outline = [];
+          for (let j = 0; j < steps; j++) {
+            const t = (j / steps) * TAU;
+            const p = xyFn(t);
+            outline.push({ x: p.x * R, y: p.y * R * 0.92 });
+          }
+          const targets = samplesOnOutlineLoop(outline, n, S * 0.012);
+          return {
+            targets,
+            ordered: true,
+            eyes: eyePair(S),
+            eyeSize: 1.15,
+            maskDraw: (ctx, s) => {
+              const Rm = s * 0.34;
+              ctx.fillStyle = "#000";
+              ctx.beginPath();
+              for (let j = 0; j <= steps; j++) {
+                const t = (j / steps) * TAU;
+                const p = xyFn(t);
+                const x = s * 0.5 + p.x * Rm;
+                const y = s * 0.52 + p.y * Rm * 0.92;
+                if (j === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+              }
+              ctx.closePath();
+              ctx.fill();
+            },
+          };
+        },
+      };
+    }
+
+    addLissajous("liss_43", "李萨如·4:3", 4, 3, 0.55, 2);
+    addLissajous("liss_54", "李萨如·5:4", 5, 4, 0.2, 2);
+    addLissajous("liss_56", "李萨如·5:6", 5, 6, 0.4, 2);
+    addLissajous("liss_75", "李萨如·7:5", 7, 5, 0.65, 2);
+    addLissajous("liss_85", "李萨如·8:5", 8, 5, 0.3, 2);
+
+    addRoseK("rose_2", "蔷薇·2瓣", 2);
+    addRoseK("rose_3", "蔷薇·3瓣", 3);
+    addRoseK("rose_4", "蔷薇·4瓣", 4);
+    addRoseK("rose_6", "蔷薇·6瓣", 6);
+    addRoseK("rose_7", "蔷薇·7瓣", 7);
+    addRoseK("rose_8", "蔷薇·8瓣", 8);
+
+    addTrochoid("tro_hyp_a", "内旋·宽", 0.24, 0.065, 0.11, false, 3);
+    addTrochoid("tro_hyp_b", "内旋·紧", 0.2, 0.095, 0.065, false, 3);
+    addTrochoid("tro_ep_a", "外旋·A", 0.14, 0.07, 0.095, true, 2);
+    addTrochoid("tro_ep_b", "外旋·B", 0.12, 0.055, 0.08, true, 3);
+
+    addPolarLoop(
+      "cv_cardioid",
+      "心脏线",
+      (t) => 0.55 * (1 + Math.cos(t)),
+      520
+    );
+    addParamLoop("cv_astroid", "星形线", (t) => {
+      const c = Math.cos(t);
+      const si = Math.sin(t);
+      return { x: c * c * c, y: si * si * si };
+    });
+    addParamLoop("cv_deltoid", "三尖内摆", (t) => {
+      return {
+        x: (2 * Math.cos(t) + Math.cos(2 * t)) / 3.2,
+        y: (2 * Math.sin(t) - Math.sin(2 * t)) / 3.2,
+      };
+    });
+    addParamLoop("cv_nephroid", "肾形线", (t) => {
+      return {
+        x: 0.45 * (3 * Math.cos(t) - Math.cos(3 * t)),
+        y: 0.38 * (3 * Math.sin(t) - Math.sin(3 * t)),
+      };
+    });
+    addParamLoop("cv_hypo5", "五角内摆", (t) => {
+      return {
+        x: (4 * Math.cos(t) + Math.cos(4 * t)) / 5.5,
+        y: (4 * Math.sin(t) - Math.sin(4 * t)) / 5.5,
+      };
+    });
+    addParamLoop("cv_super3", "超椭圆·3", (t) => {
+      const n = 3;
+      const np = 2 / n;
+      return {
+        x: Math.sign(Math.cos(t)) * Math.pow(Math.abs(Math.cos(t)), np),
+        y: Math.sign(Math.sin(t)) * Math.pow(Math.abs(Math.sin(t)), np),
+      };
+    });
+    addParamLoop("cv_super2p5", "超椭圆·2.5", (t) => {
+      const n = 2.5;
+      const np = 2 / n;
+      return {
+        x: Math.sign(Math.cos(t)) * Math.pow(Math.abs(Math.cos(t)), np),
+        y: Math.sign(Math.sin(t)) * Math.pow(Math.abs(Math.sin(t)), np),
+      };
+    });
+    addParamLoop("cv_butterfly", "蝶形线", (t) => {
+      const ex =
+        Math.exp(Math.cos(t)) -
+        2 * Math.cos(4 * t) +
+        Math.pow(Math.sin(t / 12), 5);
+      return { x: Math.sin(t) * ex * 0.22, y: Math.cos(t) * ex * 0.22 };
+    });
+    addParamLoop("cv_heart", "心形参数", (t) => {
+      const si = Math.sin(t);
+      return {
+        x: 0.2 * Math.pow(si, 3),
+        y:
+          0.05 *
+          (13 * Math.cos(t) -
+            5 * Math.cos(2 * t) -
+            2 * Math.cos(3 * t) -
+            Math.cos(4 * t)),
+      };
+    });
+    addParamLoop("cv_oval", "扁圆· Cassini 近似", (t) => {
+      const a = 1.05;
+      const b = 0.72;
+      return { x: a * Math.cos(t), y: b * Math.sin(t) };
+    });
+    addParamLoop("cv_gear", "齿轮波", (t) => {
+      const k = 7;
+      const r = 0.72 + 0.28 * Math.cos(k * t);
+      return { x: r * Math.cos(t), y: r * Math.sin(t) };
+    });
+    addParamLoop("cv_star5", "五角波", (t) => {
+      const k = 5;
+      const r = 0.55 + 0.45 * Math.abs(Math.cos((k * t) / 2));
+      return { x: r * Math.cos(t), y: r * Math.sin(t) };
+    });
+  })();
+
   for (let di = 0; di <= 9; di++) {
     const ds = String(di);
     FORMS[`digit_${di}`] = {
@@ -1435,9 +1773,11 @@
     if (
       form === "lissajous" ||
       form === "spiro" ||
+      form === "flower" ||
       form === "rose" ||
       form === "lemniscate" ||
-      form === "fourier"
+      form === "fourier" ||
+      /^(liss_|rose_|tro_|cv_)/.test(String(form))
     )
       return true;
     return false;
@@ -1469,12 +1809,45 @@
     return FORMS[name].build(n, S);
   }
 
-  const FORM_ORDER = [
+  const STANDBY_MATH_ORDER = [
     "blob",
-    "soft_ray",
-    "soft_curl",
-    "soft_medusa",
+    "lissajous",
+    "liss_43",
+    "liss_54",
+    "liss_56",
+    "liss_75",
+    "liss_85",
+    "spiro",
+    "tro_hyp_a",
+    "tro_hyp_b",
+    "tro_ep_a",
+    "tro_ep_b",
     "flower",
+    "rose",
+    "rose_2",
+    "rose_3",
+    "rose_4",
+    "rose_6",
+    "rose_7",
+    "rose_8",
+    "fourier",
+    "lemniscate",
+    "cv_cardioid",
+    "cv_astroid",
+    "cv_deltoid",
+    "cv_nephroid",
+    "cv_hypo5",
+    "cv_super3",
+    "cv_super2p5",
+    "cv_butterfly",
+    "cv_heart",
+    "cv_oval",
+    "cv_gear",
+    "cv_star5",
+  ];
+
+  const FORM_ORDER = [
+    ...STANDBY_MATH_ORDER,
     "kao_joy",
     "kao_sweat",
     "kao_cool",
@@ -1484,15 +1857,9 @@
     "kao_sleep",
     "kao_spark",
     "kao_shrug",
-    "mega",
-    "fourier",
-    "rose",
-    "lemniscate",
-    "digit_8",
     "clock",
     "chrono",
-    "lissajous",
-    "spiro",
+    "mega",
   ];
 
   // ---------- 表情（眼区由躯体内的「字层」呈现；此处供旧逻辑/色值参考） ---------- //
@@ -1593,6 +1960,13 @@
       this.faceLayerMode = opts.faceLayerMode === true;
       /** 躯体墨色场：0 默认（赛璐璐/边缘）；1 纵向+呼吸；2 径向+呼吸；3 纵向稳态 */
       this.bodyColorMode = opts.bodyColorMode != null ? opts.bodyColorMode & 3 : 0;
+      /** 躯体字色（#RRGGBB）；null 则随主题默认墨色 */
+      this.bodyTintHex =
+        opts.bodyTintHex != null && String(opts.bodyTintHex).trim()
+          ? String(opts.bodyTintHex).trim()
+          : null;
+      /** 浮光：0 关；1 呼吸；2 纵波；3 径向脉动；4 星闪；5 心跳 */
+      this.glowMode = opts.glowMode != null ? opts.glowMode | 0 : 0;
       /** 朱砂叠绘高亮（重复绘制同色字粒子）；默认关 */
       this.spotAccent = opts.spotAccent === true;
 
@@ -2777,8 +3151,8 @@
         this._rumbleAmp = Math.max(this._rumbleAmp || 0, 0.85);
         this._glyphFlash = Math.min(0.55, Math.max(this._glyphFlash || 0, 0.5));
         const alt = [
-          "soft_ray",
-          "soft_curl",
+          "tro_ep_a",
+          "cv_butterfly",
           "flower",
           "kao_party",
           "kao_spark",
@@ -3817,11 +4191,13 @@
         const flashW = opts.flashWeight != null ? opts.flashWeight : 0.5;
         const flashBoost = 1 + Math.min(flash, 0.52) * flashW * 0.42;
         const edgeAlpha = crispForm ? lerp(0.99, 0.92, edge) : lerp(0.94, 0.42, edge);
+        const glowMul = g.faceRole ? 1 : this._glowAlphaMul(g, t);
         const alpha =
           (opts.alphaMul != null ? opts.alphaMul : 1) *
           flashBoost *
           edgeAlpha *
-          g.alpha;
+          g.alpha *
+          glowMul;
         const fontMain =
           '"LXGW WenKai","LXGW WenKai Screen","Noto Serif SC","Noto Sans SC",serif';
         const pxInt = Math.max(8, Math.round(size));
@@ -3843,6 +4219,22 @@
           } else {
             fillStyle = c;
           }
+        } else if (
+          !g.faceRole &&
+          this.bodyTintHex &&
+          /^#[0-9A-Fa-f]{6}$/.test(this.bodyTintHex)
+        ) {
+          const br = parseInt(this.bodyTintHex.slice(1, 3), 16);
+          const bge = parseInt(this.bodyTintHex.slice(3, 5), 16);
+          const bb = parseInt(this.bodyTintHex.slice(5, 7), 16);
+          const ek = light
+            ? lerp(0.5, 1, edge)
+            : lerp(0.42, 1, 1 - edge * 0.65);
+          fillStyle = `rgba(${clamp(Math.round(br * ek), 0, 255)},${clamp(
+            Math.round(bge * ek),
+            0,
+            255
+          )},${clamp(Math.round(bb * ek), 0, 255)},${alpha})`;
         } else if (!g.faceRole && (this.bodyColorMode || 0) > 0) {
           const cm = this.bodyColorMode || 0;
           const breath = 0.5 + 0.5 * Math.sin(t * 2.65 + (g.depth || 0) * 1.35);
@@ -3937,7 +4329,8 @@
       const useCelInk =
         !isGridLayoutImmutableForm(this.form) &&
         !light &&
-        (this.bodyColorMode || 0) === 0;
+        (this.bodyColorMode || 0) === 0 &&
+        !this.bodyTintHex;
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
         drawGlyph(g, { flashWeight: 0.45, cel: useCelInk });
@@ -4103,7 +4496,41 @@
       this.digestText(lines.join(""));
     }
 
-    /** 循环躯体墨色场模式（0～3），供 UI「色」按钮调用 */
+    /** 浮光：浓淡律动乘在透明度上（0=关） */
+    _glowAlphaMul(g, t) {
+      const gm = this.glowMode | 0;
+      if (gm <= 0) return 1;
+      const ph = (g.depth || 0) * 4.2 + (g.patrolSeed || 0);
+      let m = 1;
+      if (gm === 1) m = 0.78 + 0.22 * Math.sin(t * 2.1 + ph * 0.31);
+      else if (gm === 2) m = 0.72 + 0.28 * Math.sin(t * 1.85 + g.y * 0.019);
+      else if (gm === 3)
+        m =
+          0.74 +
+          0.26 *
+            Math.sin(
+              t * 2.35 +
+                Math.hypot(g.x - this.pos.x, g.y - this.pos.y) * 0.011
+            );
+      else if (gm === 4) m = 0.62 + 0.38 * Math.sin(t * 4.05 + ph + g.tx * 0.021);
+      else if (gm === 5) m = Math.sin(t * 6.8) > 0.1 ? 1.09 : 0.8;
+      return clamp(m, 0.52, 1.12);
+    }
+
+    setBodyTint(hex) {
+      if (hex == null || hex === "") {
+        this.bodyTintHex = null;
+        return;
+      }
+      const s = String(hex).trim();
+      this.bodyTintHex = /^#[0-9A-Fa-f]{6}$/.test(s) ? s : this.bodyTintHex;
+    }
+
+    cycleGlowMode() {
+      this.glowMode = ((this.glowMode | 0) + 1) % 6;
+    }
+
+    /** 循环躯体墨色场模式（0～3），供 UI「墨」按钮调用 */
     cycleBodyColorMode() {
       this.bodyColorMode = ((this.bodyColorMode | 0) + 1) % 4;
     }
@@ -4123,6 +4550,7 @@
     Pet,
     FORMS,
     FORM_ORDER,
+    STANDBY_MATH_ORDER,
     DEFAULT_POOL,
     DIGEST_RULES,
     CHAR_DIGEST_HINT,

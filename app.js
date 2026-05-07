@@ -3,7 +3,7 @@
  */
 (function () {
   "use strict";
-  const { Pet, FORMS, FORM_ORDER } = window.ZiLing;
+  const { Pet, FORMS, FORM_ORDER, STANDBY_MATH_ORDER } = window.ZiLing;
 
   // ---------- 初始化 ----------
   const canvas = document.getElementById("petCanvas");
@@ -64,6 +64,29 @@
     }
   }
 
+  function circledIndex(i) {
+    if (i >= 0 && i < 20) return String.fromCharCode(0x2460 + i);
+    return String(i + 1);
+  }
+
+  function buildStandbyRailButtons() {
+    const host = document.getElementById("railStandbyBtns");
+    if (!host || !STANDBY_MATH_ORDER) return;
+    host.textContent = "";
+    STANDBY_MATH_ORDER.forEach((key, idx) => {
+      const f = FORMS[key];
+      if (!f) return;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "rail-form compact";
+      b.dataset.form = key;
+      b.title = `${f.label} · ${key}`;
+      b.textContent = circledIndex(idx);
+      host.appendChild(b);
+    });
+  }
+
+  buildStandbyRailButtons();
   syncUiMode();
 
   const glyphShapeInput = document.getElementById("glyphShapeInput");
@@ -397,10 +420,65 @@
   }
   setTimeout(hideHint, 6000);
 
+  const railGroups = document.getElementById("railGroups");
+  if (railGroups) {
+    railGroups.addEventListener("click", (e) => {
+      const btn = e.target.closest(".rail-form");
+      if (!btn || !railGroups.contains(btn)) return;
+      const key = btn.dataset.form;
+      if (!key || !FORMS[key]) return;
+      morphToForm(key);
+    });
+  }
+
+  const tintPopover = document.getElementById("tintPopover");
+  const tintPopoverClose = document.getElementById("tintPopoverClose");
+  const tintSwatches = document.getElementById("tintSwatches");
+  const tintColorPicker = document.getElementById("tintColorPicker");
+
+  function closeTintPopover() {
+    if (tintPopover) tintPopover.hidden = true;
+  }
+
+  if (tintPopoverClose) tintPopoverClose.addEventListener("click", closeTintPopover);
+
+  if (tintSwatches) {
+    tintSwatches.addEventListener("click", (e) => {
+      const sw = e.target.closest("[data-tint]");
+      if (!sw) return;
+      const v = sw.getAttribute("data-tint");
+      pet.setBodyTint(v || "");
+      if (tintColorPicker && v) tintColorPicker.value = v;
+      toast(v ? `字色：${v}` : "字色：默认");
+      closeTintPopover();
+    });
+  }
+
+  if (tintColorPicker) {
+    tintColorPicker.addEventListener("change", () => {
+      const v = tintColorPicker.value;
+      pet.setBodyTint(v);
+      toast(`字色：${v}`);
+    });
+  }
+
+  document.addEventListener("click", (e) => {
+    if (!tintPopover || tintPopover.hidden) return;
+    const t = e.target;
+    if (t.closest("#tintPopover") || t.closest('[data-action="tint"]')) return;
+    closeTintPopover();
+  });
+
   // ---------- 侧栏：互动 + 快捷形态 ----------
   document.querySelectorAll(".rail-tool").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (ev) => {
       const action = btn.dataset.action;
+      if (action === "tint") {
+        ev.stopPropagation();
+        const pop = document.getElementById("tintPopover");
+        if (pop) pop.hidden = !pop.hidden;
+        return;
+      }
       if (action === "morph") {
         pet.abortFeeding();
         const cur = pet.form;
@@ -419,6 +497,17 @@
           "纵向渐变 + 慢呼吸",
         ];
         toast(`墨色：${labels[pet.bodyColorMode | 0]}`);
+      } else if (action === "glow") {
+        pet.cycleGlowMode();
+        const gl = [
+          "浮光：关",
+          "呼吸",
+          "纵波",
+          "径向脉动",
+          "星闪",
+          "心跳",
+        ];
+        toast(gl[pet.glowMode | 0] || "浮光");
       } else if (action === "sleep") {
         if (pet.mode === "sleep") {
           pet.sleep(false);
@@ -431,14 +520,6 @@
         pet.shake();
         toast("抖擞精神");
       }
-    });
-  });
-
-  document.querySelectorAll(".rail-form").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const key = btn.dataset.form;
-      if (!key || !FORMS[key]) return;
-      morphToForm(key);
     });
   });
 
