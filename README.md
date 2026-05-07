@@ -116,7 +116,7 @@ webView.loadUrl("file:///android_asset/pet/index.html");
 2. 仅保留 `.stage > #petCanvas`
 3. 通过 JS 暴露控制接口（已经预留）：
    ```js
-   window._pet.setForm('cat')        // 变形
+   window._pet.setForm('blob')        // 变形
    window._pet.sleep(true)           // 休息
    window._pet.shake()               // 抖擞
    window._pet.addPoolChars(['朋','友'])  // 往字池塞字

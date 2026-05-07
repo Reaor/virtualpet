@@ -386,6 +386,10 @@
         morphToForm(key);
       } else if (action === "feed") {
         triggerFeeding();
+      } else if (action === "ink") {
+        pet.cycleBodyColorMode();
+        const labels = ["默认墨色", "纵向呼吸渐变", "径向呼吸渐变", "纵向稳态渐变"];
+        toast(`墨色：${labels[pet.bodyColorMode | 0]}`);
       } else if (action === "sleep") {
         if (pet.mode === "sleep") {
           pet.sleep(false);

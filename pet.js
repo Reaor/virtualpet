@@ -94,10 +94,10 @@
 
   /** 字池中出现某字时给形态的「饮食偏好」累积 */
   const CHAR_FORM_BIAS = {
-    鱼: "koi",
-    鲤: "koi",
+    鱼: "soft_medusa",
+    鲤: "soft_medusa",
     花: "flower",
-    蝶: "butterfly",
+    蝶: "flower",
     网: "kao_cool",
     符: "kao_cool",
     情: "kao_joy",
@@ -105,15 +105,15 @@
     时: "clock",
     钟: "clock",
     数: "digit_8",
-    龙: "dragon",
+    龙: "fourier",
     云: "blob",
     心: "blob",
-    猫: "cat",
-    鹤: "crane",
+    猫: "blob",
+    鹤: "flower",
     月: "blob",
     星: "blob",
-    兔: "rabbit",
-    狐: "fox",
+    兔: "blob",
+    狐: "blob",
     颜: "kao_joy",
     笑: "kao_joy",
     汗: "kao_sweat",
@@ -152,8 +152,10 @@
 
   // ---------- 剪影采样 ---------- //
   // 把绘制好的不透明像素均匀抽 N 个作为目标点（步长 1 更密）
-  function sampleSilhouette(drawFn, S, count) {
-    const cap = 280;
+  function sampleSilhouette(drawFn, S, count, sampleOpts) {
+    const so = sampleOpts || {};
+    const cap = so.cap != null ? so.cap : 280;
+    const jitterScale = so.jitterScale != null ? so.jitterScale : 0.22;
     const sampleS = Math.min(Math.round(S), cap);
     const scale = sampleS / S;
     const c = document.createElement("canvas");
@@ -180,7 +182,7 @@
     const points = [];
     const off = sampleS / 2;
     for (let i = 0; i < total && points.length < count; i += step) {
-      const jitter = () => (Math.random() - 0.5) * 0.22;
+      const jitter = () => (Math.random() - 0.5) * jitterScale;
       points.push({
         x: (px[i * 2] - off) / scale + jitter(),
         y: (px[i * 2 + 1] - off) / scale + jitter(),
@@ -396,9 +398,21 @@
       }
       fs = Math.max(fs, s * 0.055);
       ctx.font = `700 ${fs}px ${fontStack}`;
-      ctx.fillText(text, s * 0.5, s * 0.52);
+      const cx = s * 0.5;
+      const cy = s * 0.52;
+      if (!kao) {
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.lineWidth = Math.max(fs * 0.07, 1.15);
+        ctx.strokeStyle = "#000";
+        ctx.strokeText(text, cx, cy);
+      }
+      ctx.fillText(text, cx, cy);
     };
-    const targets = sampleSilhouette(draw, S, n);
+    const targets = sampleSilhouette(draw, S, n, {
+      cap: 336,
+      jitterScale: kao ? 0.05 : 0.035,
+    });
     return {
       targets,
       ordered: true,
@@ -710,328 +724,6 @@
             { x: R * 0.35, y: -R * 0.55 },
           ],
           eyeSize: 1.25,
-        };
-      },
-    },
-
-    cat: {
-      label: "猫",
-      build(n, S) {
-        const targets = sampleSilhouette((ctx, s) => {
-          ctx.fillStyle = "#000";
-          const cx = s * 0.5;
-          const cy = s * 0.52;
-          // 蹲坐躯干 + 后腿
-          ctx.beginPath();
-          ctx.ellipse(cx + s * 0.02, cy + s * 0.12, s * 0.26, s * 0.16, 0.08, 0, TAU);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.ellipse(cx - s * 0.18, cy + s * 0.2, s * 0.1, s * 0.07, -0.2, 0, TAU);
-          ctx.ellipse(cx + s * 0.22, cy + s * 0.2, s * 0.1, s * 0.07, 0.2, 0, TAU);
-          ctx.fill();
-          // 前肢
-          ctx.beginPath();
-          ctx.ellipse(cx - s * 0.12, cy + s * 0.22, s * 0.06, s * 0.11, 0.3, 0, TAU);
-          ctx.ellipse(cx + s * 0.14, cy + s * 0.22, s * 0.06, s * 0.11, -0.3, 0, TAU);
-          ctx.fill();
-          // 头
-          ctx.beginPath();
-          ctx.arc(cx, cy - s * 0.08, s * 0.2, 0, TAU);
-          ctx.fill();
-          // 双耳
-          ctx.beginPath();
-          ctx.moveTo(cx - s * 0.16, cy - s * 0.18);
-          ctx.lineTo(cx - s * 0.22, cy - s * 0.32);
-          ctx.lineTo(cx - s * 0.06, cy - s * 0.22);
-          ctx.closePath();
-          ctx.fill();
-          ctx.beginPath();
-          ctx.moveTo(cx + s * 0.16, cy - s * 0.18);
-          ctx.lineTo(cx + s * 0.22, cy - s * 0.32);
-          ctx.lineTo(cx + s * 0.06, cy - s * 0.22);
-          ctx.closePath();
-          ctx.fill();
-          // 尾
-          ctx.beginPath();
-          ctx.moveTo(cx + s * 0.22, cy + s * 0.06);
-          ctx.quadraticCurveTo(cx + s * 0.42, cy - s * 0.02, cx + s * 0.38, cy - s * 0.18);
-          ctx.quadraticCurveTo(cx + s * 0.32, cy + s * 0.02, cx + s * 0.18, cy + s * 0.1);
-          ctx.closePath();
-          ctx.fill();
-        }, S, n);
-        const R = S * 0.2;
-        return {
-          targets,
-          eyes: [
-            { x: -R * 0.55, y: -R * 0.85 },
-            { x: R * 0.55, y: -R * 0.85 },
-          ],
-          eyeSize: 1.55,
-        };
-      },
-    },
-
-    fox: {
-      label: "狐",
-      build(n, S) {
-        const targets = sampleSilhouette((ctx, s) => {
-          ctx.fillStyle = "#000";
-          const cx = s * 0.48;
-          const cy = s * 0.5;
-          ctx.beginPath();
-          ctx.ellipse(cx, cy + s * 0.14, s * 0.24, s * 0.15, 0.05, 0, TAU);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.ellipse(cx - s * 0.08, cy - s * 0.06, s * 0.2, s * 0.19, 0, 0, TAU);
-          ctx.fill();
-          // 尖吻
-          ctx.beginPath();
-          ctx.moveTo(cx + s * 0.12, cy + s * 0.02);
-          ctx.lineTo(cx + s * 0.28, cy + s * 0.06);
-          ctx.lineTo(cx + s * 0.14, cy + s * 0.1);
-          ctx.closePath();
-          ctx.fill();
-          // 大尾
-          ctx.beginPath();
-          ctx.moveTo(cx - s * 0.18, cy + s * 0.12);
-          ctx.quadraticCurveTo(cx - s * 0.42, cy - s * 0.08, cx - s * 0.28, cy - s * 0.22);
-          ctx.quadraticCurveTo(cx - s * 0.15, cy + s * 0.02, cx - s * 0.05, cy + s * 0.08);
-          ctx.closePath();
-          ctx.fill();
-          // 耳
-          ctx.beginPath();
-          ctx.moveTo(cx - s * 0.12, cy - s * 0.18);
-          ctx.lineTo(cx - s * 0.2, cy - s * 0.34);
-          ctx.lineTo(cx - s * 0.04, cy - s * 0.22);
-          ctx.closePath();
-          ctx.fill();
-          ctx.beginPath();
-          ctx.moveTo(cx + s * 0.08, cy - s * 0.2);
-          ctx.lineTo(cx + s * 0.14, cy - s * 0.36);
-          ctx.lineTo(cx + s * 0.02, cy - s * 0.24);
-          ctx.closePath();
-          ctx.fill();
-          ctx.beginPath();
-          ctx.ellipse(cx - s * 0.16, cy + s * 0.22, s * 0.06, s * 0.1, 0.35, 0, TAU);
-          ctx.ellipse(cx + s * 0.12, cy + s * 0.22, s * 0.06, s * 0.1, -0.35, 0, TAU);
-          ctx.fill();
-        }, S, n);
-        const R = S * 0.2;
-        return {
-          targets,
-          eyes: [
-            { x: -R * 0.25, y: -R * 0.55 },
-            { x: R * 0.15, y: -R * 0.52 },
-          ],
-          eyeSize: 1.45,
-        };
-      },
-    },
-
-    rabbit: {
-      label: "兔",
-      build(n, S) {
-        const targets = sampleSilhouette((ctx, s) => {
-          ctx.fillStyle = "#000";
-          const cx = s * 0.5;
-          const cy = s * 0.52;
-          ctx.beginPath();
-          ctx.ellipse(cx, cy + s * 0.12, s * 0.22, s * 0.14, 0, 0, TAU);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(cx, cy - s * 0.02, s * 0.18, 0, TAU);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.ellipse(cx - s * 0.1, cy - s * 0.32, s * 0.055, s * 0.22, -0.12, 0, TAU);
-          ctx.ellipse(cx + s * 0.1, cy - s * 0.32, s * 0.055, s * 0.22, 0.12, 0, TAU);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.ellipse(cx - s * 0.14, cy + s * 0.22, s * 0.07, s * 0.05, 0.2, 0, TAU);
-          ctx.ellipse(cx + s * 0.14, cy + s * 0.22, s * 0.07, s * 0.05, -0.2, 0, TAU);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.ellipse(cx, cy + s * 0.06, s * 0.04, s * 0.06, 0, 0, TAU);
-          ctx.fill();
-        }, S, n);
-        const R = S * 0.18;
-        return {
-          targets,
-          eyes: [
-            { x: -R * 0.6, y: -R * 0.35 },
-            { x: R * 0.6, y: -R * 0.35 },
-          ],
-          eyeSize: 1.55,
-        };
-      },
-    },
-
-    dragon: {
-      label: "飞龙",
-      build(n, S) {
-        const targets = sampleSilhouette((ctx, s) => {
-          ctx.fillStyle = "#000";
-          const cx = s * 0.46;
-          const cy = s * 0.48;
-          // 胸腹
-          ctx.beginPath();
-          ctx.ellipse(cx - s * 0.02, cy + s * 0.06, s * 0.2, s * 0.14, -0.15, 0, TAU);
-          ctx.fill();
-          // 长颈抬头
-          ctx.beginPath();
-          ctx.moveTo(cx - s * 0.12, cy - s * 0.02);
-          ctx.quadraticCurveTo(cx - s * 0.22, cy - s * 0.22, cx - s * 0.08, cy - s * 0.38);
-          ctx.quadraticCurveTo(cx + s * 0.02, cy - s * 0.34, cx - s * 0.02, cy - s * 0.12);
-          ctx.quadraticCurveTo(cx + s * 0.06, cy + s * 0.02, cx - s * 0.02, cy + s * 0.1);
-          ctx.closePath();
-          ctx.fill();
-          // 头与吻
-          ctx.beginPath();
-          ctx.ellipse(cx - s * 0.06, cy - s * 0.4, s * 0.1, s * 0.07, 0.35, 0, TAU);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.moveTo(cx + s * 0.02, cy - s * 0.38);
-          ctx.lineTo(cx + s * 0.16, cy - s * 0.36);
-          ctx.lineTo(cx + s * 0.06, cy - s * 0.32);
-          ctx.closePath();
-          ctx.fill();
-          // 双翼（三角帆）
-          ctx.beginPath();
-          ctx.moveTo(cx - s * 0.08, cy + s * 0.02);
-          ctx.lineTo(cx - s * 0.42, cy - s * 0.28);
-          ctx.lineTo(cx - s * 0.18, cy + s * 0.08);
-          ctx.closePath();
-          ctx.fill();
-          ctx.beginPath();
-          ctx.moveTo(cx + s * 0.06, cy + s * 0.04);
-          ctx.lineTo(cx + s * 0.38, cy - s * 0.2);
-          ctx.lineTo(cx + s * 0.12, cy + s * 0.12);
-          ctx.closePath();
-          ctx.fill();
-          // 长尾
-          ctx.beginPath();
-          ctx.moveTo(cx + s * 0.08, cy + s * 0.12);
-          ctx.quadraticCurveTo(cx + s * 0.38, cy + s * 0.28, cx + s * 0.42, cy + s * 0.42);
-          ctx.lineTo(cx + s * 0.32, cy + s * 0.38);
-          ctx.quadraticCurveTo(cx + s * 0.2, cy + s * 0.22, cx + s * 0.02, cy + s * 0.14);
-          ctx.closePath();
-          ctx.fill();
-          // 后腿
-          ctx.beginPath();
-          ctx.ellipse(cx - s * 0.06, cy + s * 0.2, s * 0.05, s * 0.1, 0.4, 0, TAU);
-          ctx.fill();
-        }, S, n);
-        const hx = -S * 0.06;
-        const hy = -S * 0.4;
-        return {
-          targets,
-          eyes: [
-            { x: hx - S * 0.04, y: hy - S * 0.02 },
-            { x: hx + S * 0.02, y: hy - S * 0.02 },
-          ],
-          eyeSize: 1.35,
-        };
-      },
-    },
-
-    /** 鹤：全身站姿剪影 */
-    crane: {
-      label: "鹤",
-      build(n, S) {
-        const targets = sampleSilhouette((ctx, s) => {
-          ctx.fillStyle = "#000";
-          const cx = s * 0.48;
-          const cy = s * 0.55;
-          // 身
-          ctx.beginPath();
-          ctx.ellipse(cx + s * 0.06, cy + s * 0.06, s * 0.2, s * 0.12, -0.2, 0, TAU);
-          ctx.fill();
-          // 长腿
-          ctx.fillRect(cx - s * 0.02, cy + s * 0.14, s * 0.04, s * 0.22);
-          ctx.fillRect(cx + s * 0.06, cy + s * 0.14, s * 0.04, s * 0.22);
-          // 颈与头
-          ctx.beginPath();
-          ctx.moveTo(cx + s * 0.02, cy - s * 0.02);
-          ctx.quadraticCurveTo(cx - s * 0.08, cy - s * 0.28, cx - s * 0.02, cy - s * 0.44);
-          ctx.quadraticCurveTo(cx + s * 0.06, cy - s * 0.4, cx + s * 0.04, cy - s * 0.2);
-          ctx.quadraticCurveTo(cx + s * 0.06, cy + s * 0.02, cx + s * 0.12, cy + s * 0.04);
-          ctx.closePath();
-          ctx.fill();
-          // 翅
-          ctx.beginPath();
-          ctx.moveTo(cx + s * 0.04, cy + s * 0.02);
-          ctx.quadraticCurveTo(cx + s * 0.36, cy - s * 0.12, cx + s * 0.32, cy + s * 0.12);
-          ctx.lineTo(cx + s * 0.1, cy + s * 0.08);
-          ctx.closePath();
-          ctx.fill();
-        }, S, n);
-        const R = S * 0.2;
-        return {
-          targets,
-          eyes: [
-            { x: -R * 0.35, y: -R * 1.35 },
-            { x: -R * 0.2, y: -R * 1.32 },
-          ],
-          eyeSize: 1.2,
-        };
-      },
-    },
-
-    butterfly: {
-      label: "蝶",
-      build(n, S) {
-        const fn = (t) => {
-          // 蝴蝶参数曲线（Fay 曲线）
-          const r =
-            Math.exp(Math.cos(t)) -
-            2 * Math.cos(4 * t) -
-            Math.pow(Math.sin(t / 12), 5);
-          return [Math.sin(t) * r, -Math.cos(t) * r];
-        };
-        const outline = parametricPoints(fn, 400, S * 0.07);
-        const targets = fillFromOutline(outline, n, S * 0.02);
-        return {
-          targets,
-          eyes: [
-            { x: -S * 0.02, y: -S * 0.05 },
-            { x: S * 0.02, y: -S * 0.05 },
-          ],
-          eyeSize: 1.2,
-        };
-      },
-    },
-
-    koi: {
-      label: "锦鲤",
-      build(n, S) {
-        const targets = sampleSilhouette((ctx, s) => {
-          ctx.fillStyle = "#000";
-          // 身体椭圆
-          ctx.beginPath();
-          ctx.ellipse(s / 2 - s * 0.05, s / 2, s * 0.3, s * 0.14, -0.1, 0, TAU);
-          ctx.fill();
-          // 尾鳍
-          ctx.beginPath();
-          ctx.moveTo(s / 2 + s * 0.22, s / 2 - s * 0.02);
-          ctx.lineTo(s / 2 + s * 0.42, s / 2 - s * 0.18);
-          ctx.lineTo(s / 2 + s * 0.44, s / 2);
-          ctx.lineTo(s / 2 + s * 0.42, s / 2 + s * 0.18);
-          ctx.closePath();
-          ctx.fill();
-          // 上鳍
-          ctx.beginPath();
-          ctx.moveTo(s / 2 - s * 0.05, s / 2 - s * 0.12);
-          ctx.lineTo(s / 2 + s * 0.02, s / 2 - s * 0.26);
-          ctx.lineTo(s / 2 + s * 0.1, s / 2 - s * 0.1);
-          ctx.closePath();
-          ctx.fill();
-        }, S, n);
-        return {
-          targets,
-          eyes: [
-            { x: -S * 0.28, y: -S * 0.03 },
-            { x: -S * 0.23, y: -S * 0.03 },
-          ],
-          eyeSize: 1.3,
         };
       },
     },
@@ -1491,13 +1183,6 @@
     "soft_ray",
     "soft_curl",
     "soft_medusa",
-    "dragon",
-    "cat",
-    "fox",
-    "rabbit",
-    "crane",
-    "koi",
-    "butterfly",
     "flower",
     "kao_joy",
     "kao_sweat",
@@ -1613,8 +1298,12 @@
         { x: 0, y: 0, tx: 0, ty: 0, size: 22, char: "◉" },
       ];
       this.expression = "normal";
-      /** 五官由字粒子承担，不再画 canvas 墨点眼 */
-      this.faceLayerMode = opts.faceLayerMode !== false;
+      /** 五官由字粒子承担；默认关闭以保持躯体仅为用户字，不含 · 一 等眉眼符号 */
+      this.faceLayerMode = opts.faceLayerMode === true;
+      /** 躯体墨色场：0 默认（赛璐璐/边缘）；1 纵向+呼吸；2 径向+呼吸；3 纵向稳态 */
+      this.bodyColorMode = opts.bodyColorMode != null ? opts.bodyColorMode & 3 : 0;
+      /** 朱砂叠绘高亮（重复绘制同色字粒子）；默认关 */
+      this.spotAccent = opts.spotAccent === true;
 
       this.form = "blob";
       this.formData = null;
@@ -1960,7 +1649,7 @@
 
       const cell = this.gridCell;
       const rot = this.rotation;
-      const flip = this.facingFlip;
+      const flip = 1;
       const cos = Math.cos(rot);
       const sin = Math.sin(rot);
       const bx = this.pos.x;
@@ -2090,6 +1779,61 @@
         g.wgx += adx > 0 ? 1 : -1;
       } else if (ady !== 0) {
         g.wgy += ady > 0 ? 1 : -1;
+      }
+    }
+
+    /**
+     * 格点 march 后若多粒落在同一 (mgx,mgy)，将后续粒子螺旋挪到最近空位，减轻字体重叠。
+     */
+    _separateOverlappingGridGlyphs() {
+      if (!this.gridSnapping || !this.gridMarch) return;
+      const cell = this.gridCell;
+      if (!cell) return;
+      const key = (gx, gy) => `${gx},${gy}`;
+      const occ = new Map();
+      for (let i = 0; i < this.glyphs.length; i++) {
+        const g = this.glyphs[i];
+        if (g.faceRole) continue;
+        const k = key(g.mgx, g.mgy);
+        if (!occ.has(k)) occ.set(k, []);
+        occ.get(k).push(i);
+      }
+      for (const [, idxs] of occ) {
+        if (idxs.length < 2) continue;
+        for (let j = 1; j < idxs.length; j++) {
+          const gi = idxs[j];
+          const g = this.glyphs[gi];
+          const gx = g.mgx;
+          const gy = g.mgy;
+          let found = null;
+          for (let r = 1; r < 20 && !found; r++) {
+            for (let dx = -r; dx <= r && !found; dx++) {
+              for (let dy = -r; dy <= r && !found; dy++) {
+                if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+                const nx = gx + dx;
+                const ny = gy + dy;
+                const nk = key(nx, ny);
+                const list = occ.get(nk);
+                if (!list || list.length === 0) {
+                  found = { nx, ny, nk };
+                }
+              }
+            }
+          }
+          if (!found) continue;
+          const oldK = key(gx, gy);
+          const oldList = occ.get(oldK);
+          if (oldList) {
+            const ix = oldList.indexOf(gi);
+            if (ix >= 0) oldList.splice(ix, 1);
+          }
+          g.mgx = found.nx;
+          g.mgy = found.ny;
+          g.x = g.mgx * cell;
+          g.y = g.mgy * cell;
+          if (!occ.has(found.nk)) occ.set(found.nk, []);
+          occ.get(found.nk).push(gi);
+        }
       }
     }
 
@@ -2329,7 +2073,7 @@
       const bx = this.pos.x;
       const by = this.pos.y;
       const rot = this.rotation;
-      const flip = this.facingFlip;
+      const flip = 1;
       const cos = Math.cos(rot);
       const sin = Math.sin(rot);
 
@@ -2704,9 +2448,7 @@
         const alt = [
           "soft_ray",
           "soft_curl",
-          "butterfly",
           "flower",
-          "dragon",
           "kao_party",
           "kao_spark",
           "fourier",
@@ -3241,10 +2983,8 @@
         }
       }
 
-      // 朝向：速度方向决定左右翻面 & 小角度倾斜
-      if (Math.abs(this.vel.x) > 40) {
-        this.facingFlip = this.vel.x > 0 ? 1 : -1;
-      }
+      // 朝向：不再做水平翻面（facingFlip 曾导致文稿/巨字与阅读方向镜像相反）
+      this.facingFlip = 1;
       this.targetRotation = isLayoutLockedForm(this.form)
         ? 0
         : clamp(this.vel.x * 0.0005, -0.2, 0.2);
@@ -3269,7 +3009,7 @@
       const bx = this.pos.x;
       const by = this.pos.y;
       const rot = this.rotation;
-      const flip = this.facingFlip;
+      const flip = 1;
       const cos = Math.cos(rot);
       const sin = Math.sin(rot);
 
@@ -3282,11 +3022,11 @@
         this.form !== "script"
       ) {
         if (t >= this._nextWanderPick) {
-          this._nextWanderPick = t + rand(0.45, 1.15);
+          this._nextWanderPick = t + rand(0.28, 0.82);
           for (const g of this.glyphs) {
             if (g.faceRole || isLayoutLockedForm(this.form)) continue;
             if (t >= g.wanderNextAt) {
-              g.wanderNextAt = t + rand(1.0, 2.9);
+              g.wanderNextAt = t + rand(0.5, 1.75);
               this._pickWanderDelta(g, bx, by, cos, sin, flip);
             }
           }
@@ -3381,7 +3121,7 @@
           ) {
             const pAmp =
               cell *
-              0.055 *
+              0.072 *
               (this._patrolAmp || 1) *
               (g.patrolAmpMul || 1) *
               (this.dragging ? 1.35 : 1);
@@ -3441,6 +3181,8 @@
 
           g.rot = lerp(g.rot, g.targetRot, this.gridUnity ? 0.18 : 0.08);
         }
+
+        this._separateOverlappingGridGlyphs();
 
         if (this.morphGlyphToTarget) {
           let all = true;
@@ -3738,6 +3480,33 @@
           } else {
             fillStyle = c;
           }
+        } else if (!g.faceRole && (this.bodyColorMode || 0) > 0) {
+          const cm = this.bodyColorMode || 0;
+          const breath = Math.sin(t * 1.12 + (g.depth || 0) * 0.55) * 0.5 + 0.5;
+          const by0 = this.pos.y;
+          const bx0 = this.pos.x;
+          const Sref = Math.max(this.size * 0.52, 120);
+          let u = 0.5;
+          if (cm === 1) {
+            const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
+            u = clamp(ny * 0.62 + breath * 0.38, 0, 1);
+          } else if (cm === 2) {
+            const d = clamp(Math.hypot(g.x - bx0, g.y - by0) / Sref, 0, 1);
+            u = clamp(d * 0.72 + breath * 0.28, 0, 1);
+          } else if (cm === 3) {
+            u = clamp((g.y - by0) / Sref + 0.5, 0, 1);
+          }
+          if (light) {
+            const inkR = Math.round(lerp(26, 98, u));
+            const inkG = Math.round(lerp(28, 108, u));
+            const inkB = Math.round(lerp(36, 118, u));
+            fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
+          } else {
+            const inkR = Math.round(lerp(242, 115, u));
+            const inkG = Math.round(lerp(250, 152, u));
+            const inkB = Math.round(lerp(255, 200, u));
+            fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
+          }
         } else if (opts.cel === false) {
           if (light) {
             const inkR = Math.round(lerp(28, 100, edge));
@@ -3798,15 +3567,22 @@
         ctx.restore();
       };
 
-      // 浅色 UI 下躯体用单层实色（关 cel 渐变），避免边缘半透明与叠层发糊；深色保留 cel + 细描边
-      const useCelInk = !isLayoutLockedForm(this.form) && !light;
+      // 自定义墨色场开启时关闭 cel，保证整块渐变一致
+      const useCelInk =
+        !isLayoutLockedForm(this.form) &&
+        !light &&
+        (this.bodyColorMode || 0) === 0;
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
         drawGlyph(g, { flashWeight: 0.45, cel: useCelInk });
       }
 
       // 朱砂点缀（布局锁定形态跳过，避免叠影发糊）
-      if (this.glyphs.length > 0 && !isLayoutLockedForm(this.form)) {
+      if (
+        this.spotAccent &&
+        this.glyphs.length > 0 &&
+        !isLayoutLockedForm(this.form)
+      ) {
         const sorted = this._cinnabarIdx || this._pickCinnabar();
         for (let k = 0; k < sorted.length; k++) {
           const g = this.glyphs[sorted[k]];
@@ -3959,6 +3735,11 @@
         }
       }
       this.digestText(lines.join(""));
+    }
+
+    /** 循环躯体墨色场模式（0～3），供 UI「色」按钮调用 */
+    cycleBodyColorMode() {
+      this.bodyColorMode = ((this.bodyColorMode | 0) + 1) % 4;
     }
 
     destroy() {
