@@ -2119,38 +2119,69 @@
     return false;
   }
 
+  /** 侧栏「待机」模式：体内运动保持全倍率（与 3.15 前一致）。 */
+  const STANDBY_MOTION_KERNELS = {
+    id: "standby",
+    timeScale: 1,
+    ampScale: 1,
+    wanderRadScale: 1,
+    wanderPickIntervalMul: 1,
+    anchorAmpScale: 1,
+    huarongCooldownMul: 1,
+    megaSlideCooldownMul: 1,
+    crispMicroScale: 1,
+    springFollowScale: 1,
+    breathMix: 1,
+  };
+
+  /** 侧栏「呈现」模式：压低时间尺度与振幅，利于辨形（计时/巨字/颜文字共用）。 */
+  const DISPLAY_MOTION_KERNELS = {
+    id: "display",
+    timeScale: 0.34,
+    ampScale: 0.26,
+    wanderRadScale: 0.48,
+    wanderPickIntervalMul: 1.72,
+    anchorAmpScale: 0.4,
+    huarongCooldownMul: 2.45,
+    megaSlideCooldownMul: 2.85,
+    crispMicroScale: 0.4,
+    springFollowScale: 0.82,
+    breathMix: 0.48,
+  };
+
   /**
-   * 各子系统统一乘子（参考「LOD / 运动分层」思路：呈现态压时间与振幅，待机态为 1）。
+   * 实际生效的运动内核：**仅由** `Pet.uiArcMode`（侧栏 待机/呈现）决定，
+   * 不再按形态名推导——避免「计时被 layoutLock 跳过缩放、曲线却被全局乘子拖慢」的错位。
    */
+  function getMotionProfileKernelsForPet(self) {
+    return self.uiArcMode === "presentation"
+      ? DISPLAY_MOTION_KERNELS
+      : STANDBY_MOTION_KERNELS;
+  }
+
+  /** 兼容旧调用 / 调试：按形态名推测内核（不等同于运行时逻辑）。 */
   function getMotionProfileKernels(form) {
-    if (isDisplayPresentationForm(form)) {
-      return {
-        id: "display",
-        timeScale: 0.4,
-        ampScale: 0.32,
-        wanderRadScale: 0.5,
-        wanderPickIntervalMul: 1.62,
-        anchorAmpScale: 0.44,
-        huarongCooldownMul: 2.35,
-        megaSlideCooldownMul: 2.75,
-        crispMicroScale: 0.45,
-        springFollowScale: 0.86,
-        breathMix: 0.5,
-      };
-    }
-    return {
-      id: "standby",
-      timeScale: 1,
-      ampScale: 1,
-      wanderRadScale: 1,
-      wanderPickIntervalMul: 1,
-      anchorAmpScale: 1,
-      huarongCooldownMul: 1,
-      megaSlideCooldownMul: 1,
-      crispMicroScale: 1,
-      springFollowScale: 1,
-      breathMix: 1,
-    };
+    return isDisplayPresentationForm(form)
+      ? DISPLAY_MOTION_KERNELS
+      : STANDBY_MOTION_KERNELS;
+  }
+
+  function snapshotArcVisualPrefs(self) {
+    const b = self._arcPrefs[self.uiArcMode];
+    b.glyphMotionSpeed = clamp(self.glyphMotionSpeed, 0.25, 2.5);
+    b.bodyTintHex = self.bodyTintHex;
+    b.glowMode = self.glowMode | 0;
+    b.bodyColorMode = self.bodyColorMode | 0;
+  }
+
+  function applyArcVisualPrefsToPet(self) {
+    const b = self._arcPrefs[self.uiArcMode];
+    self.glyphMotionSpeed = clamp(b.glyphMotionSpeed, 0.25, 2.5);
+    self.bodyTintHex = b.bodyTintHex;
+    self.glowMode = b.glowMode | 0;
+    self.bodyColorMode = b.bodyColorMode | 0;
+    self.motionProfile =
+      self.uiArcMode === "presentation" ? "display" : "standby";
   }
 
   function buildFormLayoutData(self, name, n, S) {
@@ -2241,6 +2272,13 @@
     "chrono",
     "mega",
   ];
+
+  function getFormOrderForUiArcMode(mode) {
+    if (mode === "presentation") {
+      return FORM_ORDER.filter(isDisplayPresentationForm);
+    }
+    return STANDBY_MATH_ORDER.slice();
+  }
 
   // ---------- 表情（眼区由躯体内的「字层」呈现；此处供旧逻辑/色值参考） ---------- //
   const EXPRESSIONS = {
@@ -2456,8 +2494,44 @@
       this._huarongNextAt = 0;
       this._megaSlideNextAt = 0;
       this._lastWallFxAt = 0;
-      /** 运动模态：standby | display（由当前形态推导，见 getMotionProfileKernels） */
+      /** 与 DISPLAY/STANDBY 内核同步，供 UI toast 使用 */
       this.motionProfile = "standby";
+      /** 侧栏层级：standby=待机形态；presentation=计时/巨字/颜文字（决定运动内核与独立参数） */
+      this.uiArcMode =
+        opts.uiArcMode === "presentation"
+          ? "presentation"
+          : opts.uiArcMode === "standby"
+            ? "standby"
+            : "standby";
+      this._lastStandbyForm = "blob";
+      this._lastPresentationForm =
+        opts.initialForm && isDisplayPresentationForm(opts.initialForm)
+          ? opts.initialForm
+          : "mega";
+      const _sp0 = clamp(
+        this.glyphMotionSpeed != null ? this.glyphMotionSpeed : 1,
+        0.25,
+        2.5
+      );
+      this._arcPrefs = {
+        standby: {
+          glyphMotionSpeed: _sp0,
+          bodyTintHex: this.bodyTintHex,
+          glowMode: this.glowMode | 0,
+          bodyColorMode: this.bodyColorMode | 0,
+        },
+        presentation: {
+          glyphMotionSpeed: _sp0,
+          bodyTintHex: this.bodyTintHex,
+          glowMode: this.glowMode | 0,
+          bodyColorMode: this.bodyColorMode | 0,
+        },
+      };
+      applyArcVisualPrefsToPet(this);
+      this.onUiArcModeChange =
+        typeof opts.onUiArcModeChange === "function"
+          ? opts.onUiArcModeChange
+          : null;
 
       /** 拖拽：每字滞后锚点（有序中的乱） */
       this.dragLagEnabled = opts.dragLag !== false;
@@ -2504,6 +2578,27 @@
             ? opts.initialForm
             : this._petEntryForm;
         this.setForm(startKey);
+      }
+
+      if (this.viewMode === "pet") {
+        if (opts.uiArcMode == null) {
+          this.uiArcMode = isDisplayPresentationForm(this.form)
+            ? "presentation"
+            : "standby";
+        }
+        if (
+          this.uiArcMode === "presentation" &&
+          !isDisplayPresentationForm(this.form) &&
+          this.form !== "script"
+        ) {
+          this.setForm(this._lastPresentationForm || "mega", true, true);
+        } else if (
+          this.uiArcMode === "standby" &&
+          isDisplayPresentationForm(this.form)
+        ) {
+          this.setForm(this._lastStandbyForm || "blob", true, true);
+        }
+        applyArcVisualPrefsToPet(this);
       }
 
       this._lastTime = performance.now();
@@ -2669,7 +2764,13 @@
       const data = buildFormLayoutData(this, name, this.particleCount, S);
       if (!data || !data.targets || !data.targets.length) return;
       this.form = name;
-      this.motionProfile = getMotionProfileKernels(name).id;
+      if (name !== "script") {
+        if (isDisplayPresentationForm(name)) {
+          this._lastPresentationForm = name;
+        } else {
+          this._lastStandbyForm = name;
+        }
+      }
       this.formStartTime = performance.now();
       if (name === "clock") {
         const d = new Date();
@@ -2771,7 +2872,11 @@
         g.lagY = by;
         g.lagVx = 0;
         g.lagVy = 0;
-        g.wanderNextAt = nowSec + rand(0.15, 0.9);
+        g.wanderNextAt =
+          nowSec +
+          rand(0.08, 0.55) +
+          ((i * 0.11) % 1.85) +
+          (g.faceRole ? 0.35 : 0);
         const radBase = 8 + Math.floor((g.depth || 0.5) * 24);
         g._megaEdgeRing = false;
         g._megaDeepInterior = false;
@@ -2872,13 +2977,13 @@
       const wyb = by + (txl * sin + tyl * cos);
       const anchorGx = Math.round(wxb / cell);
       const anchorGy = Math.round(wyb / cell);
-      const mkW = getMotionProfileKernels(this.form);
+      const mkW = getMotionProfileKernelsForPet(this);
       const rad = (g.wanderRad || 14) * mkW.wanderRadScale;
       const maxK =
         this.form === "mega" && g._megaDeepInterior
           ? 62
           : this.form === "mega" && g._megaEdgeRing
-            ? 28
+            ? 40
             : 48;
       for (let k = 0; k < maxK; k++) {
         const ddx = Math.floor(rand(-rad, rad + 1));
@@ -2995,7 +3100,7 @@
         0.25,
         2.5
       );
-      const mkH = getMotionProfileKernels(this.form);
+      const mkH = getMotionProfileKernelsForPet(this);
       this._huarongNextAt =
         now + ((260 + Math.random() * 320) * mkH.huarongCooldownMul) / gmsH;
 
@@ -3134,7 +3239,7 @@
         0.25,
         2.5
       );
-      const mkS = getMotionProfileKernels(this.form);
+      const mkS = getMotionProfileKernelsForPet(this);
       this._megaSlideNextAt =
         now + ((95 + Math.random() * 115) * mkS.megaSlideCooldownMul) / gmsH;
 
@@ -3181,7 +3286,7 @@
 
       for (let attempt = 0; attempt < 36; attempt++) {
         const g = pickWeightedGlyph();
-        if (g._megaEdgeRing && Math.random() < 0.62) continue;
+        if (g._megaEdgeRing && Math.random() < 0.48) continue;
         const d = dirs[Math.floor(Math.random() * dirs.length)];
         const ngx = g.mgx + d[0];
         const ngy = g.mgy + d[1];
@@ -4340,7 +4445,7 @@
         0.25,
         2.5
       );
-      const mk = getMotionProfileKernels(this.form);
+      const mk = getMotionProfileKernelsForPet(this);
       this.breath = isMotionLayoutLockedForm(this.form)
         ? 1
         : Math.sin(t * 1.05) * 0.032 + 1;
@@ -5350,10 +5455,11 @@
     setBodyTint(hex) {
       if (hex == null || hex === "") {
         this.bodyTintHex = null;
-        return;
+      } else {
+        const s = String(hex).trim();
+        this.bodyTintHex = /^#[0-9A-Fa-f]{6}$/.test(s) ? s : this.bodyTintHex;
       }
-      const s = String(hex).trim();
-      this.bodyTintHex = /^#[0-9A-Fa-f]{6}$/.test(s) ? s : this.bodyTintHex;
+      snapshotArcVisualPrefs(this);
     }
 
     /** 侧栏「速」：循环体内运动速度挡位 */
@@ -5373,16 +5479,65 @@
         i = best;
       }
       this.glyphMotionSpeed = tiers[(i + 1) % tiers.length];
+      snapshotArcVisualPrefs(this);
       return this.glyphMotionSpeed;
     }
 
     cycleGlowMode() {
       this.glowMode = ((this.glowMode | 0) + 1) % 6;
+      snapshotArcVisualPrefs(this);
     }
 
     /** 循环躯体墨色场模式（0～3），供 UI「墨」按钮调用 */
     cycleBodyColorMode() {
       this.bodyColorMode = ((this.bodyColorMode | 0) + 1) % 4;
+      snapshotArcVisualPrefs(this);
+    }
+
+    /**
+     * 侧栏「待机 / 呈现」层级：决定运动内核与独立一套色·速·墨·浮光参数。
+     * @param {boolean} [silent] 为 true 时不触发 onUiArcModeChange
+     */
+    setUiArcMode(mode, silent) {
+      const m = mode === "presentation" ? "presentation" : "standby";
+      if (m === this.uiArcMode) {
+        if (!silent && this.onUiArcModeChange) {
+          try {
+            this.onUiArcModeChange(this.uiArcMode);
+          } catch (_) {}
+        }
+        return this.uiArcMode;
+      }
+      snapshotArcVisualPrefs(this);
+      this.uiArcMode = m;
+      applyArcVisualPrefsToPet(this);
+      if (this.viewMode === "pet") {
+        if (
+          this.uiArcMode === "presentation" &&
+          !isDisplayPresentationForm(this.form) &&
+          this.form !== "script"
+        ) {
+          this.setForm(this._lastPresentationForm || "mega", true, true);
+        } else if (
+          this.uiArcMode === "standby" &&
+          isDisplayPresentationForm(this.form)
+        ) {
+          this.setForm(this._lastStandbyForm || "blob", true, true);
+        }
+      }
+      if (!silent && this.onUiArcModeChange) {
+        try {
+          this.onUiArcModeChange(this.uiArcMode);
+        } catch (_) {}
+      }
+      return this.uiArcMode;
+    }
+
+    cycleUiArcMode(silent) {
+      return this.setUiArcMode(
+        this.uiArcMode === "presentation" ? "standby" : "presentation",
+        silent
+      );
     }
 
     destroy() {
@@ -5408,5 +5563,7 @@
     classifyScheduleLine,
     isDisplayPresentationForm,
     getMotionProfileKernels,
+    getMotionProfileKernelsForPet,
+    getFormOrderForUiArcMode,
   };
 })();

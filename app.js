@@ -3,7 +3,8 @@
  */
 (function () {
   "use strict";
-  const { Pet, FORMS, FORM_ORDER, STANDBY_MATH_ORDER } = window.ZiLing;
+  const { Pet, FORMS, getFormOrderForUiArcMode, STANDBY_MATH_ORDER } =
+    window.ZiLing;
 
   // ---------- 初始化 ----------
   const canvas = document.getElementById("petCanvas");
@@ -37,10 +38,26 @@
     ? openingPreset.value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
     : [];
 
+  const urlUiArcRaw = params.get("uiArc");
+  const urlUiArc =
+    urlUiArcRaw === "presentation"
+      ? "presentation"
+      : urlUiArcRaw === "standby"
+        ? "standby"
+        : undefined;
+
+  function syncRailUiArcClass(p) {
+    const appRoot = document.querySelector(".app");
+    if (!appRoot || !p) return;
+    appRoot.dataset.uiArc =
+      p.uiArcMode === "presentation" ? "presentation" : "standby";
+  }
+
   const pet = new Pet(canvas, {
     particleCount: 220,
     initialViewMode: skipIntro ? "pet" : "intro",
     initialForm: urlForm && FORMS[urlForm] ? urlForm : undefined,
+    uiArcMode: urlUiArc,
     scriptLines: scriptLinesFromUi.length ? scriptLinesFromUi : undefined,
     macroText: urlMacroStr ? urlMacroStr.slice(0, 48) : undefined,
     showPlayfieldGuide: devHud,
@@ -48,8 +65,12 @@
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
       syncUiMode();
     },
+    onUiArcModeChange() {
+      syncRailUiArcClass(pet);
+    },
   });
   window._pet = pet;
+  syncRailUiArcClass(pet);
 
   function syncUiMode() {
     if (!openingPanel || !formLabel) return;
@@ -109,6 +130,8 @@
       toast("先点「呈」或「灵」进入画布后再试");
       return;
     }
+    pet.setUiArcMode("presentation", true);
+    syncRailUiArcClass(pet);
     if (pet.viewMode === "script") {
       pet.awakenPet("mega", false);
     } else {
@@ -505,12 +528,17 @@
         if (pop) pop.hidden = !pop.hidden;
         return;
       }
-      if (action === "morph") {
+      if (action === "arcMode") {
+        pet.cycleUiArcMode();
+        const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
+        toast(`层级 · ${lab}（形态栏与色/速/墨/浮光已切换）`);
+      } else if (action === "morph") {
         pet.abortFeeding();
+        const order = getFormOrderForUiArcMode(pet.uiArcMode);
         const cur = pet.form;
-        const idx = FORM_ORDER.indexOf(cur);
-        const nextIdx = ((idx >= 0 ? idx : 0) + 1) % FORM_ORDER.length;
-        const key = FORM_ORDER[nextIdx];
+        const idx = order.indexOf(cur);
+        const nextIdx = ((idx >= 0 ? idx : 0) + 1) % order.length;
+        const key = order[nextIdx];
         morphToForm(key);
       } else if (action === "feed") {
         triggerFeeding();
@@ -537,10 +565,18 @@
       } else if (action === "speed") {
         const v = pet.cycleGlyphMotionSpeed();
         const profLabel =
-          pet.motionProfile === "display" ? "呈现态" : "待机态";
+          pet.uiArcMode === "presentation" ? "呈现层" : "待机层";
         toast(
-          `运动速度 ×${v.toFixed(2)}（当前「${profLabel}」内；格移/游走/流体/华容道）`
+          `运动速度 ×${v.toFixed(2)}（${profLabel} 独立记忆；格移/游走/流体/华容道）`
         );
+      } else if (action === "sleep") {
+        if (pet.mode === "sleep") {
+          pet.sleep(false);
+          toast("已醒");
+        } else {
+          pet.sleep(true);
+          toast("小憩");
+        }
       } else if (action === "shake") {
         pet.shake();
         toast("抖擞精神");

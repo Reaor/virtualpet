@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.16.0** 起）。  
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.17.0** 起）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
@@ -196,13 +196,14 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 
 ---
 
-### 1.28 待机 vs 呈现 · 运动内核分层（3.16.0）
+### 1.28 待机 vs 呈现 · 运动内核分层（3.16.0 → 3.17.0 修订）
 
 | 子需求 | 状态 | 说明 |
 |--------|------|------|
-| 待机态（曲线/抽象） | **保持** | `getMotionProfileKernels` → 全 1，行为与升级前一致 |
-| 呈现态（计时/巨字/颜文字轮廓） | **已完成** | `timeScale`/`ampScale`/`crispMicroScale`/游走/跟随/呼吸混合/华容道冷却 分层压低 |
-| 可观测 | **已完成** | `pet.motionProfile`；`ZiLing.getMotionProfileKernels`；「速」toast 标明显示态 |
+| 待机态（曲线/抽象） | **保持** | **3.17.0**：由侧栏 **待机层**（`uiArcMode=standby`）驱动 → `STANDBY_MOTION_KERNELS` 全 1；不再按形态名误判 |
+| 呈现态（计时/巨字/颜文字轮廓） | **已完成** | **3.17.0**：**呈现层**（`uiArcMode=presentation`）→ `DISPLAY_MOTION_KERNELS`；解决计时因 `layoutLock` 未吃到缩放、曲线却被压慢的错位 |
+| 侧栏层级与参数分套 | **已完成** | **层** 切换互斥形态区；`_arcPrefs`：**速 / 颜 / 墨 / 浮** 分套；「变」仅当前层 `getFormOrderForUiArcMode` |
+| 可观测 | **已完成** | `pet.uiArcMode`；`ZiLing.getMotionProfileKernelsForPet`（运行时）；`getMotionProfileKernels(form)` 仅兼容/调试 |
 
 ---
 

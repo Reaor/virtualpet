@@ -254,6 +254,14 @@ body {
   line-height: 1.4;
 }
 
+.app[data-ui-arc="standby"] .ui-arc-present-only {
+  display: none !important;
+}
+
+.app[data-ui-arc="presentation"] .ui-arc-standby-only {
+  display: none !important;
+}
+
 .tint-popover {
   position: fixed;
   inset: 0;
