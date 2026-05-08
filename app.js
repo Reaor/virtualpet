@@ -3,8 +3,13 @@
  */
 (function () {
   "use strict";
-  const { Pet, FORMS, getFormOrderForUiArcMode, STANDBY_MATH_ORDER } =
-    window.ZiLing;
+  const {
+    Pet,
+    FORMS,
+    getFormOrderForUiArcMode,
+    STANDBY_MATH_ORDER,
+    BODY_MOTION_LABELS,
+  } = window.ZiLing;
 
   // ---------- 初始化 ----------
   const canvas = document.getElementById("petCanvas");
@@ -535,7 +540,7 @@
         pet.cycleUiArcMode();
         const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
         toast(
-          `层级 · ${lab}（各层色/速/墨/浮/波/徙/粒 设置已分别保留）`
+          `层级 · ${lab}（色/速/轨/墨/浮/波/徙/粒 分套保留）`
         );
       } else if (action === "morph") {
         pet.abortFeeding();
@@ -572,6 +577,11 @@
         toast(
           `运动 ×${v.toFixed(2)}（${arcLayerZh()}；剪影谐波节拍 / 格移 / 亚格平滑位移）`
         );
+      } else if (action === "motionStyle") {
+        const k = pet.cycleBodyMotionStyle();
+        const lab =
+          (BODY_MOTION_LABELS && BODY_MOTION_LABELS[k]) || k;
+        toast(`运动轨：${lab}（${arcLayerZh()}；巨字/颜文字 mask 内）`);
       } else if (action === "fluid") {
         const v = pet.cycleArcFluidStrength();
         toast(`波纹强度 ×${v.toFixed(2)}（${arcLayerZh()}）`);
