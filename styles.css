@@ -262,6 +262,24 @@ body {
   display: none !important;
 }
 
+.rail-tools-extra {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+  padding-top: 4px;
+  margin-top: 2px;
+  border-top: 1px solid var(--separator);
+}
+
+.rail-tools-extra .rail-tool {
+  width: auto;
+  flex: 1 1 30%;
+  min-height: 36px;
+  font-size: 15px;
+}
+
 .tint-popover {
   position: fixed;
   inset: 0;
