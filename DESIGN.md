@@ -52,7 +52,7 @@
 
 1. **轮廓优先**：在 **呈现层** 下，`mega` 与 `kao_*`（有 mask 的剪影类）以 **可辨识形体** 为第一目标；动感是 **次要、可控** 的。  
 2. **统一节拍**：体内位移以 **全队共享相位** `_ensemblePhase` 为主驱动；**「速」** 统一缩放时间尺度，避免「有的字快、有的字慢」的失控对比。  
-2b. **格目标吸附（辨形硬约束）**：谐波/流体推算的 **march 目标格** 若落在 mask 外，则 **吸附到最近可走格**（`_nearestWalkableMarchCell`），优先避免小字长期占在剪影外；**淡出 / 内向补步 / 壳上重生** 仍作兜底与语义空缺处理。**有 mask 的 `mega` / `kao_*`** 在待机层亦 **停用格子游走**，与呈现层共用 **同一套和谐体内波相位**（`isMaskBackedMegaKao`）；呈现层另叠 `mergePresentationSilhouetteMotion` 再压低幅速。**亚格绘制位移**：逻辑格心仍对齐 `mgx/mgy`，但绘制层对 **谐波理想坐标与格心之差** 做平滑跟随（`_silDrawOx/_silDrawOy`），避免「四舍五入到同一格 → 像素完全静止」。  
+2b. **格目标吸附（辨形硬约束）**：谐波/流体推算的 **march 目标格** 若落在 mask 外，则 **吸附到最近可走格**（`_nearestWalkableMarchCell`），优先避免小字长期占在剪影外；**淡出 / 内向补步 / 壳上重生** 仍作兜底与语义空缺处理。**有 mask 的 `mega` / `kao_*`** 在待机层亦 **停用格子游走**，与呈现层共用 **同一套和谐体内波相位**（`isMaskBackedMegaKao`）；呈现层另叠 `mergePresentationSilhouetteMotion` 再压低幅速。**严格格点（谐波默认）**：`harmonic` 且 **关** 侧栏「颤」时，`silhouetteStrictHarmonicGrid` 为真——**不在连续坐标上叠谐波/流体**，而以 **离散格偏移**（`_ensemblePhase` 驱动 ±1 曼哈顿步候选）+ 曼哈顿 march 表现 **横竖匀速换格**；**亚格绘制位移** `_silDrawOx/_silDrawOy` 与谐波 **连续微振** 仅在 **「颤」开**（`silhouetteGlyphJitter`，`_arcPrefs.glyphsJitter` 分套）时启用，避免默认「颤抖」观感。  
 3. **淡出即语义空缺**：粒子落在 **mask 不可走** 格上视为 **离轮廓 / 破坏形态**，**alpha 淡出至消失**（不强行把字拽回剪影内乱撞）。  
 4. **空缺如何补上**（一脉相承两条路径，可同时存在）：  
    - **内向补步**：淡出瞬间登记锚点格 `(anchorGx, anchorGy)`，在短窗口内由 **内部非外缘粒子** 沿曼哈顿格 **向锚点迈一步**，形成「**邻字挪入、密度内聚**」的观感；  
@@ -71,20 +71,20 @@
 
 | 范式 ID | 中文标签 | 设计意图 |
 |---------|----------|----------|
-| `harmonic` | 谐波亚格 | **默认**：全队 `_ensemblePhase` + 弱倍频/索引相移 + **亚格绘制位移** `_silDrawOx/Oy`；辨形优先，弱流体。 |
+| `harmonic` | 谐波格点 | **默认**：`silhouetteStrictHarmonicGrid` — 全队 `_ensemblePhase` 驱动 **离散格目标** + 曼哈顿 march，**关流体/连续谐波位移**；**开侧栏「颤」** 时恢复 **亚格绘制位移** + 连续谐波微振 + 弱流体相位。 |
 | `snake_stream` | 流线蛇行 | mask 内可走格排成走廊 `_snakeWalkPath`（默认 **螺旋**：质心 + **切比雪夫环** + 极角，由心向外「挤满」感；可选 **弓字** `snakePathVariant=zigzag`）。每帧对目标路径索引做 **去重**，避免多字抢同一格。字列沿走廊 **递进**；**淡色折线**按 `_snakeSlot` 序连接。 |
 | `contour_drift` | 轮廓游走 | 在剪影内 **恢复格子游走**（`allowGridWander`），`marchPref` 按深度交替；与谐波可同时存在，偏 **探索性**，略增叠字风险，由叠分与「徙」兜底。 |
 
 **与速/徙的关系**：`glyphMotionSpeed` 仍调 ensemble 与蛇行相位；`gridMarchSpeed` 调曼哈顿步预算与蛇行 `_snakePhase` 增速。  
-**URL**：`?motionStyle=snake_stream` / `?bodyMotion=…`（须为 `BODY_MOTION_STYLES` 之一）；`?snakePath=spiral`（默认）或 `zigzag`。运行时 `setSnakePathVariant` 可切换并强制重建走廊。
+**URL**：`?motionStyle=snake_stream` / `?bodyMotion=…`（须为 `BODY_MOTION_STYLES` 之一）；`?snakePath=spiral`（默认）或 `zigzag`；`?glyphsJitter=1`（或 `silhouetteJitter`）预开亚格颤抖。运行时 `setSnakePathVariant` 可切换并强制重建走廊。
 
 ### 2.7 迭代审视：负优化风险与创新研究
 
 | 现象 | 可能成因（迭代中） | 当前对策 / 研究方向 |
 |------|-------------------|---------------------|
-| 「有的字不动」 | 仅按格心 `mgx*cell` 绘制，谐波被 `round` 吃掉 | **亚格位移** + 蛇行 **显式目标格** |
+| 「有的字不动」 | 仅按格心 `mgx*cell` 绘制，谐波被 `round` 吃掉 | **开「颤」** 用亚格位移；默认 **离散格目标** 仍迈格可见动 |
 | 闪现、硬切 | lifecycle 瞬间满 alpha、`_glyphFlash` 放大字号 | 重生 **低 alpha 渐回**、剪影 **关 flashBoost**、淡出 **更慢** |
-| 叠字 | 同格竞争、分离半径不足 | mask **5 遍**分离、lifecycle 后再分、蛇行后再分 |
+| 叠字 | 同格竞争、分离半径不足 | mask **3～4 遍**分离（较 5～6 遍 **减负防卡顿**）；lifecycle 后再分、蛇行后再分 |
 | 输入形状拟合仍差 | 壳层采样与 `enforceSpacing` 张力（粒子数 × 最小间距 × 宏字笔画复杂度） | **略增** `enforceSpacingPasses`（呈现）；后续：**笔画感知间距**、动态粒子预算 |
 | 运动单调或疲劳 | 单一谐波或单一蛇速 | **螺旋走廊** + **索引去重**；后续：Perlin 导向场、真 Hamilton 覆盖 |
 
@@ -98,7 +98,8 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.25.0**：**流线蛇行** 默认 **螺旋走廊**（切比雪夫环 + 极角）；**弓字** `zigzag` 保留为 `snakePathVariant`。**蛇行目标格去重**（`_snakeResolvedIdx` 每帧贪心顺延）。**URL**：`motionStyle` / `bodyMotion`、`snakePath`。`setSnakePathVariant`。 |
+| 最新 | **3.26.0**：**谐波默认严格格点**（`silhouetteStrictHarmonicGrid`）：连续谐波/流体 **不** 叠在 march 前坐标上；**ensemble 离散 ±1 格** 驱动曼哈顿步进。**亚格颤抖** 独立为侧栏 **「颤」**（`_arcPrefs.glyphsJitter`）+ URL `glyphsJitter`。**性能**：巨字 / mask 叠分 **6→4**、**5→3** 遍。蛇行亚格微摆随「颤」。 |
+| 先前 | **3.25.0**：**流线蛇行** 默认 **螺旋走廊**（切比雪夫环 + 极角）；**弓字** `zigzag` 保留为 `snakePathVariant`。**蛇行目标格去重**（`_snakeResolvedIdx` 每帧贪心顺延）。**URL**：`motionStyle` / `bodyMotion`、`snakePath`。`setSnakePathVariant`。 |
 | 先前 | **3.24.0**：侧栏 **「轨」** `bodyMotionStyle`（`_arcPrefs` 分套）：**谐波亚格** / **流线蛇行**（`_rebuildMaskSnakeWalkPath` 弓字走廊 + `_snakePhase` + 序连线）/ **轮廓游走**（mask 内恢复游走）。**叠分** mask **5 遍**；蛇行后 **再分离**；lifecycle **更慢**淡出。**巨字** `enforceSpacingPasses` 略增。`DESIGN` **§2.6～2.7** 记录范式与迭代负优化审视。 |
 | 先前 | **3.22.0**：**亚格绘制位移** `_silDrawOx/_silDrawOy`（平滑跟随谐波目标），解决「格点四舍五入后大量字像素静止」。**剪影谐波** 加 **弱倍频 + 索引相移** 使字字有微动且同拍。**`glyphMotionSpeed`** 显式驱动 `ensBoost`、`speedVis`、`marchGms`。**叠分** mask 4 遍 + kao `rMax`。**剪影** 关 `flashBoost`、缓和 lifecycle alpha。 |
 | 先前 | **3.21.0**：**剪影格吸附** `_nearestWalkableMarchCell`：目标格出 mask 时迈到最近可走格，辨形优先。**`isMaskBackedMegaKao`**：待机层有 mask 的巨字/颜文字 **关格子游走**、**统一和谐体内波**（与呈现层同相位，待机仍吃待机运动内核）；**弱流体/撞墙/点散/闪光** 与呈现层对齐收紧。**淡出/补步/重生** 扩展到待机剪影作兜底；**仅呈现层和谐** 重生时 `_randomChar()`。`patrolAmpMul`/`lagK` 在剪影换形时收窄。 |
