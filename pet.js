@@ -2162,6 +2162,20 @@
       : STANDBY_MOTION_KERNELS;
   }
 
+  /** 呈现层巨字：在 DISPLAY 内核上再压低，轮廓优先 */
+  function mergePresentationMegaMotion(self, mk) {
+    if (self.form !== "mega" || self.uiArcMode !== "presentation") return mk;
+    return {
+      ...mk,
+      timeScale: mk.timeScale * 0.42,
+      ampScale: mk.ampScale * 0.26,
+      crispMicroScale: Math.min(0.22, mk.crispMicroScale * 0.28),
+      anchorAmpScale: mk.anchorAmpScale * 0.48,
+      springFollowScale: mk.springFollowScale * 0.85,
+      breathMix: Math.min(0.88, mk.breathMix + 0.22),
+    };
+  }
+
   /** 兼容旧调用 / 调试：按形态名推测内核（不等同于运行时逻辑）。 */
   function getMotionProfileKernels(form) {
     return isDisplayPresentationForm(form)
@@ -2960,6 +2974,15 @@
         g._anchorGx = Math.round(wx / cell);
         g._anchorGy = Math.round(wy / cell);
       }
+      if (name === "mega" && this.uiArcMode === "presentation") {
+        for (const g of this.glyphs) {
+          if (g.faceRole) continue;
+          g.patrolAmpMul = 1;
+          g.alpha = 0.94;
+          g._megaBaseAlpha = g.alpha;
+          g._megaOutsideAcc = 0;
+        }
+      }
       this._nextWanderPick = nowSec + 0.35;
 
       if (typeof this.onFormChange === "function" && !noEmitOnFormChange) {
@@ -3355,6 +3378,80 @@
         this._megaNudgeGlyphToGrid(g, ngx, ngy, bx, by, cos, sin, flip);
         occ.add(key(ngx, ngy));
         return;
+      }
+    }
+
+    /** 呈现层巨字：在笔画锚点邻域找可走格重生 */
+    _respawnMegaGlyphNearShell(g, bx, by, cos, sin, flip) {
+      const cell = this.gridCell || 12;
+      let gx =
+        g._anchorGx != null ? g._anchorGx : Math.round(g.mgx || 0);
+      let gy =
+        g._anchorGy != null ? g._anchorGy : Math.round(g.mgy || 0);
+      if (this._worldCellWalkable(gx, gy, bx, by, cos, sin, flip)) {
+        g.mgx = gx;
+        g.mgy = gy;
+        g.x = gx * cell;
+        g.y = gy * cell;
+        return;
+      }
+      for (let r = 1; r < 52; r++) {
+        for (let dx = -r; dx <= r; dx++) {
+          for (let dy = -r; dy <= r; dy++) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+            const nx = gx + dx;
+            const ny = gy + dy;
+            if (this._worldCellWalkable(nx, ny, bx, by, cos, sin, flip)) {
+              g.mgx = nx;
+              g.mgy = ny;
+              g.x = nx * cell;
+              g.y = ny * cell;
+              return;
+            }
+          }
+        }
+      }
+    }
+
+    /** 呈现层巨字：离轮廓（mask 不可走）则淡出至消失，再在壳上重生 */
+    _updatePresentationMegaGlyphLifecycle(dt, bx, by, cos, sin, flip) {
+      if (!this._maskPack || !this._maskPack.grid) return;
+      const fadeOut = 1.05;
+      const fadeIn = 2.05;
+      for (const g of this.glyphs) {
+        if (g.faceRole) continue;
+        if (g._megaBaseAlpha == null) {
+          g._megaBaseAlpha = g.alpha != null ? g.alpha : 0.94;
+        }
+        const ok = this._worldCellWalkable(
+          g.mgx,
+          g.mgy,
+          bx,
+          by,
+          cos,
+          sin,
+          flip
+        );
+        let a = g.alpha != null ? g.alpha : 1;
+        if (!ok) {
+          g._megaOutsideAcc = (g._megaOutsideAcc || 0) + dt;
+          a -= dt * fadeOut * (1 + (g._megaOutsideAcc || 0) * 0.32);
+        } else {
+          g._megaOutsideAcc = Math.max(0, (g._megaOutsideAcc || 0) - dt * 2.4);
+          const tgt = g._megaBaseAlpha;
+          a += dt * fadeIn;
+          if (a > tgt) a = tgt;
+        }
+        g.alpha = clamp(a, 0, 1);
+        if (g.alpha < 0.035) {
+          this._respawnMegaGlyphNearShell(g, bx, by, cos, sin, flip);
+          g.alpha = g._megaBaseAlpha;
+          g._megaOutsideAcc = 0;
+          g.wgx = 0;
+          g.wgy = 0;
+          g.wtgx = 0;
+          g.wtgy = 0;
+        }
       }
     }
 
@@ -3955,10 +4052,13 @@
     /** 轻点：所有形态下小字沿格目标方向短暂散开（华容道位移的可见反馈） */
     scatterTapBurst() {
       const cell = this.gridCell || 12;
+      const megaCalm =
+        this.form === "mega" && this.uiArcMode === "presentation";
+      const damp = megaCalm ? 0.18 : 1;
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
         const a = Math.random() * Math.PI * 2;
-        const mag = cell * (2.0 + Math.random() * 4.8);
+        const mag = cell * (2.0 + Math.random() * 4.8) * damp;
         g._tapScatterT = 0.42;
         g._tapScatterT0 = 0.42;
         g._tapScatterOX = Math.cos(a) * mag;
@@ -4380,6 +4480,10 @@
     }
 
     _wallShatter(nx, ny) {
+      if (this.form === "mega" && this.uiArcMode === "presentation") {
+        this._rumbleAmp = Math.min(0.18, (this._rumbleAmp || 0) + 0.06);
+        return;
+      }
       const cell = this.gridCell || 12;
       const push = cell * (2.9 + Math.random() * 3.2);
       for (const g of this.glyphs) {
@@ -4510,7 +4614,11 @@
         0.25,
         2.5
       );
-      const mk = getMotionProfileKernelsForPet(this);
+      const mk = mergePresentationMegaMotion(this, getMotionProfileKernelsForPet(this));
+      const megaHarm =
+        this.form === "mega" &&
+        this.uiArcMode === "presentation" &&
+        this.viewMode === "pet";
       this.breath = isMotionLayoutLockedForm(this.form)
         ? 1
         : Math.sin(t * 1.05) * 0.032 + 1;
@@ -4690,7 +4798,8 @@
         !this.morphGlyphToTarget &&
         this.viewMode === "pet" &&
         this.pathMode !== "none" &&
-        this.form !== "script"
+        this.form !== "script" &&
+        !megaHarm
       ) {
         if (t >= this._nextWanderPick) {
           this._nextWanderPick =
@@ -4749,17 +4858,23 @@
           : null;
 
       const cell = this.gridCell;
-      const rumble = (this._rumbleAmp || 0) * cell * 0.08;
+      const rumble = megaHarm
+        ? 0
+        : (this._rumbleAmp || 0) * cell * 0.08;
       const waveAmp = (this.fluidStrength || 0) * cell * 0.09 * mk.ampScale;
       const maskFluidMul =
         this._maskPack && this._maskPack.grid ? 0.16 : 1;
-      const waveAmpEff = waveAmp * maskFluidMul * gms;
-      this._fluidPhase += dt * 0.48 * gms;
+      const waveAmpEff =
+        waveAmp * maskFluidMul * gms * (megaHarm ? 0.1 : 1);
+      this._fluidPhase += dt * (megaHarm ? 0.09 : 0.48) * gms;
 
       if (this.gridMarch && this.gridSnapping) {
         const stepBudget = Math.max(
           1,
-          Math.min(6, Math.round((this.gridMarchSpeed || 2) * gms * dt * 6))
+          Math.min(
+            megaHarm ? 3 : 6,
+            Math.round((this.gridMarchSpeed || 2) * gms * dt * 6)
+          )
         );
         const crispMotion = isGridLayoutImmutableForm(this.form);
 
@@ -4784,7 +4899,8 @@
             !g.faceRole &&
             this.viewMode === "pet" &&
             this.pathMode !== "none" &&
-            !isMotionLayoutLockedForm(this.form)
+            !isMotionLayoutLockedForm(this.form) &&
+            !megaHarm
           ) {
             wx += (g.wgx || 0) * cell;
             wy += (g.wgy || 0) * cell;
@@ -4795,14 +4911,21 @@
             !g.faceRole &&
             !isMotionLayoutLockedForm(this.form)
           ) {
-            const pAmp =
+            const pAmpBase =
               cell *
               0.072 *
               (this._patrolAmp || 1) *
               (this.dragging ? 1.15 : 1) *
               gms *
               mk.ampScale;
-            if (crispMotion) {
+            if (megaHarm) {
+              const phase = t * 0.31 * gms;
+              const spat = g.tx * 0.013 + g.ty * 0.0105;
+              const uAmp = pAmpBase * mk.crispMicroScale * 0.58;
+              wx += Math.sin(phase + spat * 1.72) * uAmp;
+              wy +=
+                Math.cos(phase * 0.93 + spat * 1.72 + 0.62) * uAmp * 0.86;
+            } else if (crispMotion) {
               const dispScale =
                 (this.form === "mega" ? 1.08 : 1) * mk.crispMicroScale;
               const breath = Math.sin(t * 0.86);
@@ -4811,18 +4934,18 @@
               const m = 0.52 + 0.48 * Math.sin(ang * 3.1 + t * 0.38);
               wx +=
                 (breath * Math.cos(ang) + sway * 0.34 * Math.sin(ang)) *
-                pAmp *
+                pAmpBase *
                 0.44 *
                 m *
                 dispScale;
               wy +=
                 (sway * Math.sin(ang) - breath * 0.34 * Math.cos(ang)) *
-                pAmp *
+                pAmpBase *
                 0.44 *
                 m *
                 dispScale;
             } else {
-              const pAmpFull = pAmp * (g.patrolAmpMul || 1);
+              const pAmpFull = pAmpBase * (g.patrolAmpMul || 1);
               const ph = g.patrolSeed || 0;
               wx +=
                 Math.sin(t * 0.52 + ph * 2.1) * pAmpFull * 0.62 +
@@ -4862,8 +4985,9 @@
           if (g._tapScatterT > 0) {
             const t0 = g._tapScatterT0 || 0.38;
             const f = clamp(g._tapScatterT / t0, 0, 1);
-            wx += (g._tapScatterOX || 0) * f;
-            wy += (g._tapScatterOY || 0) * f;
+            const sc = megaHarm ? 0.2 : 1;
+            wx += (g._tapScatterOX || 0) * f * sc;
+            wy += (g._tapScatterOY || 0) * f * sc;
             g._tapScatterT -= dt;
           }
 
@@ -4905,8 +5029,13 @@
         }
 
         this._separateOverlappingGridGlyphs();
-        this._tryHuarongAdjacentSwaps(now);
-        this._tryMegaSlideIntoVoid(now);
+        if (!megaHarm) {
+          this._tryHuarongAdjacentSwaps(now);
+          this._tryMegaSlideIntoVoid(now);
+        }
+        if (megaHarm) {
+          this._updatePresentationMegaGlyphLifecycle(dt, bx, by, cos, sin, flip);
+        }
 
         if (this.morphGlyphToTarget) {
           let all = true;
@@ -5151,7 +5280,10 @@
           ctx.textRendering = "geometricPrecision";
         }
       } catch (_) {}
-      const flash = this._glyphFlash || 0;
+      const flash =
+        this.form === "mega" && this.uiArcMode === "presentation"
+          ? (this._glyphFlash || 0) * 0.22
+          : this._glyphFlash || 0;
 
       const drawGlyph = (g, opts) => {
         const crispForm = isGridLayoutImmutableForm(this.form);
