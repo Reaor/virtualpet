@@ -2162,6 +2162,12 @@
     );
   }
 
+  const SNAKE_PATH_VARIANTS = ["spiral", "zigzag"];
+
+  function normalizeSnakePathVariant(v) {
+    return v === "zigzag" ? "zigzag" : "spiral";
+  }
+
   /** 侧栏「待机」模式：体内运动保持全倍率（与 3.15 前一致）。 */
   const STANDBY_MOTION_KERNELS = {
     id: "standby",
@@ -2647,6 +2653,8 @@
       );
       this._arcPrefs.standby.bodyMotionStyle = this.bodyMotionStyle;
       this._arcPrefs.presentation.bodyMotionStyle = this.bodyMotionStyle;
+      /** 流线蛇行：走廊排序（螺旋≈由心向外挤满；弓字=逐行扫描） */
+      this.snakePathVariant = normalizeSnakePathVariant(opts.snakePathVariant);
       applyArcVisualPrefsToPet(this);
       this.onUiArcModeChange =
         typeof opts.onUiArcModeChange === "function"
@@ -3160,7 +3168,8 @@
     }
 
     /**
-     * 将 mask 内可走世界格排成 **弓字形走廊**，供 snake_stream 沿廊递进。
+     * 将 mask 内可走世界格排成走廊：`spiral` 切比雪夫环 + 极角（由心向外「挤满」感）；
+     * `zigzag` 为弓字形行扫描（旧版）。
      */
     _rebuildMaskSnakeWalkPath(bx, by, cos, sin, flip) {
       if (!this._maskPack || !this._maskPack.grid) {
@@ -3189,21 +3198,37 @@
         this._snakeWalkPath = cells;
         return;
       }
-      cells.sort((a, b) => a.gy - b.gy || a.gx - b.gx);
-      const byRow = new Map();
-      for (const c of cells) {
-        if (!byRow.has(c.gy)) byRow.set(c.gy, []);
-        byRow.get(c.gy).push(c);
+      if (this.snakePathVariant === "zigzag") {
+        cells.sort((a, b) => a.gy - b.gy || a.gx - b.gx);
+        const byRow = new Map();
+        for (const c of cells) {
+          if (!byRow.has(c.gy)) byRow.set(c.gy, []);
+          byRow.get(c.gy).push(c);
+        }
+        const ys = [...byRow.keys()].sort((a, b) => a - b);
+        const path = [];
+        ys.forEach((y, ri) => {
+          const row = byRow.get(y).slice();
+          row.sort((a, b) => a.gx - b.gx);
+          if (ri % 2) row.reverse();
+          path.push(...row);
+        });
+        this._snakeWalkPath = path;
+        return;
       }
-      const ys = [...byRow.keys()].sort((a, b) => a - b);
-      const path = [];
-      ys.forEach((y, ri) => {
-        const row = byRow.get(y).slice();
-        row.sort((a, b) => a.gx - b.gx);
-        if (ri % 2) row.reverse();
-        path.push(...row);
+      const cx = cells.reduce((s, c) => s + c.gx, 0) / cells.length;
+      const cy = cells.reduce((s, c) => s + c.gy, 0) / cells.length;
+      cells.sort((a, b) => {
+        const dxa = a.gx - cx;
+        const dya = a.gy - cy;
+        const dxb = b.gx - cx;
+        const dyb = b.gy - cy;
+        const ra = Math.max(Math.abs(dxa), Math.abs(dya));
+        const rb = Math.max(Math.abs(dxb), Math.abs(dyb));
+        if (ra !== rb) return ra - rb;
+        return Math.atan2(dya, dxa) - Math.atan2(dyb, dxb);
       });
-      this._snakeWalkPath = path;
+      this._snakeWalkPath = cells;
     }
 
     _pickWanderDelta(g, bx, by, cos, sin, flip) {
@@ -5145,15 +5170,10 @@
         );
         const crispMotion = isGridLayoutImmutableForm(this.form);
 
-        let snakeBodyN = 0;
         if (snakeStream) {
           for (const gg of this.glyphs) {
-            if (!gg.faceRole) snakeBodyN++;
+            delete gg._snakeResolvedIdx;
           }
-        }
-        let bodyIdx = 0;
-
-        if (snakeStream) {
           if (t - (this._snakePathT || 0) > 0.72) {
             this._rebuildMaskSnakeWalkPath(bx, by, cos, sin, flip);
             this._snakePathT = t;
@@ -5162,6 +5182,39 @@
             dt *
             (0.28 + 0.46 * gms0) *
             (0.4 + 0.36 * clamp(this.gridMarchSpeed || 2, 0.85, 3.6));
+          const pathSnake = this._snakeWalkPath;
+          if (pathSnake && pathSnake.length > 1) {
+            const L = pathSnake.length;
+            const bodyGi = [];
+            for (let gi = 0; gi < this.glyphs.length; gi++) {
+              const g0 = this.glyphs[gi];
+              const mT0 = this.morphGlyphToTarget && this.morphGlyphToTarget[gi];
+              if (!g0.faceRole && !mT0) bodyGi.push(gi);
+            }
+            const N = bodyGi.length;
+            if (N > 0) {
+              const entries = [];
+              for (let i = 0; i < N; i++) {
+                const gi = bodyGi[i];
+                const slot = (i * L) / N;
+                const idx0 =
+                  (Math.floor(this._snakePhase + slot) % L + L) % L;
+                entries.push({ gi, idx0, ord: i });
+              }
+              entries.sort((a, b) => a.idx0 - b.idx0 || a.ord - b.ord);
+              const used = new Set();
+              for (const e of entries) {
+                let idx = e.idx0;
+                let guard = 0;
+                while (used.has(idx) && guard < L) {
+                  idx = (idx + 1) % L;
+                  guard++;
+                }
+                used.add(idx);
+                this.glyphs[e.gi]._snakeResolvedIdx = idx;
+              }
+            }
+          }
         }
 
         for (let gi = 0; gi < this.glyphs.length; gi++) {
@@ -5188,12 +5241,10 @@
             !g.faceRole &&
             !mT &&
             this._snakeWalkPath &&
-            this._snakeWalkPath.length > 1
+            this._snakeWalkPath.length > 1 &&
+            g._snakeResolvedIdx != null
           ) {
-            const N = snakeBodyN;
-            const L = this._snakeWalkPath.length;
-            const slot = (bodyIdx * L) / Math.max(N, 1);
-            const idx = (Math.floor(this._snakePhase + slot) % L + L) % L;
+            const idx = g._snakeResolvedIdx;
             const c = this._snakeWalkPath[idx];
             g._snakeSlot = idx;
             g._snakeMgx = c.gx;
@@ -5201,11 +5252,10 @@
             const mic =
               cell *
               0.034 *
-              Math.sin(this._ensemblePhase * 0.29 + bodyIdx * 0.44);
+              Math.sin(this._ensemblePhase * 0.29 + idx * 0.07);
             wx = c.gx * cell + mic;
             wy = c.gy * cell + mic * 0.9;
             useSnakeCell = true;
-            bodyIdx++;
           }
 
           if (
@@ -6099,6 +6149,13 @@
       return this.bodyMotionStyle;
     }
 
+    /** 螺旋 / 弓字走廊；切换后下一帧强制重建蛇行路径 */
+    setSnakePathVariant(v) {
+      this.snakePathVariant = normalizeSnakePathVariant(v);
+      this._snakePathT = 0;
+      return this.snakePathVariant;
+    }
+
     /** 侧栏「速」：循环体内运动速度挡位 */
     cycleGlyphMotionSpeed() {
       const tiers = [0.4, 0.65, 1, 1.45, 1.9, 2.35];
@@ -6280,6 +6337,8 @@
     isMaskBackedMegaKao,
     BODY_MOTION_STYLES,
     BODY_MOTION_LABELS,
+    SNAKE_PATH_VARIANTS,
+    normalizeSnakePathVariant,
     usesMaskSnakeStream,
     usesContourDrift,
     getMotionProfileKernels,

@@ -9,6 +9,7 @@
     getFormOrderForUiArcMode,
     STANDBY_MATH_ORDER,
     BODY_MOTION_LABELS,
+    BODY_MOTION_STYLES,
   } = window.ZiLing;
 
   // ---------- 初始化 ----------
@@ -51,6 +52,15 @@
         ? "standby"
         : undefined;
 
+  const urlMotion = (params.get("motionStyle") || params.get("bodyMotion") || "").trim();
+  const urlSnakePath = (params.get("snakePath") || "").trim();
+  const bodyMotionFromUrl =
+    urlMotion && BODY_MOTION_STYLES.includes(urlMotion) ? urlMotion : undefined;
+  const snakePathFromUrl =
+    urlSnakePath === "zigzag" || urlSnakePath === "spiral"
+      ? urlSnakePath
+      : undefined;
+
   function syncRailUiArcClass(p) {
     const appRoot = document.querySelector(".app");
     if (!appRoot || !p) return;
@@ -65,6 +75,8 @@
     uiArcMode: urlUiArc,
     scriptLines: scriptLinesFromUi.length ? scriptLinesFromUi : undefined,
     macroText: urlMacroStr ? urlMacroStr.slice(0, 48) : undefined,
+    bodyMotionStyle: bodyMotionFromUrl,
+    snakePathVariant: snakePathFromUrl,
     showPlayfieldGuide: devHud,
     onFormChange(key) {
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
