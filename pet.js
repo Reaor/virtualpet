@@ -853,21 +853,29 @@
     };
   }
 
-  /** 按笔画壳层面积 + 字数估算巨字粒子数，兼顾可读与塑形。 */
+  /**
+   * 巨字粒子数：按剪影填充面积 / 格面积严密估算，并预留空位供格内华容道滑动。
+   * voidFrac：留白比例（略随字数增，避免多字时塞满）。
+   */
   function suggestMegaGlyphParticleCount(displayText, S) {
     const text = String(displayText || "字").trim() || "字";
     const graphemes = Array.from(text);
     const gcount = Math.max(1, graphemes.length);
     const draw = createMacroTextDraw(text, { noStroke: true });
-    const shellMax = 3;
-    const px = countSilhouetteBandPixels(draw, S, 420, shellMax);
+    const sampleS = Math.min(420, Math.round(S));
+    const scaleRel = S / sampleS;
+    const fillPx = countSilhouetteFillPixels(draw, S, sampleS);
+    const areaLogical = fillPx * scaleRel * scaleRel;
     const cellEst = clamp(Math.round(S * 0.043), 12, 20);
-    const slotFootprint = cellEst * cellEst * 0.42;
-    let n = px < 45 ? 40 + 18 * gcount : Math.floor((px * 0.42) / Math.max(slotFootprint, 1.05));
-    const minByChars = 26 + 24 * gcount;
-    n = Math.max(n, minByChars);
-    n = Math.max(n, Math.floor(px / Math.max(slotFootprint * 0.95, 1)));
-    return clamp(n, 36, 240);
+    const cellArea = cellEst * cellEst * 0.9;
+    const voidFrac = clamp(0.16 + 0.018 * gcount, 0.15, 0.28);
+    let n = Math.floor((areaLogical * (1 - voidFrac)) / Math.max(cellArea, 1));
+    const shellPx = countSilhouetteBandPixels(draw, S, sampleS, 3);
+    const bandLogical = shellPx * scaleRel * scaleRel;
+    const nBand = Math.ceil(bandLogical / Math.max(cellArea * 0.55, 1));
+    n = Math.max(n, nBand);
+    n = Math.max(n, 22 + 14 * gcount);
+    return clamp(n, 32, 280);
   }
 
   /**
@@ -2401,6 +2409,7 @@
         opts.pathMode !== undefined ? opts.pathMode : "wander";
       this._nextWanderPick = 0;
       this._huarongNextAt = 0;
+      this._megaSlideNextAt = 0;
       this._lastWallFxAt = 0;
 
       /** 拖拽：每字滞后锚点（有序中的乱） */
@@ -2716,9 +2725,24 @@
         g.lagVy = 0;
         g.wanderNextAt = nowSec + rand(0.15, 0.9);
         const radBase = 8 + Math.floor((g.depth || 0.5) * 24);
-        g.wanderRad = isMotionLayoutLockedForm(name)
-          ? clamp(radBase, 4, 11)
-          : clamp(radBase, 12, 44);
+        g._megaEdgeRing = false;
+        g._megaDeepInterior = false;
+        if (name === "mega" && !g.faceRole) {
+          const e = g.edge != null ? g.edge : 0.5;
+          g._megaEdgeRing = e > 0.66;
+          g._megaDeepInterior = e < 0.37;
+          if (g._megaEdgeRing) {
+            g.wanderRad = clamp(Math.round(radBase * 0.5), 4, 10);
+          } else if (g._megaDeepInterior) {
+            g.wanderRad = clamp(radBase + 14, 20, 44);
+          } else {
+            g.wanderRad = clamp(radBase + 7, 14, 34);
+          }
+        } else {
+          g.wanderRad = isMotionLayoutLockedForm(name)
+            ? clamp(radBase, 4, 11)
+            : clamp(radBase, 12, 44);
+        }
         const txl = g.tx * flip;
         const tyl = g.ty;
         const wx = bx + (txl * cos - tyl * sin);
@@ -2801,7 +2825,13 @@
       const anchorGx = Math.round(wxb / cell);
       const anchorGy = Math.round(wyb / cell);
       const rad = g.wanderRad || 14;
-      for (let k = 0; k < 48; k++) {
+      const maxK =
+        this.form === "mega" && g._megaDeepInterior
+          ? 62
+          : this.form === "mega" && g._megaEdgeRing
+            ? 28
+            : 48;
+      for (let k = 0; k < maxK; k++) {
         const ddx = Math.floor(rand(-rad, rad + 1));
         const ddy = Math.floor(rand(-rad, rad + 1));
         if (ddx * ddx + ddy * ddy > rad * rad) continue;
@@ -2931,6 +2961,26 @@
       }
       if (bodyIdx.length < 2) return;
 
+      const pickIdxMega = () => {
+        let sum = 0;
+        const wt = [];
+        for (const i of bodyIdx) {
+          const g = this.glyphs[i];
+          let w = 1.4;
+          if (g._megaDeepInterior) w = 3.8;
+          else if (g._megaEdgeRing) w = 0.65;
+          else w = 2;
+          sum += w;
+          wt.push(w);
+        }
+        let r = Math.random() * sum;
+        for (let k = 0; k < bodyIdx.length; k++) {
+          r -= wt[k];
+          if (r <= 0) return bodyIdx[k];
+        }
+        return bodyIdx[bodyIdx.length - 1];
+      };
+
       const dirs = [
         [1, 0],
         [-1, 0],
@@ -2958,7 +3008,10 @@
       };
 
       for (let attempt = 0; attempt < 14; attempt++) {
-        const ia = bodyIdx[Math.floor(Math.random() * bodyIdx.length)];
+        const ia =
+          this.form === "mega"
+            ? pickIdxMega()
+            : bodyIdx[Math.floor(Math.random() * bodyIdx.length)];
         const gA = this.glyphs[ia];
         const d = dirs[Math.floor(Math.random() * dirs.length)];
         const ngx = gA.mgx + d[0];
@@ -2974,6 +3027,14 @@
         }
         if (ib < 0) continue;
         const gB = this.glyphs[ib];
+        if (
+          this.form === "mega" &&
+          gA._megaEdgeRing &&
+          gB._megaEdgeRing &&
+          Math.random() < 0.72
+        ) {
+          continue;
+        }
         if (useMask) {
           if (
             !this._worldCellWalkable(gA.mgx, gA.mgy, bx, by, cos, sin, flip) ||
@@ -2983,6 +3044,101 @@
           }
         }
         swapPair(gA, gB);
+        return;
+      }
+    }
+
+    /**
+     * 将巨字单字锚定到世界格 (ngx,ngy)，同步 tx/ty 与格心，便于滑入空位后仍沿 mask 约束。
+     */
+    _megaNudgeGlyphToGrid(g, ngx, ngy, bx, by, cos, sin, flip) {
+      const cell = this.gridCell;
+      const wx = ngx * cell;
+      const wy = ngy * cell;
+      const rdx = wx - bx;
+      const rdy = wy - by;
+      const txl = rdx * cos + rdy * sin;
+      const tyl = -rdx * sin + rdy * cos;
+      const f = this.facingFlip || 1;
+      g.tx = txl / f;
+      g.ty = tyl;
+      g.baseTx = g.tx;
+      g.baseTy = g.ty;
+      g.mgx = ngx;
+      g.mgy = ngy;
+      g.x = ngx * cell;
+      g.y = ngy * cell;
+    }
+
+    /**
+     * 巨字：单字滑入相邻空walkable格（华容道让位），优先内部字、边缘较少触发。
+     */
+    _tryMegaSlideIntoVoid(now) {
+      if (this.form !== "mega" || !this.gridMarch || !this.gridSnapping) return;
+      if (this.dragging || this.morphGlyphToTarget) return;
+      if (this.viewMode !== "pet") return;
+      if (now < this._megaSlideNextAt) return;
+      const gmsH = clamp(
+        this.glyphMotionSpeed != null ? this.glyphMotionSpeed : 1,
+        0.25,
+        2.5
+      );
+      this._megaSlideNextAt = now + (95 + Math.random() * 115) / gmsH;
+
+      const bx = this.pos.x;
+      const by = this.pos.y;
+      const cos = Math.cos(this.rotation);
+      const sin = Math.sin(this.rotation);
+      const flip = this.facingFlip || 1;
+      const dirs = [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ];
+      const key = (gx, gy) => `${gx},${gy}`;
+      const occ = new Set();
+      const body = [];
+      for (let i = 0; i < this.glyphs.length; i++) {
+        const g = this.glyphs[i];
+        if (g.faceRole) continue;
+        occ.add(key(g.mgx, g.mgy));
+        body.push(g);
+      }
+      if (body.length < 2) return;
+
+      const pickWeightedGlyph = () => {
+        let sum = 0;
+        const w = [];
+        for (const g of body) {
+          let wt = 1.2;
+          if (g._megaDeepInterior) wt = 4.2;
+          else if (g._megaEdgeRing) wt = 0.55;
+          else wt = 2.1;
+          sum += wt;
+          w.push(wt);
+        }
+        let r = Math.random() * sum;
+        for (let i = 0; i < body.length; i++) {
+          r -= w[i];
+          if (r <= 0) return body[i];
+        }
+        return body[body.length - 1];
+      };
+
+      for (let attempt = 0; attempt < 36; attempt++) {
+        const g = pickWeightedGlyph();
+        if (g._megaEdgeRing && Math.random() < 0.62) continue;
+        const d = dirs[Math.floor(Math.random() * dirs.length)];
+        const ngx = g.mgx + d[0];
+        const ngy = g.mgy + d[1];
+        if (occ.has(key(ngx, ngy))) continue;
+        if (!this._worldCellWalkable(ngx, ngy, bx, by, cos, sin, flip)) {
+          continue;
+        }
+        occ.delete(key(g.mgx, g.mgy));
+        this._megaNudgeGlyphToGrid(g, ngx, ngy, bx, by, cos, sin, flip);
+        occ.add(key(ngx, ngy));
         return;
       }
     }
@@ -4410,7 +4566,7 @@
               (this.dragging ? 1.15 : 1) *
               gms;
             if (crispMotion) {
-              const megaBoost = this.form === "mega" ? 1.42 : 1;
+              const megaBoost = this.form === "mega" ? 1.08 : 1;
               const breath = Math.sin(t * 0.86);
               const sway = Math.cos(t * 0.63);
               const ang = g.tx * 0.012 + g.ty * 0.01;
@@ -4441,7 +4597,7 @@
 
           if (waveAmpEff > 0.001 && !isMotionLayoutLockedForm(this.form)) {
             if (crispMotion) {
-              const megaBoost = this.form === "mega" ? 1.35 : 1;
+              const megaBoost = this.form === "mega" ? 1.03 : 1;
               const ph = this._fluidPhase;
               wx +=
                 Math.sin(t * 0.95 + ph + g.tx * 0.008) *
@@ -4511,6 +4667,7 @@
 
         this._separateOverlappingGridGlyphs();
         this._tryHuarongAdjacentSwaps(now);
+        this._tryMegaSlideIntoVoid(now);
 
         if (this.morphGlyphToTarget) {
           let all = true;
