@@ -54,7 +54,8 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.17.0**：**侧栏层级**（`Pet.uiArcMode`：**待机** \| **呈现**）为运动内核的**唯一**来源（`getMotionProfileKernelsForPet`）：待机层全 1 倍率；呈现层统一 **DISPLAY** 压低 `gms`/振幅/游走等（解决「按形态推导时计时被 layoutLock 跳过缩放、曲线却被拖慢」的错位）。左栏 **层** 切换互斥形态区；**颜 / 速 / 墨 / 浮** 分套 `_arcPrefs`；「变」用 `getFormOrderForUiArcMode`。**巨字** 输入自动切呈现层。`?uiArc=presentation` 默认层。游走 `wanderNextAt` 错相；巨字边缘游走/滑步略增参与。 |
+| 最新 | **3.18.0**：**呈现层锁形**：`presentation` 下戳身烦躁**不**再随机 `setForm` 到待机曲线。**巨字**：`suggestMegaGlyphParticleCount` 用 **真实 gridCell**、提高 **voidFrac**、上限 **250**；呈现层 **更强** `enforceSpacing`/spread；`_separateOverlappingGridGlyphs` **5 遍 / rMax 82**。**分层参数** 增加 **波纹(`fluidStrength`) / 格移(`gridMarchSpeed`) / 巨字粒倍率(`megaParticleMul`)**，侧栏 **波·徙·粒**，与色速墨浮一并 **按层记忆**。 |
+| 先前 | **3.17.0**：**侧栏层级**（`uiArcMode`）驱动运动内核；互斥形态区；`_arcPrefs` 色速墨浮。 |
 | 先前 | **3.16.0**：**双运动模态**（按形态名推导 `getMotionProfileKernels`；已弃用为主路径）。 |
 | 先前 | **3.15.0**：**巨字**：面积规划粒子、滑入空格、边缘/内部分层等。 |
 | 先前 | **3.14.0**：**巨字字腔**：外连背景距离场 + 去字腔环；无衬线 + 600；计时槽位同步。 |

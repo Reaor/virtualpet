@@ -857,7 +857,7 @@
    * 巨字粒子数：按剪影填充面积 / 格面积严密估算，并预留空位供格内华容道滑动。
    * voidFrac：留白比例（略随字数增，避免多字时塞满）。
    */
-  function suggestMegaGlyphParticleCount(displayText, S) {
+  function suggestMegaGlyphParticleCount(displayText, S, cellPx) {
     const text = String(displayText || "字").trim() || "字";
     const graphemes = Array.from(text);
     const gcount = Math.max(1, graphemes.length);
@@ -866,16 +866,19 @@
     const scaleRel = S / sampleS;
     const fillPx = countSilhouetteFillPixels(draw, S, sampleS);
     const areaLogical = fillPx * scaleRel * scaleRel;
-    const cellEst = clamp(Math.round(S * 0.043), 12, 20);
-    const cellArea = cellEst * cellEst * 0.9;
-    const voidFrac = clamp(0.16 + 0.018 * gcount, 0.15, 0.28);
+    const cellEst =
+      cellPx != null && cellPx > 0
+        ? cellPx
+        : clamp(Math.round(S * 0.043), 12, 20);
+    const cellArea = cellEst * cellEst * 0.92;
+    const voidFrac = clamp(0.2 + 0.021 * gcount, 0.19, 0.36);
     let n = Math.floor((areaLogical * (1 - voidFrac)) / Math.max(cellArea, 1));
     const shellPx = countSilhouetteBandPixels(draw, S, sampleS, 3);
     const bandLogical = shellPx * scaleRel * scaleRel;
-    const nBand = Math.ceil(bandLogical / Math.max(cellArea * 0.55, 1));
+    const nBand = Math.ceil(bandLogical / Math.max(cellArea * 0.58, 1));
     n = Math.max(n, nBand);
-    n = Math.max(n, 22 + 14 * gcount);
-    return clamp(n, 32, 280);
+    n = Math.max(n, 20 + 12 * gcount);
+    return clamp(n, 28, 250);
   }
 
   /**
@@ -2172,6 +2175,21 @@
     b.bodyTintHex = self.bodyTintHex;
     b.glowMode = self.glowMode | 0;
     b.bodyColorMode = self.bodyColorMode | 0;
+    b.fluidStrength = clamp(
+      self.fluidStrength != null ? +self.fluidStrength : 0.2,
+      0,
+      0.55
+    );
+    b.gridMarchSpeed = clamp(
+      self.gridMarchSpeed != null ? +self.gridMarchSpeed : 2,
+      0.85,
+      3.6
+    );
+    b.megaParticleMul = clamp(
+      b.megaParticleMul != null ? +b.megaParticleMul : 1,
+      0.72,
+      1.28
+    );
   }
 
   function applyArcVisualPrefsToPet(self) {
@@ -2180,6 +2198,16 @@
     self.bodyTintHex = b.bodyTintHex;
     self.glowMode = b.glowMode | 0;
     self.bodyColorMode = b.bodyColorMode | 0;
+    self.fluidStrength = clamp(
+      b.fluidStrength != null ? +b.fluidStrength : 0.2,
+      0,
+      0.55
+    );
+    self.gridMarchSpeed = clamp(
+      b.gridMarchSpeed != null ? +b.gridMarchSpeed : 2,
+      0.85,
+      3.6
+    );
     self.motionProfile =
       self.uiArcMode === "presentation" ? "display" : "standby";
   }
@@ -2203,16 +2231,20 @@
         self.gridCell != null
           ? self.gridCell
           : clamp(Math.round(S * 0.042), 13, 19);
+      const pres = self.uiArcMode === "presentation";
       return buildTextSilhouetteLayout(self._pickMacroDisplay(), n, S, {
         shellSample: true,
         noStroke: true,
         shellMax: 3,
         cap: 420,
-        spreadMin: Math.max(S * 0.051, gc * 1.02),
-        spreadPasses: 12,
-        jitterScale: 0.0022,
-        enforceSpacing: Math.max(S * 0.054, gc * 1.12),
-        enforceSpacingPasses: 14,
+        spreadMin: Math.max(S * (pres ? 0.055 : 0.051), gc * (pres ? 1.1 : 1.02)),
+        spreadPasses: pres ? 18 : 12,
+        jitterScale: pres ? 0.0015 : 0.0022,
+        enforceSpacing: Math.max(
+          S * (pres ? 0.064 : 0.054),
+          gc * (pres ? 1.34 : 1.12)
+        ),
+        enforceSpacingPasses: pres ? 22 : 14,
         snapToShell: true,
       });
     }
@@ -2513,18 +2545,34 @@
         0.25,
         2.5
       );
+      const _fs0 = clamp(
+        this.fluidStrength != null ? +this.fluidStrength : 0.2,
+        0,
+        0.55
+      );
+      const _gm0 = clamp(
+        this.gridMarchSpeed != null ? +this.gridMarchSpeed : 2,
+        0.85,
+        3.6
+      );
       this._arcPrefs = {
         standby: {
           glyphMotionSpeed: _sp0,
           bodyTintHex: this.bodyTintHex,
           glowMode: this.glowMode | 0,
           bodyColorMode: this.bodyColorMode | 0,
+          fluidStrength: _fs0,
+          gridMarchSpeed: _gm0,
+          megaParticleMul: 1,
         },
         presentation: {
           glyphMotionSpeed: _sp0,
           bodyTintHex: this.bodyTintHex,
           glowMode: this.glowMode | 0,
           bodyColorMode: this.bodyColorMode | 0,
+          fluidStrength: _fs0,
+          gridMarchSpeed: _gm0,
+          megaParticleMul: 1,
         },
       };
       applyArcVisualPrefsToPet(this);
@@ -2733,7 +2781,16 @@
         this.gridCell = clamp(Math.round(S * 0.03), 9, 14);
       }
       if (name === "mega") {
-        const want = suggestMegaGlyphParticleCount(this._pickMacroDisplay(), S);
+        const mul =
+          this._arcPrefs[this.uiArcMode].megaParticleMul != null
+            ? clamp(+this._arcPrefs[this.uiArcMode].megaParticleMul, 0.72, 1.28)
+            : 1;
+        let want = suggestMegaGlyphParticleCount(
+          this._pickMacroDisplay(),
+          S,
+          this.gridCell
+        );
+        want = clamp(Math.round(want * mul), 26, 255);
         if (want !== this.glyphs.length) {
           this.particleCount = want;
           this._initGlyphs();
@@ -3028,8 +3085,8 @@
       const sin = Math.sin(this.rotation);
       const useMask = this._maskPack && this._maskPack.grid;
       const mega = this.form === "mega";
-      const rMax = mega ? 56 : useMask ? 34 : 22;
-      const passes = mega ? 3 : useMask ? 2 : 1;
+      const rMax = mega ? 82 : useMask ? 34 : 22;
+      const passes = mega ? 5 : useMask ? 2 : 1;
       const key = (gx, gy) => `${gx},${gy}`;
 
       for (let pass = 0; pass < passes; pass++) {
@@ -3919,24 +3976,32 @@
         this.vel.y += rand(-80, 80);
       }
       if (this.annoyance >= 0.95 && this.mode === "idle") {
-        if (!this._savedFormBeforeAnnoyed) this._savedFormBeforeAnnoyed = this.form;
         this.setExpression("annoyed");
         this._applyMoodChars("annoyed", 1.8);
         this._rumbleAmp = Math.max(this._rumbleAmp || 0, 0.85);
         this._glyphFlash = Math.min(0.55, Math.max(this._glyphFlash || 0, 0.5));
-        const alt = [
-          "tro_ep_a",
-          "cv_butterfly",
-          "flower",
-          "kao_party",
-          "kao_spark",
-          "fourier",
-        ];
-        const pick = alt[Math.floor(Math.random() * alt.length)];
-        if (FORMS[pick]) this.setForm(pick, true);
+        const lockPresentation =
+          this.viewMode === "pet" && this.uiArcMode === "presentation";
+        if (!lockPresentation) {
+          if (!this._savedFormBeforeAnnoyed) this._savedFormBeforeAnnoyed = this.form;
+          const alt = [
+            "tro_ep_a",
+            "cv_butterfly",
+            "flower",
+            "kao_party",
+            "kao_spark",
+            "fourier",
+          ];
+          const pick = alt[Math.floor(Math.random() * alt.length)];
+          if (FORMS[pick]) this.setForm(pick, true);
+        }
         this.annoyance = 0.45;
         setTimeout(() => {
-          if (this.mode === "idle" && this._savedFormBeforeAnnoyed) {
+          if (
+            this.mode === "idle" &&
+            this._savedFormBeforeAnnoyed &&
+            !(this.viewMode === "pet" && this.uiArcMode === "presentation")
+          ) {
             this.setForm(this._savedFormBeforeAnnoyed, true);
             this._savedFormBeforeAnnoyed = null;
           }
@@ -5492,6 +5557,83 @@
     cycleBodyColorMode() {
       this.bodyColorMode = ((this.bodyColorMode | 0) + 1) % 4;
       snapshotArcVisualPrefs(this);
+    }
+
+    /** 当前层：液体波纹强度（与速/墨等分套记忆） */
+    cycleArcFluidStrength() {
+      const tiers = [0, 0.06, 0.12, 0.18, 0.25, 0.34, 0.44];
+      const cur = clamp(this.fluidStrength != null ? +this.fluidStrength : 0.2, 0, 0.55);
+      let i = tiers.findIndex((t) => Math.abs(t - cur) < 0.026);
+      if (i < 0) {
+        let best = 0;
+        let bd = Infinity;
+        for (let k = 0; k < tiers.length; k++) {
+          const d = Math.abs(tiers[k] - cur);
+          if (d < bd) {
+            bd = d;
+            best = k;
+          }
+        }
+        i = best;
+      }
+      this.fluidStrength = clamp(tiers[(i + 1) % tiers.length], 0, 0.55);
+      snapshotArcVisualPrefs(this);
+      return this.fluidStrength;
+    }
+
+    /** 当前层：格点沿路径移动速度 */
+    cycleArcGridMarchSpeed() {
+      const tiers = [1.1, 1.45, 1.85, 2.25, 2.75, 3.2];
+      const cur = clamp(
+        this.gridMarchSpeed != null ? +this.gridMarchSpeed : 2,
+        0.85,
+        3.6
+      );
+      let i = tiers.findIndex((t) => Math.abs(t - cur) < 0.11);
+      if (i < 0) {
+        let best = 0;
+        let bd = Infinity;
+        for (let k = 0; k < tiers.length; k++) {
+          const d = Math.abs(tiers[k] - cur);
+          if (d < bd) {
+            bd = d;
+            best = k;
+          }
+        }
+        i = best;
+      }
+      this.gridMarchSpeed = clamp(tiers[(i + 1) % tiers.length], 0.85, 3.6);
+      snapshotArcVisualPrefs(this);
+      return this.gridMarchSpeed;
+    }
+
+    /**
+     * 当前层：巨字粒数乘子（越小越疏）；已是巨字时立即重建布局。
+     */
+    cycleArcMegaParticleMul() {
+      const b = this._arcPrefs[this.uiArcMode];
+      const tiers = [0.78, 0.88, 1, 1.1, 1.18];
+      let cur = b.megaParticleMul != null ? +b.megaParticleMul : 1;
+      cur = clamp(cur, 0.72, 1.28);
+      let i = tiers.findIndex((t) => Math.abs(t - cur) < 0.045);
+      if (i < 0) {
+        let best = 0;
+        let bd = Infinity;
+        for (let k = 0; k < tiers.length; k++) {
+          const d = Math.abs(tiers[k] - cur);
+          if (d < bd) {
+            bd = d;
+            best = k;
+          }
+        }
+        i = best;
+      }
+      b.megaParticleMul = clamp(tiers[(i + 1) % tiers.length], 0.72, 1.28);
+      if (this.form === "mega" && this.viewMode === "pet") {
+        this.setForm("mega", true, true);
+      }
+      snapshotArcVisualPrefs(this);
+      return b.megaParticleMul;
     }
 
     /**

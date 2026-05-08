@@ -163,6 +163,9 @@
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1600);
   }
+  function arcLayerZh() {
+    return pet.uiArcMode === "presentation" ? "呈现层" : "待机层";
+  }
 
   function parseOpeningLines() {
     if (!openingPreset) return [];
@@ -498,7 +501,7 @@
       const v = sw.getAttribute("data-tint");
       pet.setBodyTint(v || "");
       if (tintColorPicker && v) tintColorPicker.value = v;
-      toast(v ? `字色：${v}` : "字色：默认");
+      toast((v ? `字色：${v}` : "字色：默认") + `（${arcLayerZh()}）`);
       closeTintPopover();
     });
   }
@@ -507,7 +510,7 @@
     tintColorPicker.addEventListener("change", () => {
       const v = tintColorPicker.value;
       pet.setBodyTint(v);
-      toast(`字色：${v}`);
+      toast(`字色：${v}（${arcLayerZh()}）`);
     });
   }
 
@@ -531,7 +534,9 @@
       if (action === "arcMode") {
         pet.cycleUiArcMode();
         const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
-        toast(`层级 · ${lab}（形态栏与色/速/墨/浮光已切换）`);
+        toast(
+          `层级 · ${lab}（各层色/速/墨/浮/波/徙/粒 设置已分别保留）`
+        );
       } else if (action === "morph") {
         pet.abortFeeding();
         const order = getFormOrderForUiArcMode(pet.uiArcMode);
@@ -550,7 +555,7 @@
           "径向渐变 + 强呼吸",
           "纵向渐变 + 慢呼吸",
         ];
-        toast(`墨色：${labels[pet.bodyColorMode | 0]}`);
+        toast(`墨色：${labels[pet.bodyColorMode | 0]}（${arcLayerZh()}）`);
       } else if (action === "glow") {
         pet.cycleGlowMode();
         const gl = [
@@ -561,14 +566,21 @@
           "星闪",
           "心跳",
         ];
-        toast(gl[pet.glowMode | 0] || "浮光");
+        toast((gl[pet.glowMode | 0] || "浮光") + `（${arcLayerZh()}）`);
       } else if (action === "speed") {
         const v = pet.cycleGlyphMotionSpeed();
-        const profLabel =
-          pet.uiArcMode === "presentation" ? "呈现层" : "待机层";
         toast(
-          `运动速度 ×${v.toFixed(2)}（${profLabel} 独立记忆；格移/游走/流体/华容道）`
+          `运动速度 ×${v.toFixed(2)}（${arcLayerZh()}；格移/游走/流体/华容道）`
         );
+      } else if (action === "fluid") {
+        const v = pet.cycleArcFluidStrength();
+        toast(`波纹强度 ×${v.toFixed(2)}（${arcLayerZh()}）`);
+      } else if (action === "gridMarch") {
+        const v = pet.cycleArcGridMarchSpeed();
+        toast(`格移速度 ×${v.toFixed(2)}（${arcLayerZh()}）`);
+      } else if (action === "megaPack") {
+        const m = pet.cycleArcMegaParticleMul();
+        toast(`巨字粒数 ×${m.toFixed(2)}（${arcLayerZh()}；已巨字则重建）`);
       } else if (action === "sleep") {
         if (pet.mode === "sleep") {
           pet.sleep(false);
