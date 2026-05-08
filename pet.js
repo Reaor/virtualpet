@@ -2135,6 +2135,33 @@
     return self.uiArcMode === "presentation" && isMaskBackedMegaKao(self);
   }
 
+  /** 侧栏「轨」：有 mask 的巨字/颜文字躯体运动范式（待机/呈现各记一套） */
+  const BODY_MOTION_STYLES = ["harmonic", "snake_stream", "contour_drift"];
+
+  const BODY_MOTION_LABELS = {
+    harmonic: "谐波亚格",
+    snake_stream: "流线蛇行",
+    contour_drift: "轮廓游走",
+  };
+
+  function normalizeBodyMotionStyle(s) {
+    return BODY_MOTION_STYLES.indexOf(s) >= 0 ? s : "harmonic";
+  }
+
+  function usesMaskSnakeStream(self) {
+    return (
+      isMaskBackedMegaKao(self) &&
+      normalizeBodyMotionStyle(self.bodyMotionStyle) === "snake_stream"
+    );
+  }
+
+  function usesContourDrift(self) {
+    return (
+      isMaskBackedMegaKao(self) &&
+      normalizeBodyMotionStyle(self.bodyMotionStyle) === "contour_drift"
+    );
+  }
+
   /** 侧栏「待机」模式：体内运动保持全倍率（与 3.15 前一致）。 */
   const STANDBY_MOTION_KERNELS = {
     id: "standby",
@@ -2217,6 +2244,7 @@
       0.72,
       1.28
     );
+    b.bodyMotionStyle = normalizeBodyMotionStyle(self.bodyMotionStyle);
   }
 
   function applyArcVisualPrefsToPet(self) {
@@ -2235,6 +2263,7 @@
       0.85,
       3.6
     );
+    self.bodyMotionStyle = normalizeBodyMotionStyle(b.bodyMotionStyle);
     self.motionProfile =
       self.uiArcMode === "presentation" ? "display" : "standby";
   }
@@ -2271,7 +2300,7 @@
           S * (pres ? 0.064 : 0.054),
           gc * (pres ? 1.34 : 1.12)
         ),
-        enforceSpacingPasses: pres ? 22 : 14,
+        enforceSpacingPasses: pres ? 26 : 16,
         snapToShell: true,
       });
     }
@@ -2558,6 +2587,10 @@
       this._silVacPullNextAt = 0;
       /** 全队共享节拍相位（体内运动谐和） */
       this._ensemblePhase = 0;
+      /** mask 内蛇行走廊（世界格 gx,gy），供 snake_stream 范式 */
+      this._snakeWalkPath = [];
+      this._snakePhase = 0;
+      this._snakePathT = 0;
       /** 与 DISPLAY/STANDBY 内核同步，供 UI toast 使用 */
       this.motionProfile = "standby";
       /** 侧栏层级：standby=待机形态；presentation=计时/巨字/颜文字（决定运动内核与独立参数） */
@@ -2596,6 +2629,7 @@
           fluidStrength: _fs0,
           gridMarchSpeed: _gm0,
           megaParticleMul: 1,
+          bodyMotionStyle: "harmonic",
         },
         presentation: {
           glyphMotionSpeed: _sp0,
@@ -2605,8 +2639,14 @@
           fluidStrength: _fs0,
           gridMarchSpeed: _gm0,
           megaParticleMul: 1,
+          bodyMotionStyle: "harmonic",
         },
       };
+      this.bodyMotionStyle = normalizeBodyMotionStyle(
+        opts.bodyMotionStyle != null ? opts.bodyMotionStyle : "harmonic"
+      );
+      this._arcPrefs.standby.bodyMotionStyle = this.bodyMotionStyle;
+      this._arcPrefs.presentation.bodyMotionStyle = this.bodyMotionStyle;
       applyArcVisualPrefsToPet(this);
       this.onUiArcModeChange =
         typeof opts.onUiArcModeChange === "function"
@@ -3020,6 +3060,16 @@
 
       if (!isMaskBackedMegaKao(this)) {
         this._silhouetteVacancyPulls.length = 0;
+      } else {
+        const rb = this.rotation;
+        this._rebuildMaskSnakeWalkPath(
+          this.pos.x,
+          this.pos.y,
+          Math.cos(rb),
+          Math.sin(rb),
+          1
+        );
+        this._snakePathT = nowSec;
       }
       if (typeof this.onFormChange === "function" && !noEmitOnFormChange) {
         try {
@@ -3109,6 +3159,53 @@
       return { gx, gy };
     }
 
+    /**
+     * 将 mask 内可走世界格排成 **弓字形走廊**，供 snake_stream 沿廊递进。
+     */
+    _rebuildMaskSnakeWalkPath(bx, by, cos, sin, flip) {
+      if (!this._maskPack || !this._maskPack.grid) {
+        this._snakeWalkPath = [];
+        return;
+      }
+      const cell = this.gridCell || 12;
+      const R = Math.max(
+        this.size * 0.8,
+        Math.min(this.width, this.height) * 0.24,
+        150
+      );
+      const g0x = Math.floor((bx - R) / cell);
+      const g1x = Math.ceil((bx + R) / cell);
+      const g0y = Math.floor((by - R) / cell);
+      const g1y = Math.ceil((by + R) / cell);
+      const cells = [];
+      for (let gy = g0y; gy <= g1y; gy++) {
+        for (let gx = g0x; gx <= g1x; gx++) {
+          if (this._worldCellWalkable(gx, gy, bx, by, cos, sin, flip)) {
+            cells.push({ gx, gy });
+          }
+        }
+      }
+      if (cells.length < 2) {
+        this._snakeWalkPath = cells;
+        return;
+      }
+      cells.sort((a, b) => a.gy - b.gy || a.gx - b.gx);
+      const byRow = new Map();
+      for (const c of cells) {
+        if (!byRow.has(c.gy)) byRow.set(c.gy, []);
+        byRow.get(c.gy).push(c);
+      }
+      const ys = [...byRow.keys()].sort((a, b) => a - b);
+      const path = [];
+      ys.forEach((y, ri) => {
+        const row = byRow.get(y).slice();
+        row.sort((a, b) => a.gx - b.gx);
+        if (ri % 2) row.reverse();
+        path.push(...row);
+      });
+      this._snakeWalkPath = path;
+    }
+
     _pickWanderDelta(g, bx, by, cos, sin, flip) {
       const cell = this.gridCell;
       const txl = g.tx * flip;
@@ -3170,7 +3267,7 @@
       const mega = this.form === "mega";
       const kaoMask = useMask && String(this.form || "").startsWith("kao_");
       const rMax = mega ? 90 : kaoMask ? 52 : useMask ? 40 : 22;
-      const passes = mega ? 6 : useMask ? 4 : 1;
+      const passes = mega ? 6 : useMask ? 5 : 1;
       const key = (gx, gy) => `${gx},${gy}`;
 
       for (let pass = 0; pass < passes; pass++) {
@@ -3544,8 +3641,8 @@
     /** 呈现层剪影（巨字/颜）：离轮廓淡出 → 登记空位 → 壳上重生并换新字 */
     _updatePresentationSilhouetteGlyphLifecycle(dt, bx, by, cos, sin, flip) {
       if (!this._maskPack || !this._maskPack.grid) return;
-      const fadeOut = 0.55;
-      const fadeIn = 1.35;
+      const fadeOut = 0.38;
+      const fadeIn = 1.05;
       const tWall = performance.now() / 1000;
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
@@ -4951,6 +5048,12 @@
       const flip = 1;
       const cos = Math.cos(rot);
       const sin = Math.sin(rot);
+      const contourDrift = usesContourDrift(this);
+      const snakeStream = usesMaskSnakeStream(this);
+      const allowGridWander =
+        !presSilHarm &&
+        !snakeStream &&
+        !(silMaskPet && !contourDrift);
 
       if (
         this.gridMarch &&
@@ -4959,8 +5062,7 @@
         this.viewMode === "pet" &&
         this.pathMode !== "none" &&
         this.form !== "script" &&
-        !presSilHarm &&
-        !silMaskPet
+        allowGridWander
       ) {
         if (t >= this._nextWanderPick) {
           this._nextWanderPick =
@@ -5043,13 +5145,32 @@
         );
         const crispMotion = isGridLayoutImmutableForm(this.form);
 
+        let snakeBodyN = 0;
+        if (snakeStream) {
+          for (const gg of this.glyphs) {
+            if (!gg.faceRole) snakeBodyN++;
+          }
+        }
+        let bodyIdx = 0;
+
+        if (snakeStream) {
+          if (t - (this._snakePathT || 0) > 0.72) {
+            this._rebuildMaskSnakeWalkPath(bx, by, cos, sin, flip);
+            this._snakePathT = t;
+          }
+          this._snakePhase +=
+            dt *
+            (0.28 + 0.46 * gms0) *
+            (0.4 + 0.36 * clamp(this.gridMarchSpeed || 2, 0.85, 3.6));
+        }
+
         for (let gi = 0; gi < this.glyphs.length; gi++) {
           const g = this.glyphs[gi];
           if (g.mgx == null || g.mgy == null) {
             g.mgx = Math.round(g.x / cell);
             g.mgy = Math.round(g.y / cell);
           }
-          if (silMaskPet) {
+          if (silMaskPet && !contourDrift) {
             g.marchPref = 0;
           } else if (g.marchPref == null) {
             g.marchPref = g.depth > 0.5 ? 1 : 0;
@@ -5061,20 +5182,47 @@
           let wy = by + (txl * sin + tyl * cos);
 
           const mT = this.morphGlyphToTarget && this.morphGlyphToTarget[gi];
+          let useSnakeCell = false;
           if (
+            snakeStream &&
+            !g.faceRole &&
+            !mT &&
+            this._snakeWalkPath &&
+            this._snakeWalkPath.length > 1
+          ) {
+            const N = snakeBodyN;
+            const L = this._snakeWalkPath.length;
+            const slot = (bodyIdx * L) / Math.max(N, 1);
+            const idx = (Math.floor(this._snakePhase + slot) % L + L) % L;
+            const c = this._snakeWalkPath[idx];
+            g._snakeSlot = idx;
+            g._snakeMgx = c.gx;
+            g._snakeMgy = c.gy;
+            const mic =
+              cell *
+              0.034 *
+              Math.sin(this._ensemblePhase * 0.29 + bodyIdx * 0.44);
+            wx = c.gx * cell + mic;
+            wy = c.gy * cell + mic * 0.9;
+            useSnakeCell = true;
+            bodyIdx++;
+          }
+
+          if (
+            !useSnakeCell &&
             !mT &&
             !g.faceRole &&
             this.viewMode === "pet" &&
             this.pathMode !== "none" &&
             !isMotionLayoutLockedForm(this.form) &&
-            !presSilHarm &&
-            !silMaskPet
+            allowGridWander
           ) {
             wx += (g.wgx || 0) * cell;
             wy += (g.wgy || 0) * cell;
           }
 
           if (
+            !useSnakeCell &&
             this.internalMotion &&
             !g.faceRole &&
             !isMotionLayoutLockedForm(this.form)
@@ -5086,7 +5234,10 @@
               (this.dragging ? 1.15 : 1) *
               gms *
               mk.ampScale;
-            if (presSilHarm || silMaskPet) {
+            if (
+              (presSilHarm || silMaskPet) &&
+              !snakeStream
+            ) {
               const phase = this._ensemblePhase * 0.58 + t * 0.06 * gms;
               const spat = g.tx * 0.013 + g.ty * 0.0105;
               const tight = presSilHarm ? 1 : 1.06;
@@ -5143,7 +5294,11 @@
             }
           }
 
-          if (waveAmpEff > 0.001 && !isMotionLayoutLockedForm(this.form)) {
+          if (
+            !useSnakeCell &&
+            waveAmpEff > 0.001 &&
+            !isMotionLayoutLockedForm(this.form)
+          ) {
             if (crispMotion) {
               const dispScale =
                 (this.form === "mega" ? 1.03 : 1) * mk.crispMicroScale;
@@ -5165,14 +5320,22 @@
               wy += Math.cos(ny + g.depth * 1.5) * waveAmpEff * 0.48;
             }
           }
-          const rx = rumble ? Math.sin(t * 26 + g.depth * 15) * rumble : 0;
-          const ry = rumble ? Math.cos(t * 24 + g.depth * 13) * rumble : 0;
-          wx += rx;
-          wy += ry;
+          if (!useSnakeCell) {
+            const rx = rumble ? Math.sin(t * 26 + g.depth * 15) * rumble : 0;
+            const ry = rumble ? Math.cos(t * 24 + g.depth * 13) * rumble : 0;
+            wx += rx;
+            wy += ry;
+          }
           if (g._tapScatterT > 0) {
             const t0 = g._tapScatterT0 || 0.38;
             const f = clamp(g._tapScatterT / t0, 0, 1);
-            const sc = presSilHarm ? 0.2 : silMaskPet ? 0.42 : 1;
+            const sc = useSnakeCell
+              ? 0.16
+              : presSilHarm
+                ? 0.2
+                : silMaskPet
+                  ? 0.42
+                  : 1;
             wx += (g._tapScatterOX || 0) * f * sc;
             wy += (g._tapScatterOY || 0) * f * sc;
             g._tapScatterT -= dt;
@@ -5183,12 +5346,15 @@
           if (mT) {
             tgx = Math.round(mT.twx / cell);
             tgy = Math.round(mT.twy / cell);
+          } else if (useSnakeCell) {
+            tgx = g._snakeMgx;
+            tgy = g._snakeMgy;
           } else {
             tgx = Math.round(wx / cell);
             tgy = Math.round(wy / cell);
           }
 
-          if (silMaskPet && !mT) {
+          if (silMaskPet && !mT && !useSnakeCell) {
             const sn = this._nearestWalkableMarchCell(
               tgx,
               tgy,
@@ -5232,7 +5398,7 @@
             const cap = cell * 0.46;
             const tox = clamp(txo, -cap, cap);
             const toy = clamp(tyo, -cap, cap);
-            const sm = 1 - Math.exp(-dt * 32);
+            const sm = 1 - Math.exp(-dt * 22);
             g._silDrawOx = lerp(g._silDrawOx || 0, tox, sm);
             g._silDrawOy = lerp(g._silDrawOy || 0, toy, sm);
           } else {
@@ -5258,6 +5424,9 @@
             sin,
             flip
           );
+          this._separateOverlappingGridGlyphs();
+        }
+        if (snakeStream) {
           this._separateOverlappingGridGlyphs();
         }
 
@@ -5698,6 +5867,37 @@
         drawGlyph(g, { flashWeight: 0.45, cel: useCelInk });
       }
 
+      if (usesMaskSnakeStream(this) && this.viewMode === "pet" && this.gridMarch) {
+        const body = this.glyphs.filter((g) => !g.faceRole);
+        if (body.length > 1) {
+          body.sort((a, b) => (a._snakeSlot | 0) - (b._snakeSlot | 0));
+          ctx.save();
+          ctx.strokeStyle = light
+            ? "rgba(0, 115, 175, 0.11)"
+            : "rgba(130, 200, 255, 0.14)";
+          ctx.lineWidth = Math.max(0.9, (this.gridCell || 12) * 0.065);
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          const silPt = (g) => {
+            let px = (this.gridUnity ? Math.round(g.x) : g.x) + (g._silDrawOx || 0);
+            let py = (this.gridUnity ? Math.round(g.y) : g.y) + (g._silDrawOy || 0);
+            if (this.gridUnity) {
+              px = this._snapLogicalToDevice(px);
+              py = this._snapLogicalToDevice(py);
+            }
+            return [px, py];
+          };
+          ctx.beginPath();
+          for (let i = 0; i < body.length; i++) {
+            const [px, py] = silPt(body[i]);
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
       // 朱砂点缀（巨字/曲线等清晰形态跳过，避免叠影发糊）
       if (
         this.spotAccent &&
@@ -5889,6 +6089,16 @@
       snapshotArcVisualPrefs(this);
     }
 
+    /** 侧栏「轨」：切换有 mask 的巨字/颜文字躯体运动范式（分套记忆） */
+    cycleBodyMotionStyle() {
+      const cur = normalizeBodyMotionStyle(this.bodyMotionStyle);
+      const ix = BODY_MOTION_STYLES.indexOf(cur);
+      const next = BODY_MOTION_STYLES[(ix + 1) % BODY_MOTION_STYLES.length];
+      this.bodyMotionStyle = next;
+      snapshotArcVisualPrefs(this);
+      return this.bodyMotionStyle;
+    }
+
     /** 侧栏「速」：循环体内运动速度挡位 */
     cycleGlyphMotionSpeed() {
       const tiers = [0.4, 0.65, 1, 1.45, 1.9, 2.35];
@@ -6068,6 +6278,10 @@
     isDisplayPresentationForm,
     isPresentationSilhouetteHarm,
     isMaskBackedMegaKao,
+    BODY_MOTION_STYLES,
+    BODY_MOTION_LABELS,
+    usesMaskSnakeStream,
+    usesContourDrift,
     getMotionProfileKernels,
     getMotionProfileKernelsForPet,
     getFormOrderForUiArcMode,
