@@ -238,10 +238,85 @@
   }
 
   /**
+   * 从笔画壳层像素中分层抽样，避免按扫描序取点导致笔画间分配不均、巨字「断墨」。
+   */
+  function stratifiedPickFromShellPixels(pxFlat, w, h, want) {
+    const pairs = [];
+    for (let i = 0; i + 1 < pxFlat.length; i += 2) {
+      pairs.push({ x: pxFlat[i], y: pxFlat[i + 1] });
+    }
+    const nb = clamp(Math.round((w + h) * 0.034), 5, 14);
+    const bw = nb;
+    const bh = nb;
+    const buckets = [];
+    for (let i = 0; i < bw * bh; i++) buckets.push([]);
+    for (const p of pairs) {
+      const bx = Math.min(bw - 1, Math.max(0, ((p.x / w) * bw) | 0));
+      const by = Math.min(bh - 1, Math.max(0, ((p.y / h) * bh) | 0));
+      buckets[by * bw + bx].push(p);
+    }
+    const order = [];
+    for (let i = 0; i < buckets.length; i++) {
+      if (buckets[i].length) order.push(i);
+    }
+    if (!order.length) return pairs.slice(0, want);
+    const out = [];
+    let wave = 0;
+    while (out.length < want && wave < want * 6) {
+      for (const bi of order) {
+        if (out.length >= want) break;
+        const b = buckets[bi];
+        const pick = b[(wave * 17 + bi * 31) % b.length];
+        out.push(pick);
+      }
+      wave++;
+    }
+    while (out.length < want) {
+      const p = pairs[(Math.random() * pairs.length) | 0];
+      out.push(p);
+    }
+    return out.slice(0, want);
+  }
+
+  /** spread/enforce 后把明显飞出笔画壳层的目标拉回最近壳像素，减少断笔；近处不强行吸附以免多点塌缩。 */
+  function snapTargetsToShellPx(targets, pxFlat, scale, sampleS, onlyIfFarSq) {
+    if (!targets || !targets.length || !pxFlat || pxFlat.length < 4) return;
+    const thr = onlyIfFarSq != null ? onlyIfFarSq : (Math.max(sampleS / scale, 100) * 0.2) ** 2;
+    const off = sampleS / 2;
+    const world = [];
+    for (let i = 0; i + 1 < pxFlat.length; i += 2) {
+      world.push({
+        x: (pxFlat[i] - off) / scale,
+        y: (pxFlat[i + 1] - off) / scale,
+      });
+    }
+    for (let i = 0; i < targets.length; i++) {
+      const tx = targets[i].x;
+      const ty = targets[i].y;
+      let bd = 1e18;
+      let bi = 0;
+      for (let j = 0; j < world.length; j++) {
+        const wx = world[j].x;
+        const wy = world[j].y;
+        const d2 = (wx - tx) * (wx - tx) + (wy - ty) * (wy - ty);
+        if (d2 < bd) {
+          bd = d2;
+          bi = j;
+        }
+      }
+      if (bd > thr) {
+        targets[i].x = world[bi].x;
+        targets[i].y = world[bi].y;
+      }
+    }
+  }
+
+  /**
    * 距空白最近的笔画环带采样：保留字心留白，避免巨字被「实心糊满」。
    * shellMax：笔画内距边界的像素深度（1≈仅轮廓，3~4≈薄墨壳层）。
+   * outMeta：若传入对象，写入 pxFlat / scale / sampleS / w / h 供 snap 复用。
    */
-  function sampleSilhouetteShell(drawFn, S, count, sampleOpts) {
+  function sampleSilhouetteShell(drawFn, S, count, sampleOpts, outMeta) {
     const so = sampleOpts || {};
     const cap = so.cap != null ? so.cap : 336;
     const shellMax = clamp(so.shellMax != null ? so.shellMax : 4, 1, 8);
@@ -324,20 +399,28 @@
       }
     }
     const total = px.length / 2;
+    if (outMeta && typeof outMeta === "object") {
+      outMeta.pxFlat = px;
+      outMeta.scale = scale;
+      outMeta.sampleS = sampleS;
+      outMeta.w = w;
+      outMeta.h = h;
+    }
     if (total === 0) {
       return sampleSilhouette(drawFn, S, count, {
         cap,
         jitterScale: Math.max(jitterScale, 0.02),
       });
     }
-    const step = Math.max(1, Math.floor(total / count));
+    const picked = stratifiedPickFromShellPixels(px, w, h, count);
     const points = [];
     const off = sampleS / 2;
-    for (let i = 0; i < total && points.length < count; i += step) {
-      const jitter = () => (Math.random() - 0.5) * jitterScale * sampleS;
+    const jitter = () => (Math.random() - 0.5) * jitterScale * sampleS;
+    for (let i = 0; i < picked.length && points.length < count; i++) {
+      const pr = picked[i];
       points.push({
-        x: (px[i * 2] - off) / scale + jitter(),
-        y: (px[i * 2 + 1] - off) / scale + jitter(),
+        x: (pr.x - off) / scale + jitter(),
+        y: (pr.y - off) / scale + jitter(),
       });
     }
     while (points.length < count) {
@@ -698,7 +781,8 @@
       ctx.fillStyle = "#000";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      let fs = s * 0.52;
+      const gLen = Math.max(2, Array.from(text).length);
+      let fs = s * 0.52 * Math.min(1, 8.5 / gLen);
       const maxW = s * 0.9;
       for (let iter = 0; iter < 22; iter++) {
         ctx.font = `700 ${fs}px ${fontStack}`;
@@ -721,16 +805,21 @@
     };
   }
 
-  /** 按笔画覆盖面积估算巨字所需小字粒子数 */
+  /** 按笔画壳层面积 + 字数估算巨字粒子数，兼顾可读与塑形。 */
   function suggestMegaGlyphParticleCount(displayText, S) {
-    const draw = createMacroTextDraw(displayText, { noStroke: true });
+    const text = String(displayText || "字").trim() || "字";
+    const graphemes = Array.from(text);
+    const gcount = Math.max(1, graphemes.length);
+    const draw = createMacroTextDraw(text, { noStroke: true });
     const shellMax = 4;
-    const px = countSilhouetteBandPixels(draw, S, 400, shellMax);
-    if (px < 40) return 56;
-    const cellEst = clamp(Math.round(S * 0.044), 12, 19);
-    const slotFootprint = cellEst * cellEst * 0.5;
-    const n = Math.floor((px * 0.36) / Math.max(slotFootprint, 1.1));
-    return clamp(Math.max(n, 24), 24, 160);
+    const px = countSilhouetteBandPixels(draw, S, 420, shellMax);
+    const cellEst = clamp(Math.round(S * 0.043), 12, 20);
+    const slotFootprint = cellEst * cellEst * 0.42;
+    let n = px < 45 ? 40 + 18 * gcount : Math.floor((px * 0.42) / Math.max(slotFootprint, 1.05));
+    const minByChars = 26 + 24 * gcount;
+    n = Math.max(n, minByChars);
+    n = Math.max(n, Math.floor(px / Math.max(slotFootprint * 0.95, 1)));
+    return clamp(n, 36, 240);
   }
 
   /**
@@ -747,11 +836,12 @@
     const kao = o.kao;
     let targets;
     if (o.shellSample) {
+      const shellMeta = o.snapToShell !== false ? {} : null;
       targets = sampleSilhouetteShell(draw, S, n, {
-        cap: 336,
+        cap: o.cap != null ? o.cap : 400,
         shellMax: o.shellMax != null ? o.shellMax : 4,
-        jitterScale: o.jitterScale != null ? o.jitterScale : 0.01,
-      });
+        jitterScale: o.jitterScale != null ? o.jitterScale : 0.008,
+      }, shellMeta);
       if (o.spreadMin != null && targets.length > 1) {
         spreadTargets2D(
           targets,
@@ -765,6 +855,27 @@
           o.enforceSpacing,
           o.enforceSpacingPasses != null ? o.enforceSpacingPasses : 8
         );
+      }
+      if (
+        shellMeta &&
+        shellMeta.pxFlat &&
+        shellMeta.pxFlat.length >= 4
+      ) {
+        const farSq = (Math.max(S * 0.017, 9)) ** 2;
+        snapTargetsToShellPx(
+          targets,
+          shellMeta.pxFlat,
+          shellMeta.scale,
+          shellMeta.sampleS,
+          farSq
+        );
+        if (o.enforceSpacing != null && targets.length > 1) {
+          enforceTargetsMinSpacing(
+            targets,
+            o.enforceSpacing * 0.92,
+            6
+          );
+        }
       }
     } else {
       targets = sampleSilhouette(draw, S, n, {
@@ -835,34 +946,62 @@
     return [...top, ...gap, ...bot];
   }
 
+  /**
+   * 点阵「亮」格 → 目标点：按格均分粒子，避免 n>格数 时大量叠在同一点导致计时字形塌缩。
+   */
   function rowsToTargets(rows, cell, n, jitter = 0.12) {
     const h = rows.length;
     const w = rows[0] ? rows[0].length : 0;
-    const pts = [];
+    const centers = [];
     for (let y = 0; y < h; y++) {
       const row = rows[y] || "";
       for (let x = 0; x < row.length; x++) {
-        const ch = row[x];
-        if (ch === "1") {
-          pts.push({
+        if (row[x] === "1") {
+          centers.push({
             x: (x - w / 2 + 0.5) * cell,
             y: (y - h / 2 + 0.5) * cell,
           });
         }
       }
     }
-    if (pts.length === 0) {
+    const M = centers.length;
+    if (M === 0) {
       return Array.from({ length: n }, () => ({ x: 0, y: 0 }));
     }
-    const out = [];
-    for (let i = 0; i < n; i++) {
-      const p = pts[i % pts.length];
-      out.push({
-        x: p.x + rand(-cell * jitter, cell * jitter),
-        y: p.y + rand(-cell * jitter, cell * jitter),
-      });
+    const jx = cell * jitter;
+    if (n <= M) {
+      const out = [];
+      const step = Math.max(1, Math.floor(M / Math.max(n, 1)));
+      for (let i = 0; i < n; i++) {
+        const j = (i * step) % M;
+        const c = centers[j];
+        out.push({
+          x: c.x + rand(-jx, jx) * 0.35,
+          y: c.y + rand(-jx, jx) * 0.35,
+        });
+      }
+      return out;
     }
-    return out;
+    const out = [];
+    const base = Math.floor(n / M);
+    let extra = n % M;
+    for (let i = 0; i < M; i++) {
+      const ki = base + (extra > 0 ? 1 : 0);
+      if (extra > 0) extra--;
+      const c = centers[i];
+      for (let s = 0; s < ki; s++) {
+        const ang =
+          ki <= 1
+            ? 0
+            : (s / (ki - 1)) * TAU + i * 0.61 + c.x * 0.02;
+        const rad = ki <= 1 ? 0 : cell * 0.29 * Math.sqrt(s / (ki - 1));
+        out.push({
+          x: c.x + Math.cos(ang) * rad + rand(-jx, jx) * 0.4,
+          y: c.y + Math.sin(ang) * rad + rand(-jx, jx) * 0.4,
+        });
+      }
+    }
+    return out.slice(0, n);
   }
 
   /** 点阵行 → maskDraw，与 rowsToTargets 同一几何（cellRel = cell/s） */
@@ -881,7 +1020,7 @@
           if (row[x] === "1") {
             const px = cx + (x - w / 2 + 0.5) * cell;
             const py = cy + (y - h / 2 + 0.5) * cell;
-            const hw = cell * 0.42;
+            const hw = cell * 0.46;
             ctx.fillRect(px - hw, py - hw, hw * 2, hw * 2);
           }
         }
@@ -893,6 +1032,45 @@
     const dot = ".....1.....";
     const emp = "...........";
     return [dot, dot, emp, dot, dot, emp, emp];
+  }
+
+  function countTimerOnes(rows) {
+    let n = 0;
+    for (const row of rows || []) {
+      for (let i = 0; i < row.length; i++) {
+        if (row[i] === "1") n++;
+      }
+    }
+    return n;
+  }
+
+  function getLiveClockRows() {
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    const r1 = mergeDigitRows(digitPattern5x7(hh[0]), 1, digitPattern5x7(hh[1]));
+    const rMid = mergeDigitRows(r1, 1, colonRows());
+    return mergeDigitRows(
+      rMid,
+      1,
+      mergeDigitRows(digitPattern5x7(mm[0]), 1, digitPattern5x7(mm[1]))
+    );
+  }
+
+  function getLiveChronoRows() {
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    const ss = String(d.getSeconds()).padStart(2, "0");
+    const r1 = mergeDigitRows(digitPattern5x7(hh[0]), 1, digitPattern5x7(hh[1]));
+    const rMid = mergeDigitRows(r1, 1, colonRows());
+    const rowHM = mergeDigitRows(
+      rMid,
+      1,
+      mergeDigitRows(digitPattern5x7(mm[0]), 1, digitPattern5x7(mm[1]))
+    );
+    const rowSec = mergeDigitRows(digitPattern5x7(ss[0]), 1, digitPattern5x7(ss[1]));
+    return stackDigitRowBlocks(rowHM, rowSec, 2);
   }
 
   function countScriptSlotsFromLines(lines) {
@@ -1192,19 +1370,10 @@
     clock: {
       label: "计时",
       build(n, S) {
-        const d = new Date();
-        const hh = String(d.getHours()).padStart(2, "0");
-        const mm = String(d.getMinutes()).padStart(2, "0");
-        const r1 = mergeDigitRows(digitPattern5x7(hh[0]), 1, digitPattern5x7(hh[1]));
-        const rMid = mergeDigitRows(r1, 1, colonRows());
-        const rows = mergeDigitRows(
-          rMid,
-          1,
-          mergeDigitRows(digitPattern5x7(mm[0]), 1, digitPattern5x7(mm[1]))
-        );
-        const cellRel = 0.046;
+        const rows = getLiveClockRows();
+        const cellRel = 0.05;
         const cell = S * cellRel;
-        const targets = rowsToTargets(rows, cell, n, 0.026);
+        const targets = rowsToTargets(rows, cell, n, 0.05);
         return {
           targets,
           ordered: true,
@@ -1340,22 +1509,10 @@
     chrono: {
       label: "时分秒",
       build(n, S) {
-        const d = new Date();
-        const hh = String(d.getHours()).padStart(2, "0");
-        const mm = String(d.getMinutes()).padStart(2, "0");
-        const ss = String(d.getSeconds()).padStart(2, "0");
-        const r1 = mergeDigitRows(digitPattern5x7(hh[0]), 1, digitPattern5x7(hh[1]));
-        const rMid = mergeDigitRows(r1, 1, colonRows());
-        const rowHM = mergeDigitRows(
-          rMid,
-          1,
-          mergeDigitRows(digitPattern5x7(mm[0]), 1, digitPattern5x7(mm[1]))
-        );
-        const rowSec = mergeDigitRows(digitPattern5x7(ss[0]), 1, digitPattern5x7(ss[1]));
-        const rows = stackDigitRowBlocks(rowHM, rowSec, 2);
-        const cellRel = 0.036;
+        const rows = getLiveChronoRows();
+        const cellRel = 0.042;
         const cell = S * cellRel;
-        const targets = rowsToTargets(rows, cell, n, 0.024);
+        const targets = rowsToTargets(rows, cell, n, 0.045);
         return {
           targets,
           ordered: true,
@@ -1918,11 +2075,13 @@
         shellSample: true,
         noStroke: true,
         shellMax: 4,
-        spreadMin: Math.max(S * 0.056, gc * 1.08),
-        spreadPasses: 14,
-        jitterScale: 0.0025,
-        enforceSpacing: Math.max(S * 0.058, gc * 1.18),
-        enforceSpacingPasses: 16,
+        cap: 420,
+        spreadMin: Math.max(S * 0.051, gc * 1.02),
+        spreadPasses: 12,
+        jitterScale: 0.0022,
+        enforceSpacing: Math.max(S * 0.054, gc * 1.12),
+        enforceSpacingPasses: 14,
+        snapToShell: true,
       });
     }
     if (!FORMS[name]) return null;
@@ -2366,16 +2525,38 @@
         this.gridCell = clamp(Math.round(S * 0.052), 13, 26);
         this._resizeGlyphsForScript(this.scriptLines, { mode: "script" });
       } else if (name === "mega") {
-        this.gridCell = clamp(Math.round(S * 0.042), 13, 19);
+        this.gridCell = clamp(Math.round(S * 0.044), 14, 21);
       } else if (name === "clock") {
-        this.gridCell = clamp(Math.round(S * 0.046), 12, 20);
+        this.gridCell = clamp(Math.round(S * 0.05), 14, 24);
       } else if (name === "chrono") {
-        this.gridCell = clamp(Math.round(S * 0.036), 10, 16);
+        this.gridCell = clamp(Math.round(S * 0.042), 13, 22);
       } else {
         this.gridCell = clamp(Math.round(S * 0.03), 9, 14);
       }
       if (name === "mega") {
         const want = suggestMegaGlyphParticleCount(this._pickMacroDisplay(), S);
+        if (want !== this.glyphs.length) {
+          this.particleCount = want;
+          this._initGlyphs();
+        }
+      } else if (name === "clock") {
+        const on = countTimerOnes(getLiveClockRows());
+        const want = clamp(
+          Math.max(this.particleCount, Math.min(on * 3, on + 100)),
+          Math.min(on, 72),
+          340
+        );
+        if (want !== this.glyphs.length) {
+          this.particleCount = want;
+          this._initGlyphs();
+        }
+      } else if (name === "chrono") {
+        const on = countTimerOnes(getLiveChronoRows());
+        const want = clamp(
+          Math.max(this.particleCount, Math.min(on * 3, on + 120)),
+          Math.min(on, 80),
+          360
+        );
         if (want !== this.glyphs.length) {
           this.particleCount = want;
           this._initGlyphs();
@@ -4174,6 +4355,7 @@
               (this.dragging ? 1.15 : 1) *
               gms;
             if (crispMotion) {
+              const megaBoost = this.form === "mega" ? 1.42 : 1;
               const breath = Math.sin(t * 0.86);
               const sway = Math.cos(t * 0.63);
               const ang = g.tx * 0.012 + g.ty * 0.01;
@@ -4182,12 +4364,14 @@
                 (breath * Math.cos(ang) + sway * 0.34 * Math.sin(ang)) *
                 pAmp *
                 0.44 *
-                m;
+                m *
+                megaBoost;
               wy +=
                 (sway * Math.sin(ang) - breath * 0.34 * Math.cos(ang)) *
                 pAmp *
                 0.44 *
-                m;
+                m *
+                megaBoost;
             } else {
               const pAmpFull = pAmp * (g.patrolAmpMul || 1);
               const ph = g.patrolSeed || 0;
@@ -4202,11 +4386,18 @@
 
           if (waveAmpEff > 0.001 && !isMotionLayoutLockedForm(this.form)) {
             if (crispMotion) {
+              const megaBoost = this.form === "mega" ? 1.35 : 1;
               const ph = this._fluidPhase;
               wx +=
-                Math.sin(t * 0.95 + ph + g.tx * 0.008) * waveAmpEff * 0.24;
+                Math.sin(t * 0.95 + ph + g.tx * 0.008) *
+                waveAmpEff *
+                0.24 *
+                megaBoost;
               wy +=
-                Math.cos(t * 0.88 - ph * 0.65 + g.ty * 0.008) * waveAmpEff * 0.22;
+                Math.cos(t * 0.88 - ph * 0.65 + g.ty * 0.008) *
+                waveAmpEff *
+                0.22 *
+                megaBoost;
             } else {
               const nx = wx * 0.017 + this._fluidPhase;
               const ny = wy * 0.015 - this._fluidPhase * 0.75;
