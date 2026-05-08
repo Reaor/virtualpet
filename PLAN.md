@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.15.0** 起）。  
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.16.0** 起）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
@@ -193,6 +193,16 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 | 字数按形状面积规划 | **已完成** | `suggestMegaGlyphParticleCount`：`fill×scale²×(1−voidFrac)/cellArea`，并与壳带下限、`280` 上限 |
 | 内部华容道向空白 | **已完成** | `_tryMegaSlideIntoVoid` 优先内部字滑入邻空格；`tx/ty` 与格心同步 |
 | 边缘轻、内部动 | **已完成** | `_megaEdgeRing` / `_megaDeepInterior`：`wanderRad` 分层；互换/滑步加权；巨字 crisp 波略降 |
+
+---
+
+### 1.28 待机 vs 呈现 · 运动内核分层（3.16.0）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 待机态（曲线/抽象） | **保持** | `getMotionProfileKernels` → 全 1，行为与升级前一致 |
+| 呈现态（计时/巨字/颜文字轮廓） | **已完成** | `timeScale`/`ampScale`/`crispMicroScale`/游走/跟随/呼吸混合/华容道冷却 分层压低 |
+| 可观测 | **已完成** | `pet.motionProfile`；`ZiLing.getMotionProfileKernels`；「速」toast 标明显示态 |
 
 ---
 

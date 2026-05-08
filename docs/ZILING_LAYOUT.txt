@@ -7,7 +7,7 @@
   app.js           DOM、手势、侧栏、与 Pet 绑定；?dev=1 → showPlayfieldGuide；「速」→ glyphMotionSpeed
 
 引擎（单文件，体量仍大）
-  pet.js           Pet 类、形态 FORMS、物理与绘制；依赖 window.ZiLingPlayBounds
+  pet.js           Pet、双运动模态（motionProfile / getMotionProfileKernels）
 
 可拆出的小模块（按需再细分）
   js/ziling/play-bounds.js   画布内碰撞夹紧与反弹；pet 里 _playBounds / _applyPlayfieldBounds

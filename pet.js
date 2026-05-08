@@ -2108,6 +2108,51 @@
     return false;
   }
 
+  /**
+   * 运动模态：**呈现**（计时、巨字、颜文字轮廓）——低幅、低速，利于辨形；
+   * 其余形态为 **待机**（数学曲线、软团等），保持原有灵动幅度。
+   */
+  function isDisplayPresentationForm(form) {
+    if (!form) return false;
+    if (form === "clock" || form === "chrono" || form === "mega") return true;
+    if (String(form).startsWith("kao_")) return true;
+    return false;
+  }
+
+  /**
+   * 各子系统统一乘子（参考「LOD / 运动分层」思路：呈现态压时间与振幅，待机态为 1）。
+   */
+  function getMotionProfileKernels(form) {
+    if (isDisplayPresentationForm(form)) {
+      return {
+        id: "display",
+        timeScale: 0.4,
+        ampScale: 0.32,
+        wanderRadScale: 0.5,
+        wanderPickIntervalMul: 1.62,
+        anchorAmpScale: 0.44,
+        huarongCooldownMul: 2.35,
+        megaSlideCooldownMul: 2.75,
+        crispMicroScale: 0.45,
+        springFollowScale: 0.86,
+        breathMix: 0.5,
+      };
+    }
+    return {
+      id: "standby",
+      timeScale: 1,
+      ampScale: 1,
+      wanderRadScale: 1,
+      wanderPickIntervalMul: 1,
+      anchorAmpScale: 1,
+      huarongCooldownMul: 1,
+      megaSlideCooldownMul: 1,
+      crispMicroScale: 1,
+      springFollowScale: 1,
+      breathMix: 1,
+    };
+  }
+
   function buildFormLayoutData(self, name, n, S) {
     if (name === "script" && self.scriptLines && self.scriptLines.length) {
       const b = buildScriptLayout(self.scriptLines, n, S);
@@ -2411,6 +2456,8 @@
       this._huarongNextAt = 0;
       this._megaSlideNextAt = 0;
       this._lastWallFxAt = 0;
+      /** 运动模态：standby | display（由当前形态推导，见 getMotionProfileKernels） */
+      this.motionProfile = "standby";
 
       /** 拖拽：每字滞后锚点（有序中的乱） */
       this.dragLagEnabled = opts.dragLag !== false;
@@ -2622,6 +2669,7 @@
       const data = buildFormLayoutData(this, name, this.particleCount, S);
       if (!data || !data.targets || !data.targets.length) return;
       this.form = name;
+      this.motionProfile = getMotionProfileKernels(name).id;
       this.formStartTime = performance.now();
       if (name === "clock") {
         const d = new Date();
@@ -2824,7 +2872,8 @@
       const wyb = by + (txl * sin + tyl * cos);
       const anchorGx = Math.round(wxb / cell);
       const anchorGy = Math.round(wyb / cell);
-      const rad = g.wanderRad || 14;
+      const mkW = getMotionProfileKernels(this.form);
+      const rad = (g.wanderRad || 14) * mkW.wanderRadScale;
       const maxK =
         this.form === "mega" && g._megaDeepInterior
           ? 62
@@ -2946,7 +2995,9 @@
         0.25,
         2.5
       );
-      this._huarongNextAt = now + (260 + Math.random() * 320) / gmsH;
+      const mkH = getMotionProfileKernels(this.form);
+      this._huarongNextAt =
+        now + ((260 + Math.random() * 320) * mkH.huarongCooldownMul) / gmsH;
 
       const bx = this.pos.x;
       const by = this.pos.y;
@@ -3083,7 +3134,9 @@
         0.25,
         2.5
       );
-      this._megaSlideNextAt = now + (95 + Math.random() * 115) / gmsH;
+      const mkS = getMotionProfileKernels(this.form);
+      this._megaSlideNextAt =
+        now + ((95 + Math.random() * 115) * mkS.megaSlideCooldownMul) / gmsH;
 
       const bx = this.pos.x;
       const by = this.pos.y;
@@ -4282,7 +4335,12 @@
 
     _update(dt, now) {
       const t = now / 1000;
-      const gms = clamp(this.glyphMotionSpeed != null ? this.glyphMotionSpeed : 1, 0.25, 2.5);
+      const gms0 = clamp(
+        this.glyphMotionSpeed != null ? this.glyphMotionSpeed : 1,
+        0.25,
+        2.5
+      );
+      const mk = getMotionProfileKernels(this.form);
       this.breath = isMotionLayoutLockedForm(this.form)
         ? 1
         : Math.sin(t * 1.05) * 0.032 + 1;
@@ -4290,7 +4348,7 @@
       if (this.viewMode === "intro") {
         const capR = Math.min(this.width, this.height) * 0.22;
         for (const r of this.ripples) {
-          r.r += 55 * dt * gms;
+          r.r += 55 * dt * gms0;
           r.alpha -= 1.5 * dt;
           if (r.r > capR) r.alpha -= 2.2 * dt;
         }
@@ -4299,6 +4357,8 @@
         );
         return;
       }
+
+      const gms = gms0 * mk.timeScale;
 
       if (this.viewMode !== "intro") {
         this.ripples.length = 0;
@@ -4333,8 +4393,8 @@
       } else if (!this.dragging) {
         if (this.mode === "idle" && this.viewMode === "pet") {
           if (isMotionLayoutLockedForm(this.form)) {
-            this.idleAngle += dt * 0.12;
-            const s = 0.055;
+            this.idleAngle += dt * 0.12 * mk.anchorAmpScale;
+            const s = 0.055 * mk.anchorAmpScale;
             this.anchor.x =
               this.center.x +
               Math.sin(this.idleAngle * 0.42) * this.width * s;
@@ -4342,15 +4402,16 @@
               this.center.y +
               Math.cos(this.idleAngle * 0.38) * this.height * s * 0.92;
           } else {
-            this.idleAngle += dt * 0.35 * gms;
+            this.idleAngle += dt * 0.35 * gms * mk.anchorAmpScale;
+            const aM = mk.anchorAmpScale;
             const ax =
               this.center.x +
-              Math.sin(this.idleAngle * 0.7) * this.width * 0.3 +
-              Math.sin(this.idleAngle * 1.3 + 1.1) * this.width * 0.12;
+              Math.sin(this.idleAngle * 0.7) * this.width * 0.3 * aM +
+              Math.sin(this.idleAngle * 1.3 + 1.1) * this.width * 0.12 * aM;
             const ay =
               this.center.y +
-              Math.cos(this.idleAngle * 0.6) * this.height * 0.22 +
-              Math.sin(this.idleAngle * 1.1) * this.height * 0.11;
+              Math.cos(this.idleAngle * 0.6) * this.height * 0.22 * aM +
+              Math.sin(this.idleAngle * 1.1) * this.height * 0.11 * aM;
             this.anchor.x = ax;
             this.anchor.y = ay;
           }
@@ -4377,7 +4438,8 @@
       }
       if (!this.dragging) {
         const layoutLocked = isMotionLayoutLockedForm(this.form);
-        const gmsVel = layoutLocked ? 1 : 0.82 + 0.26 * gms;
+        const gmsVel =
+          (layoutLocked ? 1 : 0.82 + 0.26 * gms) * mk.springFollowScale;
         const k = (this.mode === "feeding" ? 14 : layoutLocked ? 2.85 : 3.5) * gmsVel;
         const damp = (this.mode === "feeding" ? 4 : layoutLocked ? 2.75 : 2.2) / gmsVel;
         const ax = (this.anchor.x - this.pos.x) * k - this.vel.x * damp;
@@ -4426,7 +4488,9 @@
         ? 0
         : clamp(this.vel.x * 0.0005, -0.2, 0.2);
       this.rotation = lerp(this.rotation, this.targetRotation, 0.1);
-      const breathUse = isMotionLayoutLockedForm(this.form) ? 1 : this.breath;
+      const breathUse = isMotionLayoutLockedForm(this.form)
+        ? 1
+        : lerp(1, this.breath, mk.breathMix);
       this.scale = lerp(this.scale, this.targetScale * breathUse, 0.15);
 
       this.annoyance = Math.max(0, this.annoyance - 0.22 * dt);
@@ -4459,11 +4523,13 @@
         this.form !== "script"
       ) {
         if (t >= this._nextWanderPick) {
-          this._nextWanderPick = t + rand(0.28, 0.82) / gms;
+          this._nextWanderPick =
+            t + (rand(0.28, 0.82) * mk.wanderPickIntervalMul) / gms;
           for (const g of this.glyphs) {
             if (g.faceRole || isMotionLayoutLockedForm(this.form)) continue;
             if (t >= g.wanderNextAt) {
-              g.wanderNextAt = t + rand(0.5, 1.75) / gms;
+              g.wanderNextAt =
+                t + (rand(0.5, 1.75) * mk.wanderPickIntervalMul) / gms;
               this._pickWanderDelta(g, bx, by, cos, sin, flip);
             }
           }
@@ -4514,7 +4580,7 @@
 
       const cell = this.gridCell;
       const rumble = (this._rumbleAmp || 0) * cell * 0.08;
-      const waveAmp = (this.fluidStrength || 0) * cell * 0.09;
+      const waveAmp = (this.fluidStrength || 0) * cell * 0.09 * mk.ampScale;
       const maskFluidMul =
         this._maskPack && this._maskPack.grid ? 0.16 : 1;
       const waveAmpEff = waveAmp * maskFluidMul * gms;
@@ -4564,9 +4630,11 @@
               0.072 *
               (this._patrolAmp || 1) *
               (this.dragging ? 1.15 : 1) *
-              gms;
+              gms *
+              mk.ampScale;
             if (crispMotion) {
-              const megaBoost = this.form === "mega" ? 1.08 : 1;
+              const dispScale =
+                (this.form === "mega" ? 1.08 : 1) * mk.crispMicroScale;
               const breath = Math.sin(t * 0.86);
               const sway = Math.cos(t * 0.63);
               const ang = g.tx * 0.012 + g.ty * 0.01;
@@ -4576,13 +4644,13 @@
                 pAmp *
                 0.44 *
                 m *
-                megaBoost;
+                dispScale;
               wy +=
                 (sway * Math.sin(ang) - breath * 0.34 * Math.cos(ang)) *
                 pAmp *
                 0.44 *
                 m *
-                megaBoost;
+                dispScale;
             } else {
               const pAmpFull = pAmp * (g.patrolAmpMul || 1);
               const ph = g.patrolSeed || 0;
@@ -4597,18 +4665,19 @@
 
           if (waveAmpEff > 0.001 && !isMotionLayoutLockedForm(this.form)) {
             if (crispMotion) {
-              const megaBoost = this.form === "mega" ? 1.03 : 1;
+              const dispScale =
+                (this.form === "mega" ? 1.03 : 1) * mk.crispMicroScale;
               const ph = this._fluidPhase;
               wx +=
                 Math.sin(t * 0.95 + ph + g.tx * 0.008) *
                 waveAmpEff *
                 0.24 *
-                megaBoost;
+                dispScale;
               wy +=
                 Math.cos(t * 0.88 - ph * 0.65 + g.ty * 0.008) *
                 waveAmpEff *
                 0.22 *
-                megaBoost;
+                dispScale;
             } else {
               const nx = wx * 0.017 + this._fluidPhase;
               const ny = wy * 0.015 - this._fluidPhase * 0.75;
@@ -4686,7 +4755,7 @@
         }
       } else {
         const fMul = (this.fluidStrength || 0) * 0.001 + 1;
-        const gmsSpring = 0.88 + 0.22 * gms;
+        const gmsSpring = (0.88 + 0.22 * gms) * mk.springFollowScale;
         const springK =
           (this.mode === "feeding" ? 52 : 24) *
           fMul *
@@ -4696,7 +4765,7 @@
           (this.mode === "feeding" ? 6.2 : 4.8) *
           (1 + (this._layoutSettle || 0) * 0.3);
         const rumble2 = (this._rumbleAmp || 0) * cell * 0.1;
-        const waveAmp2 = (this.fluidStrength || 0) * cell * 0.11;
+        const waveAmp2 = (this.fluidStrength || 0) * cell * 0.11 * mk.ampScale;
         const waveAmp2Eff = waveAmp2 * maskFluidMul * gms;
 
         this._fluidPhase += dt * 0.52 * gms;
@@ -5337,5 +5406,7 @@
     CHAR_DIGEST_HINT,
     CHAR_FORM_BIAS,
     classifyScheduleLine,
+    isDisplayPresentationForm,
+    getMotionProfileKernels,
   };
 })();

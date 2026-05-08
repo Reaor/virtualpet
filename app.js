@@ -536,8 +536,10 @@
         toast(gl[pet.glowMode | 0] || "浮光");
       } else if (action === "speed") {
         const v = pet.cycleGlyphMotionSpeed();
+        const profLabel =
+          pet.motionProfile === "display" ? "呈现态" : "待机态";
         toast(
-          `运动速度 ×${v.toFixed(2)}（格移、游走、流体、巡逻与华容道交换）`
+          `运动速度 ×${v.toFixed(2)}（当前「${profLabel}」内；格移/游走/流体/华容道）`
         );
       } else if (action === "shake") {
         pet.shake();
