@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.20.0** 起）。  
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.21.0** 起）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
@@ -193,6 +193,17 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 | 字数按形状面积规划 | **已完成** | `suggestMegaGlyphParticleCount`：`fill×scale²×(1−voidFrac)/cellArea`，**传入实际 gridCell**；壳带下限；**250** 上限；**megaParticleMul** 按层调节 |
 | 内部华容道向空白 | **已完成** | `_tryMegaSlideIntoVoid` 优先内部字滑入邻空格；`tx/ty` 与格心同步 |
 | 边缘轻、内部动 | **已完成** | `_megaEdgeRing` / `_megaDeepInterior`：`wanderRad` 分层；互换/滑步加权；巨字 crisp 波略降 |
+
+---
+
+### 1.31 剪影格吸附 · 待机巨字/颜文字和谐对齐（3.21.0）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| march 目标格不出 mask | **已完成** | `_nearestWalkableMarchCell`：最近可走格螺旋搜索 |
+| 待机层关游走 + 同相位体内波 | **已完成** | `isMaskBackedMegaKao`：剪影下跳过格子游走；`presSilHarm` 与 `silMaskPet` 均走 ensemble 体内波支 |
+| 淡出/补步/重生兜底到待机 | **已完成** | `silMaskPet` 跑 inpull + lifecycle；重生 `_randomChar()` 仅 `isPresentationSilhouetteHarm` |
+| 交互与流体收紧 | **已完成** | `scatterTapBurst` / `_wallShatter` / `flash` / 流体 / `rumble` 按 mask 剪影分级 |
 
 ---
 

@@ -2122,13 +2122,17 @@
     return false;
   }
 
-  /** 呈现层 + 有 mask 的剪影类（巨字 / 颜文字）：和谐场 + 淡出补位 */
+  /** 有 mask 栅格的巨字 / 颜文字剪影（待机与呈现共用几何约束） */
+  function isMaskBackedMegaKao(self) {
+    if (!self || self.viewMode !== "pet") return false;
+    if (!self._maskPack || !self._maskPack.grid) return false;
+    const f = self.form;
+    return f === "mega" || String(f || "").startsWith("kao_");
+  }
+
+  /** 呈现层 + 剪影 mask：和谐场 + 淡出补位（比 isMaskBackedMegaKao 多一层 UI 模式） */
   function isPresentationSilhouetteHarm(self) {
-    return (
-      self.uiArcMode === "presentation" &&
-      self.viewMode === "pet" &&
-      (self.form === "mega" || String(self.form || "").startsWith("kao_"))
-    );
+    return self.uiArcMode === "presentation" && isMaskBackedMegaKao(self);
   }
 
   /** 侧栏「待机」模式：体内运动保持全倍率（与 3.15 前一致）。 */
@@ -2944,6 +2948,10 @@
       const bx = this.pos.x;
       const by = this.pos.y;
       const nowSec = performance.now() / 1000;
+      const silMk =
+        this.viewMode === "pet" &&
+        !!data.maskDraw &&
+        (name === "mega" || String(name).startsWith("kao_"));
       for (let i = 0; i < this.glyphs.length; i++) {
         const g = this.glyphs[i];
         g.wgx = 0;
@@ -2951,8 +2959,11 @@
         g.wtgx = 0;
         g.wtgy = 0;
         const ph = (g.patrolSeed || 0) * 13.7 + i * 1.73;
-        g.lagK = 0.86 + (Math.sin(ph * 1.1) * 0.5 + 0.5) * 0.2;
-        if (g.faceRole) g.lagK *= 0.52;
+        const lagBase =
+          silMk && !g.faceRole
+            ? 0.9 + (Math.sin(ph * 1.1) * 0.5 + 0.5) * 0.1
+            : 0.86 + (Math.sin(ph * 1.1) * 0.5 + 0.5) * 0.2;
+        g.lagK = g.faceRole ? lagBase * 0.52 : lagBase;
         g.lagX = bx;
         g.lagY = by;
         g.lagVx = 0;
@@ -2988,21 +2999,26 @@
         g._anchorGx = Math.round(wx / cell);
         g._anchorGy = Math.round(wy / cell);
       }
+      if (silMk) {
+        for (const g of this.glyphs) {
+          if (g.faceRole) continue;
+          g.patrolAmpMul = 1;
+          g._megaOutsideAcc = 0;
+        }
+      }
       if (
         (name === "mega" || String(name).startsWith("kao_")) &&
         this.uiArcMode === "presentation"
       ) {
         for (const g of this.glyphs) {
           if (g.faceRole) continue;
-          g.patrolAmpMul = 1;
           g.alpha = 0.94;
           g._megaBaseAlpha = g.alpha;
-          g._megaOutsideAcc = 0;
         }
       }
       this._nextWanderPick = nowSec + 0.35;
 
-      if (!isPresentationSilhouetteHarm(this)) {
+      if (!isMaskBackedMegaKao(this)) {
         this._silhouetteVacancyPulls.length = 0;
       }
       if (typeof this.onFormChange === "function" && !noEmitOnFormChange) {
@@ -3067,6 +3083,30 @@
       const tyl = -rdx * sin + rdy * cos;
       const lx = txl / flip;
       return maskLocalWalkable(this._maskPack, lx, tyl, flip);
+    }
+
+    /**
+     * 谐波/流体把 wx/wy 推到 mask 外时，将本帧 march 目标格吸附到最近可走格，
+     * 避免小字长期占格在剪影外（辨形优先）；仍保留呈现层淡出重生作兜底。
+     */
+    _nearestWalkableMarchCell(gx, gy, bx, by, cos, sin, flip) {
+      if (!this._maskPack || !this._maskPack.grid) return { gx, gy };
+      if (this._worldCellWalkable(gx, gy, bx, by, cos, sin, flip))
+        return { gx, gy };
+      const mega = this.form === "mega";
+      const maxR = mega ? 96 : 58;
+      for (let r = 1; r <= maxR; r++) {
+        for (let dx = -r; dx <= r; dx++) {
+          for (let dy = -r; dy <= r; dy++) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+            const nx = gx + dx;
+            const ny = gy + dy;
+            if (this._worldCellWalkable(nx, ny, bx, by, cos, sin, flip))
+              return { gx: nx, gy: ny };
+          }
+        }
+      }
+      return { gx, gy };
     }
 
     _pickWanderDelta(g, bx, by, cos, sin, flip) {
@@ -3543,7 +3583,9 @@
             }
           }
           this._respawnMegaGlyphNearShell(g, bx, by, cos, sin, flip);
-          g.char = this._randomChar();
+          if (isPresentationSilhouetteHarm(this)) {
+            g.char = this._randomChar();
+          }
           g.alpha = g._megaBaseAlpha;
           g._megaOutsideAcc = 0;
           g.wgx = 0;
@@ -4151,8 +4193,12 @@
     /** 轻点：所有形态下小字沿格目标方向短暂散开（华容道位移的可见反馈） */
     scatterTapBurst() {
       const cell = this.gridCell || 12;
-      const megaCalm = isPresentationSilhouetteHarm(this);
-      const damp = megaCalm ? 0.18 : 1;
+      const megaCalm = isMaskBackedMegaKao(this);
+      const damp = megaCalm
+        ? isPresentationSilhouetteHarm(this)
+          ? 0.18
+          : 0.36
+        : 1;
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
         const a = Math.random() * Math.PI * 2;
@@ -4578,7 +4624,7 @@
     }
 
     _wallShatter(nx, ny) {
-      if (isPresentationSilhouetteHarm(this)) {
+      if (isMaskBackedMegaKao(this)) {
         this._rumbleAmp = Math.min(0.18, (this._rumbleAmp || 0) + 0.06);
         return;
       }
@@ -4890,6 +4936,7 @@
       const flip = 1;
       const cos = Math.cos(rot);
       const sin = Math.sin(rot);
+      const silMaskPet = isMaskBackedMegaKao(this);
 
       if (
         this.gridMarch &&
@@ -4898,7 +4945,8 @@
         this.viewMode === "pet" &&
         this.pathMode !== "none" &&
         this.form !== "script" &&
-        !presSilHarm
+        !presSilHarm &&
+        !silMaskPet
       ) {
         if (t >= this._nextWanderPick) {
           this._nextWanderPick =
@@ -4957,21 +5005,24 @@
           : null;
 
       const cell = this.gridCell;
-      const rumble = presSilHarm
-        ? 0
-        : (this._rumbleAmp || 0) * cell * 0.08;
+      const rumble =
+        presSilHarm || silMaskPet ? 0 : (this._rumbleAmp || 0) * cell * 0.08;
       const waveAmp = (this.fluidStrength || 0) * cell * 0.09 * mk.ampScale;
       const maskFluidMul =
         this._maskPack && this._maskPack.grid ? 0.16 : 1;
       const waveAmpEff =
-        waveAmp * maskFluidMul * gms * (presSilHarm ? 0.1 : 1);
-      this._fluidPhase += dt * (presSilHarm ? 0.09 : 0.48) * gms;
+        waveAmp *
+        maskFluidMul *
+        gms *
+        (presSilHarm || silMaskPet ? 0.1 : 1);
+      this._fluidPhase +=
+        dt * (presSilHarm || silMaskPet ? 0.09 : 0.48) * gms;
 
       if (this.gridMarch && this.gridSnapping) {
         const stepBudget = Math.max(
           1,
           Math.min(
-            presSilHarm ? 3 : 6,
+            presSilHarm || silMaskPet ? 3 : 6,
             Math.round((this.gridMarchSpeed || 2) * gms * dt * 6)
           )
         );
@@ -4999,7 +5050,8 @@
             this.viewMode === "pet" &&
             this.pathMode !== "none" &&
             !isMotionLayoutLockedForm(this.form) &&
-            !presSilHarm
+            !presSilHarm &&
+            !silMaskPet
           ) {
             wx += (g.wgx || 0) * cell;
             wy += (g.wgy || 0) * cell;
@@ -5017,10 +5069,11 @@
               (this.dragging ? 1.15 : 1) *
               gms *
               mk.ampScale;
-            if (presSilHarm) {
+            if (presSilHarm || silMaskPet) {
               const phase = this._ensemblePhase * 0.58 + t * 0.06 * gms;
               const spat = g.tx * 0.013 + g.ty * 0.0105;
-              const uAmp = pAmpBase * mk.crispMicroScale * 0.58;
+              const tight = presSilHarm ? 1 : 1.12;
+              const uAmp = pAmpBase * mk.crispMicroScale * 0.58 * tight;
               wx += Math.sin(phase + spat * 1.72) * uAmp;
               wy +=
                 Math.cos(phase * 0.93 + spat * 1.72 + 0.62) * uAmp * 0.86;
@@ -5086,7 +5139,7 @@
           if (g._tapScatterT > 0) {
             const t0 = g._tapScatterT0 || 0.38;
             const f = clamp(g._tapScatterT / t0, 0, 1);
-            const sc = presSilHarm ? 0.2 : 1;
+            const sc = presSilHarm ? 0.2 : silMaskPet ? 0.42 : 1;
             wx += (g._tapScatterOX || 0) * f * sc;
             wy += (g._tapScatterOY || 0) * f * sc;
             g._tapScatterT -= dt;
@@ -5100,6 +5153,20 @@
           } else {
             tgx = Math.round(wx / cell);
             tgy = Math.round(wy / cell);
+          }
+
+          if (silMaskPet && !mT) {
+            const sn = this._nearestWalkableMarchCell(
+              tgx,
+              tgy,
+              bx,
+              by,
+              cos,
+              sin,
+              flip
+            );
+            tgx = sn.gx;
+            tgy = sn.gy;
           }
 
           let s = stepBudget;
@@ -5134,7 +5201,7 @@
           this._tryHuarongAdjacentSwaps(now);
           this._tryMegaSlideIntoVoid(now);
         }
-        if (presSilHarm) {
+        if (silMaskPet) {
           this._stepSilhouetteVacancyInpull(t, gms, bx, by, cos, sin, flip);
           this._updatePresentationSilhouetteGlyphLifecycle(
             dt,
@@ -5389,7 +5456,7 @@
           ctx.textRendering = "geometricPrecision";
         }
       } catch (_) {}
-      const flash = isPresentationSilhouetteHarm(this)
+      const flash = isMaskBackedMegaKao(this)
         ? (this._glyphFlash || 0) * 0.22
         : this._glyphFlash || 0;
 
@@ -5945,6 +6012,7 @@
     classifyScheduleLine,
     isDisplayPresentationForm,
     isPresentationSilhouetteHarm,
+    isMaskBackedMegaKao,
     getMotionProfileKernels,
     getMotionProfileKernelsForPet,
     getFormOrderForUiArcMode,
