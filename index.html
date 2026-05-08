@@ -4,17 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.16.0" />
+  <meta name="ziling-build" content="3.17.0" />
   <title>字灵 · 开发者页控制台</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.16.0" />
+  <link rel="stylesheet" href="./styles.css?v=3.17.0" />
 </head>
 <body>
-  <div class="app">
+  <div class="app" data-ui-arc="standby">
     <header class="app-bar">
       <div class="seal">字</div>
       <div class="title-group">
@@ -28,7 +28,8 @@
     <div class="playfield" id="playfield">
       <aside class="rail rail-left" aria-label="互动与换形">
         <nav class="rail-tools" role="toolbar" aria-label="互动">
-          <button type="button" class="rail-tool" data-action="morph" title="换形">变</button>
+          <button type="button" class="rail-tool" data-action="arcMode" title="待机/呈现层级">层</button>
+          <button type="button" class="rail-tool" data-action="morph" title="换形（仅当前层级内）">变</button>
           <button type="button" class="rail-tool" data-action="feed" title="觅食">觅</button>
           <button type="button" class="rail-tool" data-action="ink" title="躯体墨色渐变">墨</button>
           <button type="button" class="rail-tool" data-action="tint" title="字体颜色">颜</button>
@@ -39,19 +40,19 @@
         </nav>
         <div class="rail-divider" role="presentation"></div>
         <div class="rail-groups" id="railGroups" aria-label="形态分类">
-          <details class="rail-group" open>
+          <details class="rail-group ui-arc-standby-only" open>
             <summary>待机状态</summary>
             <p class="rail-group-hint">① 起为软团；数字序悬停看全名 · 李萨如/蔷薇/旋轮/经典闭曲线等</p>
             <div class="rail-group-btns rail-standby-scroll" id="railStandbyBtns"></div>
           </details>
-          <details class="rail-group">
+          <details class="rail-group ui-arc-present-only">
             <summary>计时</summary>
             <div class="rail-group-btns">
               <button type="button" class="rail-form compact" data-form="clock" title="时分">钟</button>
               <button type="button" class="rail-form compact" data-form="chrono" title="时分秒">秒</button>
             </div>
           </details>
-          <details class="rail-group">
+          <details class="rail-group ui-arc-present-only">
             <summary>颜文字</summary>
             <div class="rail-group-btns">
               <button type="button" class="rail-form compact" data-form="kao_joy" title="颜·喜">喜</button>
@@ -72,7 +73,7 @@
         <div class="stage-main" id="stageMain" aria-hidden="false">
           <canvas id="petCanvas" aria-label="字灵画布"></canvas>
           <div class="form-label" id="formLabel">软团</div>
-            <div class="hint" id="hint">按住字灵约0.6秒出现「松手还原文稿」后松手即还原；超过约8px移动为拖动 · 侧栏「回」也可还原 · 快连点闪光 · 三连击觅食 · 调试可加 <code>?dev=1</code> 显示活动区虚线框</div>
+            <div class="hint" id="hint">按住字灵约0.6秒出现「松手还原文稿」后松手即还原；超过约8px移动为拖动 · 侧栏「层」切换待机/呈现（形态与色速参数分套） · 侧栏「回」也可还原 · 快连点闪光 · 三连击觅食 · 调试可加 <code>?dev=1</code> 显示活动区虚线框 · <code>?uiArc=presentation</code> 默认呈现层</div>
         </div>
       </section>
 
@@ -96,7 +97,7 @@
       </div>
     </section>
 
-    <section class="import-row glyph-shape-row" aria-label="化身大字与数字">
+    <section class="import-row glyph-shape-row ui-arc-present-only" aria-label="化身大字与数字">
       <input
         type="text"
         id="glyphShapeInput"
@@ -201,8 +202,8 @@
     </div>
   </div>
 
-  <script src="./js/ziling/play-bounds.js?v=3.16.0"></script>
-  <script src="./pet.js?v=3.16.0"></script>
-  <script src="./app.js?v=3.16.0"></script>
+  <script src="./js/ziling/play-bounds.js?v=3.17.0"></script>
+  <script src="./pet.js?v=3.17.0"></script>
+  <script src="./app.js?v=3.17.0"></script>
 </body>
 </html>
