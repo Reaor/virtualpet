@@ -311,17 +311,9 @@
     }
   }
 
-  /**
-   * 距空白最近的笔画环带采样：保留字心留白，避免巨字被「实心糊满」。
-   * shellMax：笔画内距边界的像素深度（1≈仅轮廓，3~4≈薄墨壳层）。
-   * outMeta：若传入对象，写入 pxFlat / scale / sampleS / w / h 供 snap 复用。
-   */
-  function sampleSilhouetteShell(drawFn, S, count, sampleOpts, outMeta) {
-    const so = sampleOpts || {};
-    const cap = so.cap != null ? so.cap : 336;
-    const shellMax = clamp(so.shellMax != null ? so.shellMax : 4, 1, 8);
-    const jitterScale = so.jitterScale != null ? so.jitterScale : 0.01;
-    const sampleS = Math.min(Math.round(S), cap);
+  /** 将 drawFn 栅格化为二值 ink（alpha>128） */
+  function rasterizeDrawToGrid(drawFn, S, cap) {
+    const sampleS = Math.min(Math.round(S), cap || 400);
     const scale = sampleS / S;
     const c = document.createElement("canvas");
     c.width = sampleS;
@@ -339,24 +331,88 @@
     for (let i = 0, p = 0; i < w * h; i++, p += 4) {
       grid[i] = img[p + 3] > 128 ? 1 : 0;
     }
+    return { grid, w, h, scale, sampleS };
+  }
+
+  /** 与画布边缘连通的「外部白」，不含封闭字腔内的白 */
+  function floodExteriorWhiteGrid(grid, w, h) {
+    const ext = new Uint8Array(w * h);
+    const q = [];
+    const seed = (i) => {
+      if (!grid[i] && !ext[i]) {
+        ext[i] = 1;
+        q.push(i);
+      }
+    };
+    for (let x = 0; x < w; x++) {
+      seed(x);
+      seed((h - 1) * w + x);
+    }
+    for (let y = 0; y < h; y++) {
+      seed(y * w);
+      seed(y * w + (w - 1));
+    }
+    let qi = 0;
+    while (qi < q.length) {
+      const i = q[qi++];
+      const x = i % w;
+      const y = (i / w) | 0;
+      const pushIf = (ni, ok) => {
+        if (!ok) return;
+        if (!grid[ni] && !ext[ni]) {
+          ext[ni] = 1;
+          q.push(ni);
+        }
+      };
+      pushIf(i - 1, x > 0);
+      pushIf(i + 1, x + 1 < w);
+      pushIf(i - w, y > 0);
+      pushIf(i + w, y + 1 < h);
+    }
+    return ext;
+  }
+
+  /** ink 四邻是否有「内部白」（字谷），用于去掉贴腔笔画上的采样点 */
+  function inkAdjacentInteriorHole(i, grid, extWhite, w, h) {
+    const x = i % w;
+    const y = (i / w) | 0;
+    if (x > 0) {
+      const ni = i - 1;
+      if (!grid[ni] && !extWhite[ni]) return true;
+    }
+    if (x + 1 < w) {
+      const ni = i + 1;
+      if (!grid[ni] && !extWhite[ni]) return true;
+    }
+    if (y > 0) {
+      const ni = i - w;
+      if (!grid[ni] && !extWhite[ni]) return true;
+    }
+    if (y + 1 < h) {
+      const ni = i + w;
+      if (!grid[ni] && !extWhite[ni]) return true;
+    }
+    return false;
+  }
+
+  /** 仅从外部白向内 BFS，得到 ink 到「画布外背景」的曼哈顿深度（字腔内白不参与播种） */
+  function distanceInkFromExterior(grid, w, h, extWhite, shellMax) {
+    const sm = shellMax;
     const INF = 30000;
     const dist = new Int16Array(w * h);
     dist.fill(INF);
     const q = [];
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const i = y * w + x;
-        if (!grid[i]) {
-          dist[i] = 0;
-          q.push(i);
-        }
+    for (let i = 0; i < w * h; i++) {
+      if (!grid[i] && extWhite[i]) {
+        dist[i] = 0;
+        q.push(i);
       }
     }
     let qi = 0;
     while (qi < q.length) {
       const i = q[qi++];
       const d = dist[i];
-      if (d >= shellMax) continue;
+      if (d >= sm) continue;
       const x = i % w;
       const y = (i / w) | 0;
       const nd = d + 1;
@@ -389,15 +445,78 @@
         }
       }
     }
+    return dist;
+  }
+
+  function flattenOuterShellPx(
+    grid,
+    dist,
+    w,
+    h,
+    shellMax,
+    extWhite,
+    excludeHoleAdjacent
+  ) {
+    const sm = shellMax;
     const px = [];
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const i = y * w + x;
         if (!grid[i]) continue;
         const dd = dist[i];
-        if (dd >= 1 && dd <= shellMax) px.push(x, y);
+        if (dd < 1 || dd > sm) continue;
+        if (
+          excludeHoleAdjacent &&
+          inkAdjacentInteriorHole(i, grid, extWhite, w, h)
+        ) {
+          continue;
+        }
+        px.push(x, y);
       }
     }
+    return px;
+  }
+
+  /**
+   * 外轮廓壳层像素（仅连通画布背景的白参与距离场；可选去掉紧贴字腔的 ink）。
+   */
+  function collectOuterShellBandFlat(drawFn, S, cap, shellMax, excludeHoleAdjacent) {
+    const sm = clamp(shellMax != null ? shellMax : 3, 1, 8);
+    const { grid, w, h, scale, sampleS } = rasterizeDrawToGrid(drawFn, S, cap);
+    const extWhite = floodExteriorWhiteGrid(grid, w, h);
+    const dist = distanceInkFromExterior(grid, w, h, extWhite, sm);
+    let px = flattenOuterShellPx(
+      grid,
+      dist,
+      w,
+      h,
+      sm,
+      extWhite,
+      excludeHoleAdjacent
+    );
+    if (excludeHoleAdjacent && px.length < 28) {
+      px = flattenOuterShellPx(grid, dist, w, h, sm, extWhite, false);
+    }
+    return { pxFlat: px, w, h, scale, sampleS, grid, extWhite, dist };
+  }
+
+  /**
+   * 距空白最近的笔画环带采样：保留字心留白，避免巨字被「实心糊满」。
+   * shellMax：笔画内距边界的像素深度（1≈仅轮廓，3~4≈薄墨壳层）。
+   * outMeta：若传入对象，写入 pxFlat / scale / sampleS / w / h 供 snap 复用。
+   */
+  function sampleSilhouetteShell(drawFn, S, count, sampleOpts, outMeta) {
+    const so = sampleOpts || {};
+    const cap = so.cap != null ? so.cap : 336;
+    const shellMax = clamp(so.shellMax != null ? so.shellMax : 3, 1, 8);
+    const jitterScale = so.jitterScale != null ? so.jitterScale : 0.01;
+    const excludeHole = so.excludeInteriorCounters !== false;
+    const pack = collectOuterShellBandFlat(drawFn, S, cap, shellMax, excludeHole);
+    const px = pack.pxFlat;
+    const w = pack.w;
+    const h = pack.h;
+    const scale = pack.scale;
+    const sampleS = pack.sampleS;
     const total = px.length / 2;
     if (outMeta && typeof outMeta === "object") {
       outMeta.pxFlat = px;
@@ -508,84 +627,11 @@
     return n;
   }
 
-  /** 统计笔画壳层像素数（与 sampleSilhouetteShell 同口径） */
+  /** 统计笔画壳层像素数（与巨字外轮廓壳采样同口径：外部背景距离场 + 可选去字腔环） */
   function countSilhouetteBandPixels(drawFn, S, cap, shellMax) {
-    const sm = clamp(shellMax != null ? shellMax : 4, 1, 8);
-    const sampleS = Math.min(Math.round(S), cap || 336);
-    const scale = sampleS / S;
-    const c = document.createElement("canvas");
-    c.width = sampleS;
-    c.height = sampleS;
-    const ctx = c.getContext("2d", { willReadFrequently: true });
-    ctx.clearRect(0, 0, sampleS, sampleS);
-    ctx.save();
-    ctx.scale(scale, scale);
-    drawFn(ctx, S);
-    ctx.restore();
-    const img = ctx.getImageData(0, 0, sampleS, sampleS).data;
-    const w = sampleS;
-    const h = sampleS;
-    const grid = new Uint8Array(w * h);
-    for (let i = 0, p = 0; i < w * h; i++, p += 4) {
-      grid[i] = img[p + 3] > 128 ? 1 : 0;
-    }
-    const INF = 30000;
-    const dist = new Int16Array(w * h);
-    dist.fill(INF);
-    const q = [];
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const i = y * w + x;
-        if (!grid[i]) {
-          dist[i] = 0;
-          q.push(i);
-        }
-      }
-    }
-    let qi = 0;
-    while (qi < q.length) {
-      const i = q[qi++];
-      const d = dist[i];
-      if (d >= sm) continue;
-      const x = i % w;
-      const y = (i / w) | 0;
-      const nd = d + 1;
-      if (x > 0) {
-        const ni = i - 1;
-        if (grid[ni] && nd < dist[ni]) {
-          dist[ni] = nd;
-          q.push(ni);
-        }
-      }
-      if (x + 1 < w) {
-        const ni = i + 1;
-        if (grid[ni] && nd < dist[ni]) {
-          dist[ni] = nd;
-          q.push(ni);
-        }
-      }
-      if (y > 0) {
-        const ni = i - w;
-        if (grid[ni] && nd < dist[ni]) {
-          dist[ni] = nd;
-          q.push(ni);
-        }
-      }
-      if (y + 1 < h) {
-        const ni = i + w;
-        if (grid[ni] && nd < dist[ni]) {
-          dist[ni] = nd;
-          q.push(ni);
-        }
-      }
-    }
-    let n = 0;
-    for (let i = 0; i < w * h; i++) {
-      if (!grid[i]) continue;
-      const dd = dist[i];
-      if (dd >= 1 && dd <= sm) n++;
-    }
-    return n;
+    const sm = clamp(shellMax != null ? shellMax : 3, 1, 8);
+    const { pxFlat } = collectOuterShellBandFlat(drawFn, S, cap || 420, sm, true);
+    return pxFlat.length / 2;
   }
 
   /** 与剪影相同的缩放栅格，用于轮廓内可走判定（alpha > 128） */
@@ -754,8 +800,9 @@
     return { x, y };
   }
 
-  const FONT_SILHOUETTE_SERIF =
-    '"LXGW WenKai","LXGW WenKai Screen","Noto Serif SC","Noto Sans SC",serif';
+  /** 巨字/汉字剪影：无衬线优先，字腔略大、笔画分界更清晰（系统回退链） */
+  const FONT_MACRO_CJK_OPEN =
+    '"Noto Sans SC","Source Han Sans SC","Noto Sans CJK SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei UI","Liberation Sans",sans-serif';
   const FONT_SILHOUETTE_MONO =
     'ui-monospace,"Cascadia Code","SFMono-Regular","Consolas","Liberation Mono",monospace';
   /** 颜文字：混排符号，不用纯等宽，避免缺字形 */
@@ -776,7 +823,8 @@
       ? FONT_SILHOUETTE_KAO
       : forceMono || !hasHan
         ? FONT_SILHOUETTE_MONO
-        : FONT_SILHOUETTE_SERIF;
+        : FONT_MACRO_CJK_OPEN;
+    const fontWeight = kao ? "700" : "600";
     return (ctx, s) => {
       ctx.fillStyle = "#000";
       ctx.textAlign = "center";
@@ -785,13 +833,13 @@
       let fs = s * 0.52 * Math.min(1, 8.5 / gLen);
       const maxW = s * 0.9;
       for (let iter = 0; iter < 22; iter++) {
-        ctx.font = `700 ${fs}px ${fontStack}`;
+        ctx.font = `${fontWeight} ${fs}px ${fontStack}`;
         const w = ctx.measureText(text).width;
         if (w <= maxW && fs <= s * 0.58) break;
         fs *= 0.9;
       }
       fs = Math.max(fs, s * 0.055);
-      ctx.font = `700 ${fs}px ${fontStack}`;
+      ctx.font = `${fontWeight} ${fs}px ${fontStack}`;
       const cx = s * 0.5;
       const cy = s * 0.52;
       if (!kao && !noStroke) {
@@ -811,7 +859,7 @@
     const graphemes = Array.from(text);
     const gcount = Math.max(1, graphemes.length);
     const draw = createMacroTextDraw(text, { noStroke: true });
-    const shellMax = 4;
+    const shellMax = 3;
     const px = countSilhouetteBandPixels(draw, S, 420, shellMax);
     const cellEst = clamp(Math.round(S * 0.043), 12, 20);
     const slotFootprint = cellEst * cellEst * 0.42;
@@ -839,7 +887,7 @@
       const shellMeta = o.snapToShell !== false ? {} : null;
       targets = sampleSilhouetteShell(draw, S, n, {
         cap: o.cap != null ? o.cap : 400,
-        shellMax: o.shellMax != null ? o.shellMax : 4,
+        shellMax: o.shellMax != null ? o.shellMax : 3,
         jitterScale: o.jitterScale != null ? o.jitterScale : 0.008,
       }, shellMeta);
       if (o.spreadMin != null && targets.length > 1) {
@@ -2074,7 +2122,7 @@
       return buildTextSilhouetteLayout(self._pickMacroDisplay(), n, S, {
         shellSample: true,
         noStroke: true,
-        shellMax: 4,
+        shellMax: 3,
         cap: 420,
         spreadMin: Math.max(S * 0.051, gc * 1.02),
         spreadPasses: 12,
@@ -2566,8 +2614,15 @@
       if (!data || !data.targets || !data.targets.length) return;
       this.form = name;
       this.formStartTime = performance.now();
-      if (name === "clock") this._clockMinuteSlot = -1;
-      if (name === "chrono") this._chronoSecondSlot = -1;
+      if (name === "clock") {
+        const d = new Date();
+        this._clockMinuteSlot = d.getHours() * 60 + d.getMinutes();
+      }
+      if (name === "chrono") {
+        const d = new Date();
+        this._chronoSecondSlot =
+          d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+      }
       // 稳定分配
       const order = data.ordered
         ? data.targets
@@ -4183,7 +4238,7 @@
 
       if (
         this.form === "clock" &&
-        this.mode === "idle" &&
+        this.viewMode === "pet" &&
         !this.dragging &&
         !this.morphGlyphToTarget
       ) {
@@ -4197,7 +4252,7 @@
 
       if (
         this.form === "chrono" &&
-        this.mode === "idle" &&
+        this.viewMode === "pet" &&
         !this.dragging &&
         !this.morphGlyphToTarget
       ) {
