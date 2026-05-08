@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.25.0** 起）。  
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.26.0** 起）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
@@ -193,6 +193,16 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 | 字数按形状面积规划 | **已完成** | `suggestMegaGlyphParticleCount`：`fill×scale²×(1−voidFrac)/cellArea`，**传入实际 gridCell**；壳带下限；**250** 上限；**megaParticleMul** 按层调节 |
 | 内部华容道向空白 | **已完成** | `_tryMegaSlideIntoVoid` 优先内部字滑入邻空格；`tx/ty` 与格心同步 |
 | 边缘轻、内部动 | **已完成** | `_megaEdgeRing` / `_megaDeepInterior`：`wanderRad` 分层；互换/滑步加权；巨字 crisp 波略降 |
+
+---
+
+### 1.35 谐波严格格点 · 亚格颤抖分钮 · 叠分减负（3.26.0）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 默认横竖格移、非连续颤抖 | **已完成** | `silhouetteStrictHarmonicGrid`：谐波 + 关「颤」→ 关连续谐波/流体叠层；**ensemble 离散 ±1** 格目标 + `_nearestWalkableMarchCell` |
+| 亚格颤抖可选 | **已完成** | 侧栏 **「颤」** `cycleSilhouetteGlyphJitter`；`_arcPrefs.glyphsJitter`；URL `glyphsJitter=1` |
+| 卡顿 | **已缓解** | `_separateOverlappingGridGlyphs` 巨字 **4**、mask **3** 遍（原 6/5） |
 
 ---
 

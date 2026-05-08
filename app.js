@@ -60,6 +60,9 @@
     urlSnakePath === "zigzag" || urlSnakePath === "spiral"
       ? urlSnakePath
       : undefined;
+  const urlGlyphsJit =
+    params.get("glyphsJitter") === "1" ||
+    params.get("silhouetteJitter") === "1";
 
   function syncRailUiArcClass(p) {
     const appRoot = document.querySelector(".app");
@@ -77,6 +80,7 @@
     macroText: urlMacroStr ? urlMacroStr.slice(0, 48) : undefined,
     bodyMotionStyle: bodyMotionFromUrl,
     snakePathVariant: snakePathFromUrl,
+    silhouetteGlyphJitter: urlGlyphsJit ? true : undefined,
     showPlayfieldGuide: devHud,
     onFormChange(key) {
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
@@ -552,7 +556,7 @@
         pet.cycleUiArcMode();
         const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
         toast(
-          `层级 · ${lab}（色/速/轨/墨/浮/波/徙/粒 分套保留）`
+          `层级 · ${lab}（色/速/轨/颤/墨/浮/波/徙/粒 分套保留）`
         );
       } else if (action === "morph") {
         pet.abortFeeding();
@@ -587,13 +591,20 @@
       } else if (action === "speed") {
         const v = pet.cycleGlyphMotionSpeed();
         toast(
-          `运动 ×${v.toFixed(2)}（${arcLayerZh()}；剪影谐波节拍 / 格移 / 亚格平滑位移）`
+          `运动 ×${v.toFixed(2)}（${arcLayerZh()}；节拍 / 格移 / 谐波亚格见「颤」）`
         );
       } else if (action === "motionStyle") {
         const k = pet.cycleBodyMotionStyle();
         const lab =
           (BODY_MOTION_LABELS && BODY_MOTION_LABELS[k]) || k;
         toast(`运动轨：${lab}（${arcLayerZh()}；巨字/颜文字 mask 内）`);
+      } else if (action === "glyphsJitter") {
+        const on = pet.cycleSilhouetteGlyphJitter();
+        toast(
+          on
+            ? `亚格颤抖：开（${arcLayerZh()}；谐波轨下为亚格位移+微振）`
+            : `亚格颤抖：关（${arcLayerZh()}；谐波轨下=严格格点）`
+        );
       } else if (action === "fluid") {
         const v = pet.cycleArcFluidStrength();
         toast(`波纹强度 ×${v.toFixed(2)}（${arcLayerZh()}）`);

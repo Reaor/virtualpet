@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.25.0" />
+  <meta name="ziling-build" content="3.26.0" />
   <title>字灵 · 开发者页控制台</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.25.0" />
+  <link rel="stylesheet" href="./styles.css?v=3.26.0" />
 </head>
 <body>
   <div class="app" data-ui-arc="standby">
@@ -40,6 +40,7 @@
         </nav>
         <nav class="rail-tools rail-tools-extra" role="toolbar" aria-label="当前层运动参数">
           <button type="button" class="rail-tool" data-action="motionStyle" title="当前层·躯体运动轨（巨字/颜文字 mask）">轨</button>
+          <button type="button" class="rail-tool" data-action="glyphsJitter" title="当前层·剪影亚格颤抖（谐波轨下默认严格格点；开=亚格位移+微振）">颤</button>
           <button type="button" class="rail-tool" data-action="fluid" title="当前层·液体波纹强度">波</button>
           <button type="button" class="rail-tool" data-action="gridMarch" title="当前层·格点移动速度">徙</button>
           <button type="button" class="rail-tool" data-action="megaPack" title="当前层·巨字粒数倍率（巨字形下刷新）">粒</button>
@@ -79,7 +80,7 @@
         <div class="stage-main" id="stageMain" aria-hidden="false">
           <canvas id="petCanvas" aria-label="字灵画布"></canvas>
           <div class="form-label" id="formLabel">软团</div>
-            <div class="hint" id="hint">按住字灵约0.6秒出现「松手还原文稿」后松手即还原；超过约8px移动为拖动 · 「层」切换待机/呈现（色/速/轨/墨/浮/波/徙/粒 分套保留）· 「轨」切换巨字/颜文字 mask 内运动范式：谐波亚格 / 流线蛇行（默认螺旋走廊挤满 + 淡连线；弓字 <code>?snakePath=zigzag</code>）/ 轮廓游走 · 呈现层不会因戳身随机跳到待机曲线 · 见 DESIGN §2.6～2.7 · URL 例 <code>?motionStyle=snake_stream</code> · 「速」调节拍与格移 · 侧栏「回」也可还原 · 快连点闪光 · 三连击觅食 · 调试 <code>?dev=1</code> · <code>?uiArc=presentation</code></div>
+            <div class="hint" id="hint">按住字灵约0.6秒出现「松手还原文稿」后松手即还原；超过约8px移动为拖动 · 「层」切换待机/呈现（色/速/轨/颤/墨/浮/波/徙/粒 分套保留）· 「轨」谐波 / 蛇行 / 轮廓游走；谐波默认<strong>严格格点</strong>曼哈顿步进 · 「颤」才开亚格位移与谐波微振 · URL <code>?motionStyle=snake_stream</code> <code>?glyphsJitter=1</code> · 「速」节拍与格移 · 见 DESIGN §2.5b～2.7 · 调试 <code>?dev=1</code></div>
         </div>
       </section>
 
@@ -209,7 +210,7 @@
   </div>
 
   <script src="./js/ziling/play-bounds.js?v=3.25.0"></script>
-  <script src="./pet.js?v=3.25.0"></script>
-  <script src="./app.js?v=3.25.0"></script>
+  <script src="./pet.js?v=3.26.0"></script>
+  <script src="./app.js?v=3.26.0"></script>
 </body>
 </html>

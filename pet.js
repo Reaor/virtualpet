@@ -2162,6 +2162,17 @@
     );
   }
 
+  /** 谐波 + 关亚格颤抖：mask 内以离散格目标驱动曼哈顿步进（无默认亚格位移/微振） */
+  function silhouetteStrictHarmonicGrid(self) {
+    return (
+      isMaskBackedMegaKao(self) &&
+      normalizeBodyMotionStyle(self.bodyMotionStyle) === "harmonic" &&
+      !usesMaskSnakeStream(self) &&
+      !usesContourDrift(self) &&
+      !self.silhouetteGlyphJitter
+    );
+  }
+
   const SNAKE_PATH_VARIANTS = ["spiral", "zigzag"];
 
   function normalizeSnakePathVariant(v) {
@@ -2251,6 +2262,7 @@
       1.28
     );
     b.bodyMotionStyle = normalizeBodyMotionStyle(self.bodyMotionStyle);
+    b.glyphsJitter = !!self.silhouetteGlyphJitter;
   }
 
   function applyArcVisualPrefsToPet(self) {
@@ -2270,6 +2282,7 @@
       3.6
     );
     self.bodyMotionStyle = normalizeBodyMotionStyle(b.bodyMotionStyle);
+    self.silhouetteGlyphJitter = !!b.glyphsJitter;
     self.motionProfile =
       self.uiArcMode === "presentation" ? "display" : "standby";
   }
@@ -2636,6 +2649,7 @@
           gridMarchSpeed: _gm0,
           megaParticleMul: 1,
           bodyMotionStyle: "harmonic",
+          glyphsJitter: false,
         },
         presentation: {
           glyphMotionSpeed: _sp0,
@@ -2646,8 +2660,12 @@
           gridMarchSpeed: _gm0,
           megaParticleMul: 1,
           bodyMotionStyle: "harmonic",
+          glyphsJitter: false,
         },
       };
+      const _jitInit = opts.silhouetteGlyphJitter === true;
+      this._arcPrefs.standby.glyphsJitter = _jitInit;
+      this._arcPrefs.presentation.glyphsJitter = _jitInit;
       this.bodyMotionStyle = normalizeBodyMotionStyle(
         opts.bodyMotionStyle != null ? opts.bodyMotionStyle : "harmonic"
       );
@@ -3292,7 +3310,7 @@
       const mega = this.form === "mega";
       const kaoMask = useMask && String(this.form || "").startsWith("kao_");
       const rMax = mega ? 90 : kaoMask ? 52 : useMask ? 40 : 22;
-      const passes = mega ? 6 : useMask ? 5 : 1;
+      const passes = mega ? 4 : useMask ? 3 : 1;
       const key = (gx, gy) => `${gx},${gy}`;
 
       for (let pass = 0; pass < passes; pass++) {
@@ -5075,6 +5093,8 @@
       const sin = Math.sin(rot);
       const contourDrift = usesContourDrift(this);
       const snakeStream = usesMaskSnakeStream(this);
+      const strictSilGrid = silhouetteStrictHarmonicGrid(this);
+      const silJit = !!this.silhouetteGlyphJitter;
       const allowGridWander =
         !presSilHarm &&
         !snakeStream &&
@@ -5151,13 +5171,16 @@
       const waveAmp = (this.fluidStrength || 0) * cell * 0.09 * mk.ampScale;
       const maskFluidMul =
         this._maskPack && this._maskPack.grid ? 0.16 : 1;
-      const waveAmpEff =
+      let waveAmpEff =
         waveAmp *
         maskFluidMul *
         gms *
         (presSilHarm || silMaskPet ? 0.1 : 1);
-      this._fluidPhase +=
-        dt * (presSilHarm || silMaskPet ? 0.09 : 0.48) * gms;
+      if (strictSilGrid) waveAmpEff = 0;
+      if (!strictSilGrid) {
+        this._fluidPhase +=
+          dt * (presSilHarm || silMaskPet ? 0.09 : 0.48) * gms;
+      }
 
       if (this.gridMarch && this.gridSnapping) {
         const marchGms = gms * 0.55 + gms0 * 0.45;
@@ -5249,10 +5272,11 @@
             g._snakeSlot = idx;
             g._snakeMgx = c.gx;
             g._snakeMgy = c.gy;
-            const mic =
-              cell *
-              0.034 *
-              Math.sin(this._ensemblePhase * 0.29 + idx * 0.07);
+            const mic = silJit
+              ? cell *
+                0.034 *
+                Math.sin(this._ensemblePhase * 0.29 + idx * 0.07)
+              : 0;
             wx = c.gx * cell + mic;
             wy = c.gy * cell + mic * 0.9;
             useSnakeCell = true;
@@ -5286,7 +5310,8 @@
               mk.ampScale;
             if (
               (presSilHarm || silMaskPet) &&
-              !snakeStream
+              !snakeStream &&
+              !strictSilGrid
             ) {
               const phase = this._ensemblePhase * 0.58 + t * 0.06 * gms;
               const spat = g.tx * 0.013 + g.ty * 0.0105;
@@ -5404,6 +5429,27 @@
             tgy = Math.round(wy / cell);
           }
 
+          if (strictSilGrid && !mT && !useSnakeCell && !g.faceRole) {
+            const ph =
+              this._ensemblePhase * (0.38 + 0.2 * gms0) +
+              gi * 0.37 +
+              g.tx * 0.011;
+            const sx = Math.sin(ph);
+            const sy = Math.cos(ph * 0.93 + 0.71);
+            let dgx = 0;
+            let dgy = 0;
+            if (sx >= 0.5) dgx = 1;
+            else if (sx <= -0.5) dgx = -1;
+            if (sy >= 0.5) dgy = 1;
+            else if (sy <= -0.5) dgy = -1;
+            if (dgx !== 0 && dgy !== 0) {
+              if (Math.abs(sx) >= Math.abs(sy)) dgy = 0;
+              else dgx = 0;
+            }
+            tgx += dgx;
+            tgy += dgy;
+          }
+
           if (silMaskPet && !mT && !useSnakeCell) {
             const sn = this._nearestWalkableMarchCell(
               tgx,
@@ -5442,7 +5488,7 @@
           g.vx = 0;
           g.vy = 0;
 
-          if (silMaskPet && !g.faceRole && !mT) {
+          if (silMaskPet && silJit && !g.faceRole && !mT) {
             const txo = wx - g.x;
             const tyo = wy - g.y;
             const cap = cell * 0.46;
@@ -5730,7 +5776,8 @@
       const drawGlyph = (g, opts) => {
         const crispForm = isGridLayoutImmutableForm(this.form);
         const edge = g.edge;
-        const silDraw = isMaskBackedMegaKao(this) && !g.faceRole;
+        const silDraw =
+          isMaskBackedMegaKao(this) && !g.faceRole && this.silhouetteGlyphJitter;
         let rx = this.gridUnity ? Math.round(g.x) : g.x;
         let ry = this.gridUnity ? Math.round(g.y) : g.y;
         if (silDraw) {
@@ -5929,8 +5976,10 @@
           ctx.lineCap = "round";
           ctx.lineJoin = "round";
           const silPt = (g) => {
-            let px = (this.gridUnity ? Math.round(g.x) : g.x) + (g._silDrawOx || 0);
-            let py = (this.gridUnity ? Math.round(g.y) : g.y) + (g._silDrawOy || 0);
+            const ox = this.silhouetteGlyphJitter ? g._silDrawOx || 0 : 0;
+            const oy = this.silhouetteGlyphJitter ? g._silDrawOy || 0 : 0;
+            let px = (this.gridUnity ? Math.round(g.x) : g.x) + ox;
+            let py = (this.gridUnity ? Math.round(g.y) : g.y) + oy;
             if (this.gridUnity) {
               px = this._snapLogicalToDevice(px);
               py = this._snapLogicalToDevice(py);
@@ -6149,6 +6198,13 @@
       return this.bodyMotionStyle;
     }
 
+    /** 侧栏「颤」：巨字/颜文字 mask 内亚格绘制位移 + 谐波微振（默认关；谐波轨下关=严格格点） */
+    cycleSilhouetteGlyphJitter() {
+      this.silhouetteGlyphJitter = !this.silhouetteGlyphJitter;
+      snapshotArcVisualPrefs(this);
+      return this.silhouetteGlyphJitter;
+    }
+
     /** 螺旋 / 弓字走廊；切换后下一帧强制重建蛇行路径 */
     setSnakePathVariant(v) {
       this.snakePathVariant = normalizeSnakePathVariant(v);
@@ -6341,6 +6397,7 @@
     normalizeSnakePathVariant,
     usesMaskSnakeStream,
     usesContourDrift,
+    silhouetteStrictHarmonicGrid,
     getMotionProfileKernels,
     getMotionProfileKernelsForPet,
     getFormOrderForUiArcMode,
