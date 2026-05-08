@@ -3168,8 +3168,9 @@
       const sin = Math.sin(this.rotation);
       const useMask = this._maskPack && this._maskPack.grid;
       const mega = this.form === "mega";
-      const rMax = mega ? 82 : useMask ? 34 : 22;
-      const passes = mega ? 5 : useMask ? 2 : 1;
+      const kaoMask = useMask && String(this.form || "").startsWith("kao_");
+      const rMax = mega ? 90 : kaoMask ? 52 : useMask ? 40 : 22;
+      const passes = mega ? 6 : useMask ? 4 : 1;
       const key = (gx, gy) => `${gx},${gy}`;
 
       for (let pass = 0; pass < passes; pass++) {
@@ -3543,8 +3544,8 @@
     /** 呈现层剪影（巨字/颜）：离轮廓淡出 → 登记空位 → 壳上重生并换新字 */
     _updatePresentationSilhouetteGlyphLifecycle(dt, bx, by, cos, sin, flip) {
       if (!this._maskPack || !this._maskPack.grid) return;
-      const fadeOut = 1.05;
-      const fadeIn = 2.05;
+      const fadeOut = 0.55;
+      const fadeIn = 1.35;
       const tWall = performance.now() / 1000;
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
@@ -3586,12 +3587,14 @@
           if (isPresentationSilhouetteHarm(this)) {
             g.char = this._randomChar();
           }
-          g.alpha = g._megaBaseAlpha;
+          g.alpha = Math.min(0.22, g._megaBaseAlpha * 0.28);
           g._megaOutsideAcc = 0;
           g.wgx = 0;
           g.wgy = 0;
           g.wtgx = 0;
           g.wtgy = 0;
+          g._silDrawOx = 0;
+          g._silDrawOy = 0;
         }
       }
     }
@@ -4763,6 +4766,7 @@
         getMotionProfileKernelsForPet(this)
       );
       const presSilHarm = isPresentationSilhouetteHarm(this);
+      const silMaskPet = isMaskBackedMegaKao(this);
       this.breath = isMotionLayoutLockedForm(this.form)
         ? 1
         : Math.sin(t * 1.05) * 0.032 + 1;
@@ -4780,8 +4784,19 @@
         return;
       }
 
+      if (!silMaskPet) {
+        for (const g of this.glyphs) {
+          g._silDrawOx = 0;
+          g._silDrawOy = 0;
+        }
+      }
+
       const gms = gms0 * mk.timeScale;
-      this._ensemblePhase += dt * (0.78 + 0.12 * Math.sin(t * 0.17)) * gms;
+      const ensBoost = silMaskPet
+        ? 0.62 + 0.48 * clamp(gms0, 0.35, 2.5)
+        : 1;
+      this._ensemblePhase +=
+        dt * (0.78 + 0.12 * Math.sin(t * 0.17)) * gms * ensBoost;
 
       if (this.viewMode !== "intro") {
         this.ripples.length = 0;
@@ -4936,7 +4951,6 @@
       const flip = 1;
       const cos = Math.cos(rot);
       const sin = Math.sin(rot);
-      const silMaskPet = isMaskBackedMegaKao(this);
 
       if (
         this.gridMarch &&
@@ -5019,11 +5033,12 @@
         dt * (presSilHarm || silMaskPet ? 0.09 : 0.48) * gms;
 
       if (this.gridMarch && this.gridSnapping) {
+        const marchGms = gms * 0.55 + gms0 * 0.45;
         const stepBudget = Math.max(
           1,
           Math.min(
-            presSilHarm || silMaskPet ? 3 : 6,
-            Math.round((this.gridMarchSpeed || 2) * gms * dt * 6)
+            presSilHarm || silMaskPet ? 4 : 6,
+            Math.round((this.gridMarchSpeed || 2) * marchGms * dt * 6)
           )
         );
         const crispMotion = isGridLayoutImmutableForm(this.form);
@@ -5034,7 +5049,9 @@
             g.mgx = Math.round(g.x / cell);
             g.mgy = Math.round(g.y / cell);
           }
-          if (g.marchPref == null) {
+          if (silMaskPet) {
+            g.marchPref = 0;
+          } else if (g.marchPref == null) {
             g.marchPref = g.depth > 0.5 ? 1 : 0;
           }
 
@@ -5072,11 +5089,27 @@
             if (presSilHarm || silMaskPet) {
               const phase = this._ensemblePhase * 0.58 + t * 0.06 * gms;
               const spat = g.tx * 0.013 + g.ty * 0.0105;
-              const tight = presSilHarm ? 1 : 1.12;
-              const uAmp = pAmpBase * mk.crispMicroScale * 0.58 * tight;
-              wx += Math.sin(phase + spat * 1.72) * uAmp;
+              const tight = presSilHarm ? 1 : 1.06;
+              const speedVis = clamp(0.68 + 0.44 * gms0, 0.62, 2.15);
+              const uAmp =
+                cell *
+                0.058 *
+                (this._patrolAmp || 1) *
+                (this.dragging ? 1.06 : 1) *
+                mk.ampScale *
+                mk.crispMicroScale *
+                speedVis *
+                tight;
+              const ph2 = phase + spat * 1.72;
+              wx += Math.sin(ph2) * uAmp;
+              wx += Math.sin(ph2 * 2 + gi * 0.41) * uAmp * 0.16;
+              wx += Math.sin(phase * 0.5 + spat * 2.9 + gi * 0.19) * uAmp * 0.09;
               wy +=
                 Math.cos(phase * 0.93 + spat * 1.72 + 0.62) * uAmp * 0.86;
+              wy +=
+                Math.cos(phase * 1.87 + gi * 0.31) * uAmp * 0.13;
+              wy +=
+                Math.cos(phase * 0.48 + spat * 2.1 + gi * 0.23) * uAmp * 0.08;
             } else if (crispMotion) {
               const dispScale =
                 (this.form === "mega" ? 1.08 : 1) * mk.crispMicroScale;
@@ -5193,6 +5226,20 @@
           g.vx = 0;
           g.vy = 0;
 
+          if (silMaskPet && !g.faceRole && !mT) {
+            const txo = wx - g.x;
+            const tyo = wy - g.y;
+            const cap = cell * 0.46;
+            const tox = clamp(txo, -cap, cap);
+            const toy = clamp(tyo, -cap, cap);
+            const sm = 1 - Math.exp(-dt * 32);
+            g._silDrawOx = lerp(g._silDrawOx || 0, tox, sm);
+            g._silDrawOy = lerp(g._silDrawOy || 0, toy, sm);
+          } else {
+            g._silDrawOx = 0;
+            g._silDrawOy = 0;
+          }
+
           g.rot = lerp(g.rot, g.targetRot, this.gridUnity ? 0.18 : 0.08);
         }
 
@@ -5211,6 +5258,7 @@
             sin,
             flip
           );
+          this._separateOverlappingGridGlyphs();
         }
 
         if (this.morphGlyphToTarget) {
@@ -5463,8 +5511,13 @@
       const drawGlyph = (g, opts) => {
         const crispForm = isGridLayoutImmutableForm(this.form);
         const edge = g.edge;
+        const silDraw = isMaskBackedMegaKao(this) && !g.faceRole;
         let rx = this.gridUnity ? Math.round(g.x) : g.x;
         let ry = this.gridUnity ? Math.round(g.y) : g.y;
+        if (silDraw) {
+          rx += g._silDrawOx || 0;
+          ry += g._silDrawOy || 0;
+        }
         if (this.gridUnity) {
           rx = this._snapLogicalToDevice(rx);
           ry = this._snapLogicalToDevice(ry);
@@ -5492,7 +5545,9 @@
         if (size < 7.5) size = 7.5;
         if (this.gridUnity) size = Math.max(size, 8.5);
         const flashW = opts.flashWeight != null ? opts.flashWeight : 0.5;
-        const flashBoost = 1 + Math.min(flash, 0.52) * flashW * 0.42;
+        const flashBoost = silDraw
+          ? 1
+          : 1 + Math.min(flash, 0.52) * flashW * 0.42;
         const edgeAlpha = crispForm ? lerp(0.99, 0.92, edge) : lerp(0.94, 0.42, edge);
         const glowMul = g.faceRole ? 1 : this._glowAlphaMul(g, t);
         const alpha =

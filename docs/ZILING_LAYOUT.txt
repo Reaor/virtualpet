@@ -7,7 +7,7 @@
   app.js           「层」+ 波/徙/粒；toast 标明 arcLayer；色盘写入当前层
 
 引擎（单文件，体量仍大）
-  pet.js           isMaskBackedMegaKao；剪影 march 吸附；待机/呈现共用和谐体内波；淡出/补步/重生
+  pet.js           剪影：格吸附 + _silDrawOx/Oy 亚格绘制位移；ensBoost/speedVis；叠分加强
 
 可拆出的小模块（按需再细分）
   js/ziling/play-bounds.js   画布内碰撞夹紧与反弹；pet 里 _playBounds / _applyPlayfieldBounds

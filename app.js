@@ -570,7 +570,7 @@
       } else if (action === "speed") {
         const v = pet.cycleGlyphMotionSpeed();
         toast(
-          `运动速度 ×${v.toFixed(2)}（${arcLayerZh()}；含呈现巨字谐波时间尺度）`
+          `运动 ×${v.toFixed(2)}（${arcLayerZh()}；剪影谐波节拍 / 格移 / 亚格平滑位移）`
         );
       } else if (action === "fluid") {
         const v = pet.cycleArcFluidStrength();
