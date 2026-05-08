@@ -7,7 +7,7 @@
   app.js           「层」+ 波/徙/粒；toast 标明 arcLayer；色盘写入当前层
 
 引擎（单文件，体量仍大）
-  pet.js           uiArcMode；DISPLAY/STANDBY；呈现层巨字 megaHarm（和谐波+淡出重生+关游走华容道）
+  pet.js           isPresentationSilhouetteHarm；剪影淡出/空位补步/ensemble 节拍
 
 可拆出的小模块（按需再细分）
   js/ziling/play-bounds.js   画布内碰撞夹紧与反弹；pet 里 _playBounds / _applyPlayfieldBounds

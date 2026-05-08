@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.19.0** 起）。  
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.20.0** 起）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
@@ -196,6 +196,18 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 
 ---
 
+### 1.30 剪影淡出 · 空缺补步 · 全队节拍（3.20.0）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 策划书 2.5 完整条文化 | **已完成** | 原则 / 双路径补位 / 泛化 / 参考意象 |
+| 淡出后内向一格补位 | **已完成** | `_silhouetteVacancyPulls` + `_stepSilhouetteVacancyInpull` |
+| 重生 + 新字 | **已完成** | `_randomChar()` 于 `_updatePresentationSilhouetteGlyphLifecycle` |
+| kao_* 同 mega 和谐场 | **已完成** | `isPresentationSilhouetteHarm` |
+| 非剪影：谐和体内波 | **已完成** | `_ensemblePhase` + crisp / soft 分支改写 |
+
+---
+
 ### 1.29 呈现巨字 · 和谐场与淡出重生（3.19.0）
 
 | 子需求 | 状态 | 说明 |
@@ -203,7 +215,7 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 | 策划真源 | **已完成** | `DESIGN.md` **2.5 节** 与变更记录对齐 |
 | 统一体内速率 / 速钮 | **已完成** | `presentation`+`mega`：`phase = t * k * gms`，去多频 per-glyph；`stepBudget` 上限 3 |
 | 淡出重生 | **已完成** | `_worldCellWalkable` 失败累加淡出；alpha→0 `_respawnMegaGlyphNearShell` |
-| 关游走/华容道/滑步 | **已完成** | `megaHarm` 分支 |
+| 关游走/华容道/滑步 | **已完成** | `presSilHarm` / `isPresentationSilhouetteHarm` 分支 |
 | 弱流体/抖散/撞墙/闪光 | **已完成** | `waveAmpEff`、`rumble`、`_wallShatter`、`scatterTap`、`flash` 衰减 |
 
 ---

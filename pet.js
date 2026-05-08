@@ -2122,6 +2122,15 @@
     return false;
   }
 
+  /** 呈现层 + 有 mask 的剪影类（巨字 / 颜文字）：和谐场 + 淡出补位 */
+  function isPresentationSilhouetteHarm(self) {
+    return (
+      self.uiArcMode === "presentation" &&
+      self.viewMode === "pet" &&
+      (self.form === "mega" || String(self.form || "").startsWith("kao_"))
+    );
+  }
+
   /** 侧栏「待机」模式：体内运动保持全倍率（与 3.15 前一致）。 */
   const STANDBY_MOTION_KERNELS = {
     id: "standby",
@@ -2162,9 +2171,9 @@
       : STANDBY_MOTION_KERNELS;
   }
 
-  /** 呈现层巨字：在 DISPLAY 内核上再压低，轮廓优先 */
-  function mergePresentationMegaMotion(self, mk) {
-    if (self.form !== "mega" || self.uiArcMode !== "presentation") return mk;
+  /** 呈现层剪影（巨字 / 颜文字）：在 DISPLAY 内核上再压低，轮廓优先 */
+  function mergePresentationSilhouetteMotion(self, mk) {
+    if (!isPresentationSilhouetteHarm(self)) return mk;
     return {
       ...mk,
       timeScale: mk.timeScale * 0.42,
@@ -2540,6 +2549,11 @@
       this._huarongNextAt = 0;
       this._megaSlideNextAt = 0;
       this._lastWallFxAt = 0;
+      /** 呈现剪影：淡出后内向补位目标格队列 {ax, ay, until} */
+      this._silhouetteVacancyPulls = [];
+      this._silVacPullNextAt = 0;
+      /** 全队共享节拍相位（体内运动谐和） */
+      this._ensemblePhase = 0;
       /** 与 DISPLAY/STANDBY 内核同步，供 UI toast 使用 */
       this.motionProfile = "standby";
       /** 侧栏层级：standby=待机形态；presentation=计时/巨字/颜文字（决定运动内核与独立参数） */
@@ -2773,7 +2787,7 @@
           wanderRad: 10,
           /** 巡逻相位（每字不同） */
           patrolSeed: Math.random() * TAU,
-          patrolAmpMul: 0.85 + Math.random() * 0.3,
+          patrolAmpMul: 0.93 + (Math.sin(i * 2.17) * 0.5 + 0.5) * 0.14,
         });
       }
     }
@@ -2937,7 +2951,7 @@
         g.wtgx = 0;
         g.wtgy = 0;
         const ph = (g.patrolSeed || 0) * 13.7 + i * 1.73;
-        g.lagK = 0.38 + (Math.sin(ph * 1.1) * 0.5 + 0.5) * 1.45;
+        g.lagK = 0.86 + (Math.sin(ph * 1.1) * 0.5 + 0.5) * 0.2;
         if (g.faceRole) g.lagK *= 0.52;
         g.lagX = bx;
         g.lagY = by;
@@ -2974,7 +2988,10 @@
         g._anchorGx = Math.round(wx / cell);
         g._anchorGy = Math.round(wy / cell);
       }
-      if (name === "mega" && this.uiArcMode === "presentation") {
+      if (
+        (name === "mega" || String(name).startsWith("kao_")) &&
+        this.uiArcMode === "presentation"
+      ) {
         for (const g of this.glyphs) {
           if (g.faceRole) continue;
           g.patrolAmpMul = 1;
@@ -2985,6 +3002,9 @@
       }
       this._nextWanderPick = nowSec + 0.35;
 
+      if (!isPresentationSilhouetteHarm(this)) {
+        this._silhouetteVacancyPulls.length = 0;
+      }
       if (typeof this.onFormChange === "function" && !noEmitOnFormChange) {
         try {
           this.onFormChange(this.form);
@@ -3381,6 +3401,73 @@
       }
     }
 
+    /**
+     * 淡出后的语义空位：从剪影内部拉一粒向锚点格迈一步（曼哈顿），形成「邻字挪入」感。
+     */
+    _stepSilhouetteVacancyInpull(t, gms, bx, by, cos, sin, flip) {
+      if (!this._silhouetteVacancyPulls.length) return;
+      if (t < (this._silVacPullNextAt || 0)) return;
+      this._silVacPullNextAt =
+        t + clamp(0.084 / Math.max(gms, 0.38), 0.05, 0.14);
+
+      this._silhouetteVacancyPulls = this._silhouetteVacancyPulls.filter(
+        (v) => t < v.until
+      );
+      if (!this._silhouetteVacancyPulls.length) return;
+
+      const v = this._silhouetteVacancyPulls[0];
+      const ax = v.ax;
+      const ay = v.ay;
+      const key = (gx, gy) => `${gx},${gy}`;
+      const occ = new Set();
+      for (const g of this.glyphs) {
+        if (!g.faceRole) occ.add(key(g.mgx, g.mgy));
+      }
+
+      const tryMove = (g, preferX) => {
+        let ngx = g.mgx;
+        let ngy = g.mgy;
+        const dx = ax - g.mgx;
+        const dy = ay - g.mgy;
+        if (preferX) {
+          if (dx !== 0) ngx += dx > 0 ? 1 : -1;
+          else if (dy !== 0) ngy += dy > 0 ? 1 : -1;
+        } else {
+          if (dy !== 0) ngy += dy > 0 ? 1 : -1;
+          else if (dx !== 0) ngx += dx > 0 ? 1 : -1;
+        }
+        if (ngx === g.mgx && ngy === g.mgy) return false;
+        if (occ.has(key(ngx, ngy))) return false;
+        if (!this._worldCellWalkable(ngx, ngy, bx, by, cos, sin, flip))
+          return false;
+        occ.delete(key(g.mgx, g.mgy));
+        this._megaNudgeGlyphToGrid(g, ngx, ngy, bx, by, cos, sin, flip);
+        occ.add(key(ngx, ngy));
+        return true;
+      };
+
+      const candidates = this.glyphs
+        .filter(
+          (g) =>
+            !g.faceRole &&
+            (g.edge || 0) < 0.56 &&
+            g._megaEdgeRing !== true
+        )
+        .sort(
+          (a, b) =>
+            Math.abs(b.mgx - ax) +
+            Math.abs(b.mgy - ay) -
+            (Math.abs(a.mgx - ax) + Math.abs(a.mgy - ay))
+        );
+
+      for (const g of candidates) {
+        if (tryMove(g, Math.abs(ax - g.mgx) >= Math.abs(ay - g.mgy)))
+          return;
+        if (tryMove(g, Math.abs(ax - g.mgx) < Math.abs(ay - g.mgy)))
+          return;
+      }
+    }
+
     /** 呈现层巨字：在笔画锚点邻域找可走格重生 */
     _respawnMegaGlyphNearShell(g, bx, by, cos, sin, flip) {
       const cell = this.gridCell || 12;
@@ -3413,11 +3500,12 @@
       }
     }
 
-    /** 呈现层巨字：离轮廓（mask 不可走）则淡出至消失，再在壳上重生 */
-    _updatePresentationMegaGlyphLifecycle(dt, bx, by, cos, sin, flip) {
+    /** 呈现层剪影（巨字/颜）：离轮廓淡出 → 登记空位 → 壳上重生并换新字 */
+    _updatePresentationSilhouetteGlyphLifecycle(dt, bx, by, cos, sin, flip) {
       if (!this._maskPack || !this._maskPack.grid) return;
       const fadeOut = 1.05;
       const fadeIn = 2.05;
+      const tWall = performance.now() / 1000;
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
         if (g._megaBaseAlpha == null) {
@@ -3444,7 +3532,18 @@
         }
         g.alpha = clamp(a, 0, 1);
         if (g.alpha < 0.035) {
+          if (g._anchorGx != null && g._anchorGy != null) {
+            this._silhouetteVacancyPulls.push({
+              ax: g._anchorGx,
+              ay: g._anchorGy,
+              until: tWall + 2.25,
+            });
+            while (this._silhouetteVacancyPulls.length > 16) {
+              this._silhouetteVacancyPulls.shift();
+            }
+          }
           this._respawnMegaGlyphNearShell(g, bx, by, cos, sin, flip);
+          g.char = this._randomChar();
           g.alpha = g._megaBaseAlpha;
           g._megaOutsideAcc = 0;
           g.wgx = 0;
@@ -4052,8 +4151,7 @@
     /** 轻点：所有形态下小字沿格目标方向短暂散开（华容道位移的可见反馈） */
     scatterTapBurst() {
       const cell = this.gridCell || 12;
-      const megaCalm =
-        this.form === "mega" && this.uiArcMode === "presentation";
+      const megaCalm = isPresentationSilhouetteHarm(this);
       const damp = megaCalm ? 0.18 : 1;
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
@@ -4480,7 +4578,7 @@
     }
 
     _wallShatter(nx, ny) {
-      if (this.form === "mega" && this.uiArcMode === "presentation") {
+      if (isPresentationSilhouetteHarm(this)) {
         this._rumbleAmp = Math.min(0.18, (this._rumbleAmp || 0) + 0.06);
         return;
       }
@@ -4614,11 +4712,11 @@
         0.25,
         2.5
       );
-      const mk = mergePresentationMegaMotion(this, getMotionProfileKernelsForPet(this));
-      const megaHarm =
-        this.form === "mega" &&
-        this.uiArcMode === "presentation" &&
-        this.viewMode === "pet";
+      const mk = mergePresentationSilhouetteMotion(
+        this,
+        getMotionProfileKernelsForPet(this)
+      );
+      const presSilHarm = isPresentationSilhouetteHarm(this);
       this.breath = isMotionLayoutLockedForm(this.form)
         ? 1
         : Math.sin(t * 1.05) * 0.032 + 1;
@@ -4637,6 +4735,7 @@
       }
 
       const gms = gms0 * mk.timeScale;
+      this._ensemblePhase += dt * (0.78 + 0.12 * Math.sin(t * 0.17)) * gms;
 
       if (this.viewMode !== "intro") {
         this.ripples.length = 0;
@@ -4799,7 +4898,7 @@
         this.viewMode === "pet" &&
         this.pathMode !== "none" &&
         this.form !== "script" &&
-        !megaHarm
+        !presSilHarm
       ) {
         if (t >= this._nextWanderPick) {
           this._nextWanderPick =
@@ -4858,21 +4957,21 @@
           : null;
 
       const cell = this.gridCell;
-      const rumble = megaHarm
+      const rumble = presSilHarm
         ? 0
         : (this._rumbleAmp || 0) * cell * 0.08;
       const waveAmp = (this.fluidStrength || 0) * cell * 0.09 * mk.ampScale;
       const maskFluidMul =
         this._maskPack && this._maskPack.grid ? 0.16 : 1;
       const waveAmpEff =
-        waveAmp * maskFluidMul * gms * (megaHarm ? 0.1 : 1);
-      this._fluidPhase += dt * (megaHarm ? 0.09 : 0.48) * gms;
+        waveAmp * maskFluidMul * gms * (presSilHarm ? 0.1 : 1);
+      this._fluidPhase += dt * (presSilHarm ? 0.09 : 0.48) * gms;
 
       if (this.gridMarch && this.gridSnapping) {
         const stepBudget = Math.max(
           1,
           Math.min(
-            megaHarm ? 3 : 6,
+            presSilHarm ? 3 : 6,
             Math.round((this.gridMarchSpeed || 2) * gms * dt * 6)
           )
         );
@@ -4900,7 +4999,7 @@
             this.viewMode === "pet" &&
             this.pathMode !== "none" &&
             !isMotionLayoutLockedForm(this.form) &&
-            !megaHarm
+            !presSilHarm
           ) {
             wx += (g.wgx || 0) * cell;
             wy += (g.wgy || 0) * cell;
@@ -4918,8 +5017,8 @@
               (this.dragging ? 1.15 : 1) *
               gms *
               mk.ampScale;
-            if (megaHarm) {
-              const phase = t * 0.31 * gms;
+            if (presSilHarm) {
+              const phase = this._ensemblePhase * 0.58 + t * 0.06 * gms;
               const spat = g.tx * 0.013 + g.ty * 0.0105;
               const uAmp = pAmpBase * mk.crispMicroScale * 0.58;
               wx += Math.sin(phase + spat * 1.72) * uAmp;
@@ -4928,31 +5027,33 @@
             } else if (crispMotion) {
               const dispScale =
                 (this.form === "mega" ? 1.08 : 1) * mk.crispMicroScale;
-              const breath = Math.sin(t * 0.86);
-              const sway = Math.cos(t * 0.63);
+              const sync = this._ensemblePhase;
+              const breath = Math.sin(sync);
+              const sway = Math.sin(sync * 0.5 + 0.85);
               const ang = g.tx * 0.012 + g.ty * 0.01;
-              const m = 0.52 + 0.48 * Math.sin(ang * 3.1 + t * 0.38);
+              const m = 0.82 + 0.18 * Math.sin(ang * 1.35 + sync * 0.28);
               wx +=
-                (breath * Math.cos(ang) + sway * 0.34 * Math.sin(ang)) *
+                (breath * Math.cos(ang) + sway * 0.3 * Math.sin(ang)) *
                 pAmpBase *
                 0.44 *
                 m *
                 dispScale;
               wy +=
-                (sway * Math.sin(ang) - breath * 0.34 * Math.cos(ang)) *
+                (sway * Math.sin(ang) - breath * 0.3 * Math.cos(ang)) *
                 pAmpBase *
                 0.44 *
                 m *
                 dispScale;
             } else {
               const pAmpFull = pAmpBase * (g.patrolAmpMul || 1);
-              const ph = g.patrolSeed || 0;
+              const sync = this._ensemblePhase;
+              const ph = (g.patrolSeed || 0) * 0.35;
               wx +=
-                Math.sin(t * 0.52 + ph * 2.1) * pAmpFull * 0.62 +
-                Math.sin(t * 0.29 + ph * 5.4) * pAmpFull * 0.38;
+                Math.sin(sync + ph) * pAmpFull * 0.63 +
+                Math.sin(sync * 0.5 + ph * 1.05) * pAmpFull * 0.37;
               wy +=
-                Math.cos(t * 0.47 + ph * 3.7) * pAmpFull * 0.58 +
-                Math.cos(t * 0.33 + ph * 6.2) * pAmpFull * 0.35;
+                Math.cos(sync * 0.97 + ph * 0.95) * pAmpFull * 0.57 +
+                Math.cos(sync * 0.48 + ph * 0.65) * pAmpFull * 0.35;
             }
           }
 
@@ -4985,7 +5086,7 @@
           if (g._tapScatterT > 0) {
             const t0 = g._tapScatterT0 || 0.38;
             const f = clamp(g._tapScatterT / t0, 0, 1);
-            const sc = megaHarm ? 0.2 : 1;
+            const sc = presSilHarm ? 0.2 : 1;
             wx += (g._tapScatterOX || 0) * f * sc;
             wy += (g._tapScatterOY || 0) * f * sc;
             g._tapScatterT -= dt;
@@ -5029,12 +5130,20 @@
         }
 
         this._separateOverlappingGridGlyphs();
-        if (!megaHarm) {
+        if (!presSilHarm) {
           this._tryHuarongAdjacentSwaps(now);
           this._tryMegaSlideIntoVoid(now);
         }
-        if (megaHarm) {
-          this._updatePresentationMegaGlyphLifecycle(dt, bx, by, cos, sin, flip);
+        if (presSilHarm) {
+          this._stepSilhouetteVacancyInpull(t, gms, bx, by, cos, sin, flip);
+          this._updatePresentationSilhouetteGlyphLifecycle(
+            dt,
+            bx,
+            by,
+            cos,
+            sin,
+            flip
+          );
         }
 
         if (this.morphGlyphToTarget) {
@@ -5280,10 +5389,9 @@
           ctx.textRendering = "geometricPrecision";
         }
       } catch (_) {}
-      const flash =
-        this.form === "mega" && this.uiArcMode === "presentation"
-          ? (this._glyphFlash || 0) * 0.22
-          : this._glyphFlash || 0;
+      const flash = isPresentationSilhouetteHarm(this)
+        ? (this._glyphFlash || 0) * 0.22
+        : this._glyphFlash || 0;
 
       const drawGlyph = (g, opts) => {
         const crispForm = isGridLayoutImmutableForm(this.form);
@@ -5836,6 +5944,7 @@
     CHAR_FORM_BIAS,
     classifyScheduleLine,
     isDisplayPresentationForm,
+    isPresentationSilhouetteHarm,
     getMotionProfileKernels,
     getMotionProfileKernelsForPet,
     getFormOrderForUiArcMode,
