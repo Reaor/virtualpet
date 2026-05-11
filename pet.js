@@ -7,6 +7,7 @@
  * 数学曲线（心、花、蝶）则直接参数化计算，更精确。
  *
  * 依赖：`js/ziling/play-bounds.js` 先于本文件加载（`window.ZiLingPlayBounds`）。
+ * 形场 / 矩阵占位：`js/ziling/shape-field.js`、`js/ziling/matrix-bridge.js`（`PLAN.md` / `DESIGN.md`）。
  * 目录说明：`docs/ZILING_LAYOUT.txt`
  */
 
@@ -2148,6 +2149,17 @@
     return BODY_MOTION_STYLES.indexOf(s) >= 0 ? s : "harmonic";
   }
 
+  /** 非格移弹簧轨下的纹理调度（P3）；与 mask 内「轨」`bodyMotionStyle` 正交 */
+  const TEXTURE_MOTION_MODES = ["spring_flow", "adjacent_swap"];
+  const TEXTURE_MOTION_LABELS = {
+    spring_flow: "流 · 弹簧纹理（默认）",
+    adjacent_swap: "序 · 芯层邻接换位（关格移时）",
+  };
+
+  function normalizeTextureMotionMode(m) {
+    return TEXTURE_MOTION_MODES.indexOf(m) >= 0 ? m : "spring_flow";
+  }
+
   function usesMaskSnakeStream(self) {
     return (
       isMaskBackedMegaKao(self) &&
@@ -2673,6 +2685,13 @@
       this._arcPrefs.presentation.bodyMotionStyle = this.bodyMotionStyle;
       /** 流线蛇行：走廊排序（螺旋≈由心向外挤满；弓字=逐行扫描） */
       this.snakePathVariant = normalizeSnakePathVariant(opts.snakePathVariant);
+      /** 离散形场（可走格密铺 / 拓扑壳层）；换形纹理预算 */
+      this.shapeFieldVersion = 0;
+      this.shapeField = null;
+      this._shapeMutationT = 0;
+      this.shapeShellDampen = opts.shapeShellDampen !== false;
+      this.textureMotionMode = normalizeTextureMotionMode(opts.textureMotionMode);
+      this._swapNextAt = 0;
       applyArcVisualPrefsToPet(this);
       this.onUiArcModeChange =
         typeof opts.onUiArcModeChange === "function"
@@ -2858,6 +2877,8 @@
           /** 巡逻相位（每字不同） */
           patrolSeed: Math.random() * TAU,
           patrolAmpMul: 0.93 + (Math.sin(i * 2.17) * 0.5 + 0.5) * 0.14,
+          /** 形场分层：壳 / 芯（`shape-field.js`）；格移形态下可仍为 null */
+          shapeBand: null,
         });
       }
     }
@@ -3101,6 +3122,168 @@
         try {
           this.onFormChange(this.form);
         } catch (_) {}
+      }
+
+      this._shapeMutationT = 0.72;
+      this._rebuildShapeFieldFromForm();
+    }
+
+    /**
+     * 由躯体目标点 (tx,ty) 构建形场；写入 g.shapeBand。蛇形觅食跳过。
+     * 巨字 / mask 轨仍以 `bodyMotionStyle` 为主；本形场服务密铺 hash、调试与弹簧轨壳芯阻尼。
+     */
+    _rebuildShapeFieldFromForm() {
+      const SF = typeof window !== "undefined" ? window.ZiLingShapeField : null;
+      if (!SF || !this.shapeShellDampen) {
+        for (const g of this.glyphs) g.shapeBand = null;
+        this.shapeField = null;
+        return;
+      }
+      if (this.form === "snake") {
+        for (const g of this.glyphs) g.shapeBand = null;
+        this.shapeField = null;
+        return;
+      }
+      const cell = this.gridCell;
+      const pts = [];
+      for (const g of this.glyphs) {
+        if (!g.faceRole) pts.push({ x: g.tx, y: g.ty });
+      }
+      const walk = SF.buildWalkSetFromLocalPoints(pts, cell);
+      const shell = SF.shellCellsFromWalkSet(walk);
+      for (const g of this.glyphs) {
+        if (g.faceRole) {
+          g.shapeBand = null;
+          continue;
+        }
+        const gx = Math.round(g.tx / cell);
+        const gy = Math.round(g.ty / cell);
+        g.shapeBand = SF.bandAtGrid(gx, gy, shell, walk);
+      }
+      this.shapeFieldVersion++;
+      const packedInfo = SF.packWalkGrid(walk);
+      const packedHash = SF.hashPackedGrid(packedInfo.packed);
+      this.shapeField = {
+        version: this.shapeFieldVersion,
+        cell,
+        walk,
+        shell,
+        packed: packedInfo.packed,
+        packedWidth: packedInfo.width,
+        packedHeight: packedInfo.height,
+        packedMinGx: packedInfo.minGx,
+        packedMinGy: packedInfo.minGy,
+        packedHash,
+        meta: SF.summarizeWalkSet(walk, shell, 32),
+      };
+    }
+
+    /** 换形后的纹理预算倍率 0.62..1 */
+    _textureBudgetMul() {
+      const dur = 0.72;
+      const tt = this._shapeMutationT || 0;
+      if (tt <= 0) return 1;
+      return clamp(0.62 + 0.38 * (tt / dur), 0.62, 1);
+    }
+
+    /** 开发：形场摘要（含 packedHash） */
+    dumpShapeField() {
+      if (!this.shapeField) return null;
+      const m = this.shapeField.meta || {};
+      return {
+        version: this.shapeField.version,
+        form: this.form,
+        cell: this.shapeField.cell,
+        walkCount: m.walkCount,
+        shellCount: m.shellCount,
+        bounds: m.bounds,
+        sampleWalk: m.sampleWalk,
+        packedHash: this.shapeField.packedHash,
+        packed: {
+          w: this.shapeField.packedWidth,
+          h: this.shapeField.packedHeight,
+          minGx: this.shapeField.packedMinGx,
+          minGy: this.shapeField.packedMinGy,
+          bytes: this.shapeField.packed ? this.shapeField.packed.length : 0,
+        },
+        textureMotion: normalizeTextureMotionMode(this.textureMotionMode),
+      };
+    }
+
+    /**
+     * 序模式：仅芯层、4-邻格成对交换目标（不改变可走格集合）。
+     * 格移开启时跳过，避免与 mgx/mgy 脱节；mask 巨字/颜文字跳过。
+     */
+    _maybeAdjacentTargetSwap(t) {
+      if (normalizeTextureMotionMode(this.textureMotionMode) !== "adjacent_swap")
+        return;
+      if (this.dragging || this.mode === "feeding") return;
+      if (this.form === "snake") return;
+      if (this.gridMarch && this.gridSnapping) return;
+      if (isMaskBackedMegaKao(this)) return;
+      if (!this.shapeShellDampen || !this.shapeField) return;
+      if (t < this._swapNextAt) return;
+      const texMul = this._textureBudgetMul();
+      this._swapNextAt = t + 0.34 / (0.55 + 0.45 * texMul);
+
+      const cell = this.gridCell;
+      const body = [];
+      for (let i = 0; i < this.glyphs.length; i++) {
+        const g = this.glyphs[i];
+        if (!g.faceRole) body.push({ g, i });
+      }
+      if (body.length < 2) return;
+
+      const dirs = [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ];
+      const swapKeys = ["tx", "ty", "baseTx", "baseTy", "char", "edge", "depth"];
+
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const a = body[Math.floor(Math.random() * body.length)];
+        const ga = a.g;
+        if (ga.shapeBand !== "core") continue;
+        const gx0 = Math.round(ga.tx / cell);
+        const gy0 = Math.round(ga.ty / cell);
+        const d = dirs[Math.floor(Math.random() * dirs.length)];
+        const ngx = gx0 + d[0];
+        const ngy = gy0 + d[1];
+
+        let partner = null;
+        for (const b of body) {
+          if (b.i === a.i) continue;
+          const gx = Math.round(b.g.tx / cell);
+          const gy = Math.round(b.g.ty / cell);
+          if (gx === ngx && gy === ngy) {
+            partner = b;
+            break;
+          }
+        }
+        if (!partner || partner.g.shapeBand !== "core") continue;
+
+        const gb = partner.g;
+        for (const k of swapKeys) {
+          const tmp = ga[k];
+          ga[k] = gb[k];
+          gb[k] = tmp;
+        }
+        if (this.gridSnapping) {
+          const s1 = this._snapLocal(ga.tx, ga.ty);
+          const s2 = this._snapLocal(gb.tx, gb.ty);
+          ga.tx = s1.x;
+          ga.ty = s1.y;
+          ga.baseTx = s1.x;
+          ga.baseTy = s1.y;
+          gb.tx = s2.x;
+          gb.ty = s2.y;
+          gb.baseTx = s2.x;
+          gb.baseTy = s2.y;
+        }
+        this._rebuildShapeFieldFromForm();
+        break;
       }
     }
 
@@ -5082,6 +5265,7 @@
       this._rumbleAmp = Math.max(0, (this._rumbleAmp || 0) - 1.8 * dt);
       this._glyphFlash = Math.max(0, (this._glyphFlash || 0) - 2.2 * dt);
       this._layoutSettle = Math.max(0, (this._layoutSettle || 0) - dt * 1.1);
+      this._shapeMutationT = Math.max(0, (this._shapeMutationT || 0) - dt);
 
       if (this.faceLayerMode) this._syncFaceGlyphTargets(t);
 
@@ -5164,6 +5348,8 @@
               };
             })
           : null;
+
+      this._maybeAdjacentTargetSwap(t);
 
       const cell = this.gridCell;
       const rumble =
@@ -5555,10 +5741,14 @@
         const rumble2 = (this._rumbleAmp || 0) * cell * 0.1;
         const waveAmp2 = (this.fluidStrength || 0) * cell * 0.11 * mk.ampScale;
         const waveAmp2Eff = waveAmp2 * maskFluidMul * gms;
+        const texBudgetMul = this._textureBudgetMul();
 
         this._fluidPhase += dt * 0.52 * gms;
 
         for (const g of this.glyphs) {
+          const shellBw = g.shapeBand === "shell" ? 0.35 : 1;
+          const shellRu = g.shapeBand === "shell" ? 0.42 : 1;
+          const tb = texBudgetMul;
           const txl = g.tx * flip;
           const tyl = g.ty;
           let wx = bx + (txl * cos - tyl * sin);
@@ -5577,20 +5767,25 @@
             wy = Math.round(wy / cell) * cell;
           }
           if (waveAmp2Eff > 0.001 && !isMotionLayoutLockedForm(this.form)) {
+            const wEff = waveAmp2Eff * tb * (g.shapeBand === "shell" ? 0.52 : 1);
             const nx = wx * 0.019 + this._fluidPhase;
             const ny = wy * 0.017 - this._fluidPhase * 0.82;
-            wx += Math.sin(nx + g.depth * 2.2) * waveAmp2Eff * 0.62;
-            wy += Math.cos(ny + g.depth * 1.6) * waveAmp2Eff * 0.52;
-            wx += Math.sin(nx * 2.1 + wy * 0.007) * waveAmp2Eff * 0.22;
+            wx += Math.sin(nx + g.depth * 2.2) * wEff * 0.62;
+            wy += Math.cos(ny + g.depth * 1.6) * wEff * 0.52;
+            wx += Math.sin(nx * 2.1 + wy * 0.007) * wEff * 0.22;
           }
-          const rx = rumble2 ? Math.sin(t * 28 + g.depth * 16) * rumble2 : 0;
-          const ry = rumble2 ? Math.cos(t * 26 + g.depth * 14) * rumble2 : 0;
+          const rx = rumble2
+            ? Math.sin(t * 28 + g.depth * 16) * rumble2 * tb * shellRu
+            : 0;
+          const ry = rumble2
+            ? Math.cos(t * 26 + g.depth * 14) * rumble2 * tb * shellRu
+            : 0;
           let ax = (wx + rx - g.x) * springK - g.vx * damping;
           let ay = (wy + ry - g.y) * springK - g.vy * damping;
           if (!g.faceRole) {
             const mush = this.gridSnapping ? 0.28 : 1.0;
             const mushUse = isMotionLayoutLockedForm(this.form) ? 0.05 : mush;
-            ax += Math.sin(t * 2 + g.depth * 6) * mushUse;
+            ax += Math.sin(t * 2 + g.depth * 6) * mushUse * tb * shellBw;
           }
           if (eyeWorld) {
             for (const e of eyeWorld) {
@@ -6205,6 +6400,15 @@
       return this.silhouetteGlyphJitter;
     }
 
+    /** 侧栏「紊」：弹簧纹理流 ↔ 芯层邻接换位（关格移时生效） */
+    cycleTextureMotionMode() {
+      const cur = normalizeTextureMotionMode(this.textureMotionMode);
+      const ix = TEXTURE_MOTION_MODES.indexOf(cur);
+      this.textureMotionMode =
+        TEXTURE_MOTION_MODES[(ix + 1) % TEXTURE_MOTION_MODES.length];
+      return this.textureMotionMode;
+    }
+
     /** 螺旋 / 弓字走廊；切换后下一帧强制重建蛇行路径 */
     setSnakePathVariant(v) {
       this.snakePathVariant = normalizeSnakePathVariant(v);
@@ -6398,8 +6602,16 @@
     usesMaskSnakeStream,
     usesContourDrift,
     silhouetteStrictHarmonicGrid,
+    TEXTURE_MOTION_MODES,
+    TEXTURE_MOTION_LABELS,
     getMotionProfileKernels,
     getMotionProfileKernelsForPet,
     getFormOrderForUiArcMode,
+    get ShapeField() {
+      return typeof window !== "undefined" ? window.ZiLingShapeField : undefined;
+    },
+    get MatrixBridge() {
+      return typeof window !== "undefined" ? window.ZiLingMatrixBridge : undefined;
+    },
   };
 })();

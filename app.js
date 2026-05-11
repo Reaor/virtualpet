@@ -10,6 +10,7 @@
     STANDBY_MATH_ORDER,
     BODY_MOTION_LABELS,
     BODY_MOTION_STYLES,
+    TEXTURE_MOTION_LABELS,
   } = window.ZiLing;
 
   // ---------- 初始化 ----------
@@ -63,6 +64,13 @@
   const urlGlyphsJit =
     params.get("glyphsJitter") === "1" ||
     params.get("silhouetteJitter") === "1";
+  const urlTexMot = (params.get("textureMotion") || params.get("motion") || "").trim();
+  const textureMotionFromUrl =
+    urlTexMot === "swap" || urlTexMot === "adjacent_swap"
+      ? "adjacent_swap"
+      : urlTexMot === "flow" || urlTexMot === "spring_flow"
+        ? "spring_flow"
+        : undefined;
 
   function syncRailUiArcClass(p) {
     const appRoot = document.querySelector(".app");
@@ -81,6 +89,7 @@
     bodyMotionStyle: bodyMotionFromUrl,
     snakePathVariant: snakePathFromUrl,
     silhouetteGlyphJitter: urlGlyphsJit ? true : undefined,
+    textureMotionMode: textureMotionFromUrl,
     showPlayfieldGuide: devHud,
     onFormChange(key) {
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
@@ -92,6 +101,10 @@
   });
   window._pet = pet;
   syncRailUiArcClass(pet);
+  if (params.get("shapeDebug") === "1") {
+    window._shapeDump = () => pet.dumpShapeField();
+    console.info("[ZiLing] shapeDebug=1 → 控制台执行 _shapeDump() 查看形场摘要");
+  }
 
   function syncUiMode() {
     if (!openingPanel || !formLabel) return;
@@ -556,7 +569,7 @@
         pet.cycleUiArcMode();
         const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
         toast(
-          `层级 · ${lab}（色/速/轨/颤/墨/浮/波/徙/粒 分套保留）`
+          `层级 · ${lab}（色/速/轨/颤/紊/墨/浮/波/徙/粒 分套保留）`
         );
       } else if (action === "morph") {
         pet.abortFeeding();
@@ -605,6 +618,10 @@
             ? `亚格颤抖：开（${arcLayerZh()}；谐波轨下为亚格位移+微振）`
             : `亚格颤抖：关（${arcLayerZh()}；谐波轨下=严格格点）`
         );
+      } else if (action === "textureMotion") {
+        const k = pet.cycleTextureMotionMode();
+        const lab = (TEXTURE_MOTION_LABELS && TEXTURE_MOTION_LABELS[k]) || k;
+        toast(`纹理体动 · ${lab}`);
       } else if (action === "fluid") {
         const v = pet.cycleArcFluidStrength();
         toast(`波纹强度 ×${v.toFixed(2)}（${arcLayerZh()}）`);

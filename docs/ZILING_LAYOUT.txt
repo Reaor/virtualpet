@@ -4,13 +4,15 @@
 页面
   index.html       入口；先加载 js/ziling/*.js 再 pet.js、app.js
   styles.css       样式
-  app.js           「层」+ 波/徙/粒；toast 标明 arcLayer；色盘写入当前层
+  app.js           「层」+ 轨/颤/紊/波/徙/粒；toast 标明 arcLayer；色盘写入当前层
 
 引擎（单文件，体量仍大）
-  pet.js           剪影：silhouetteStrictHarmonicGrid（谐波默认离散格移）；「颤」glyphsJitter；蛇行 spiral/zigzag、_snakeResolvedIdx
+  pet.js           剪影谐波/蛇行/颤；形场重建、packedHash；纹理体动流/序（关格移时邻换）
 
 可拆出的小模块（按需再细分）
-  js/ziling/play-bounds.js   画布内碰撞夹紧与反弹；pet 里 _playBounds / _applyPlayfieldBounds
+  js/ziling/play-bounds.js   画布内碰撞夹紧与反弹
+  js/ziling/shape-field.js   可走格 + 壳层 + Uint8Array 密铺（辨形 / 矩阵伏笔）
+  js/ziling/matrix-bridge.js 矩阵预处理占位（二值混合、指数持有、置信度）
 
 对外
   window.ZiLing = { Pet, FORMS, FORM_ORDER, STANDBY_MATH_ORDER, getFormOrderForUiArcMode, getMotionProfileKernelsForPet, ... }
