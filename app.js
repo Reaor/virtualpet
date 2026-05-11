@@ -586,7 +586,7 @@
         pet.cycleUiArcMode();
         const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
         toast(
-          `层级 · ${lab}（色/速/轨/颤/紊/墨/浮/波/徙/粒 分套保留）`
+          `层级 · ${lab}（色/速/轨/颤/紊/廓/墨/浮/波/徙/粒 分套保留）`
         );
       } else if (action === "morph") {
         pet.abortFeeding();
@@ -639,6 +639,13 @@
         const k = pet.cycleTextureMotionMode();
         const lab = (TEXTURE_MOTION_LABELS && TEXTURE_MOTION_LABELS[k]) || k;
         toast(`纹理体动 · ${lab}`);
+      } else if (action === "silhouetteMatteUnderlay") {
+        const on = pet.cycleSilhouetteMatteUnderlay();
+        toast(
+          on
+            ? `剪影垫底：开（${arcLayerZh()}；巨字/颜 mask 下半透明静态轮廓）`
+            : `剪影垫底：关（${arcLayerZh()}）`
+        );
       } else if (action === "fluid") {
         const v = pet.cycleArcFluidStrength();
         toast(`波纹强度 ×${v.toFixed(2)}（${arcLayerZh()}）`);
