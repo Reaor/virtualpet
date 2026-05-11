@@ -17,6 +17,11 @@
 
   const pet = new Pet(canvas, { particleCount: 140 });
   window._pet = pet; // 便于调试
+  const shapeDebug = new URL(location.href).searchParams.get("shapeDebug") === "1";
+  if (shapeDebug) {
+    window._shapeDump = () => pet.dumpShapeField();
+    console.info("[ZiLing] shapeDebug=1 → 控制台执行 _shapeDump() 查看形场摘要");
+  }
 
   let formIdx = 0;
   function setForm(key, announce = true) {

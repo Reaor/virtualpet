@@ -5,6 +5,9 @@
  * 形态是一个函数：给定一块尺寸 S，返回 N 个目标点 + 两只眼睛位置。
  * 形态定义使用离屏 canvas 画出剪影，再均匀采样填充像素得到目标点；
  * 数学曲线（心、花、蝶）则直接参数化计算，更精确。
+ *
+ * 辨形与形场（PLAN.md / DESIGN.md）：换形后由 `js/ziling/shape-field.js` 从躯体目标点
+ * 构建离散可走格与壳/芯分层；壳层压低纹理动效；换形后短时「形变预算」压低全体纹理。
  */
 
 (function () {
@@ -664,6 +667,14 @@
       this._glyphFlash = 0;
       /** 换形后短促「落格」：弹簧略紧，字像落到格点上 */
       this._layoutSettle = 0;
+      /** 形场版本号，换形递增；供调试与将来矩阵 diff */
+      this.shapeFieldVersion = 0;
+      /** 最近一次构建的形场摘要（可走格集合在模块内算法中；此处仅存元数据） */
+      this.shapeField = null;
+      /** 换形后短时纹理压低（形变预算 M3 占位，秒） */
+      this._shapeMutationT = 0;
+      /** 壳层纹理阻尼：壳格上呼吸/抖动更弱，利于辨形 */
+      this.shapeShellDampen = opts.shapeShellDampen !== false;
 
       this._resize = this._resize.bind(this);
       this._resize();
@@ -725,6 +736,8 @@
           edge: 0.5,
           /** 字层：null | "eyeL" | "eyeR" | "brow" */
           faceRole: null,
+          /** 形场分层：'shell' 拓扑外圈格 | 'core' 内部 | null（蛇形/关闭阻尼） */
+          shapeBand: null,
         });
       }
     }
@@ -768,6 +781,73 @@
       if (this.faceLayerMode) this._assignFaceGlyphs();
       if (this.gridSnapping) this._snapGlyphTargetsToGrid();
       this._applyGridTypography();
+      this._shapeMutationT = 0.72;
+      this._rebuildShapeFieldFromForm();
+    }
+
+    /**
+     * 由当前躯体粒子目标点 (tx,ty) 构建形场，并写入 g.shapeBand: 'shell' | 'core' | null
+     * 蛇形觅食态目标每帧变动，跳过以免壳层抖动错误；蛇形结束换形后会重建。
+     */
+    _rebuildShapeFieldFromForm() {
+      const SF = typeof window !== "undefined" ? window.ZiLingShapeField : null;
+      if (!SF || !this.shapeShellDampen) {
+        for (const g of this.glyphs) g.shapeBand = null;
+        this.shapeField = null;
+        return;
+      }
+      if (this.form === "snake") {
+        for (const g of this.glyphs) g.shapeBand = null;
+        this.shapeField = null;
+        return;
+      }
+      const cell = this.gridCell;
+      const pts = [];
+      for (const g of this.glyphs) {
+        if (!g.faceRole) pts.push({ x: g.tx, y: g.ty });
+      }
+      const walk = SF.buildWalkSetFromLocalPoints(pts, cell);
+      const shell = SF.shellCellsFromWalkSet(walk);
+      for (const g of this.glyphs) {
+        if (g.faceRole) {
+          g.shapeBand = null;
+          continue;
+        }
+        const gx = Math.round(g.tx / cell);
+        const gy = Math.round(g.ty / cell);
+        g.shapeBand = SF.bandAtGrid(gx, gy, shell, walk);
+      }
+      this.shapeFieldVersion++;
+      this.shapeField = {
+        version: this.shapeFieldVersion,
+        cell,
+        walk,
+        shell,
+        meta: SF.summarizeWalkSet(walk, shell, 32),
+      };
+    }
+
+    /** 换形后的纹理预算倍率 0.62..1（形变大时压低体内动效） */
+    _textureBudgetMul() {
+      const dur = 0.72;
+      const t = this._shapeMutationT || 0;
+      if (t <= 0) return 1;
+      return clamp(0.62 + 0.38 * (t / dur), 0.62, 1);
+    }
+
+    /** 开发调试用：导出形场摘要（非完整矩阵，避免巨量 JSON） */
+    dumpShapeField() {
+      if (!this.shapeField) return null;
+      const m = this.shapeField.meta || {};
+      return {
+        version: this.shapeField.version,
+        form: this.form,
+        cell: this.shapeField.cell,
+        walkCount: m.walkCount,
+        shellCount: m.shellCount,
+        bounds: m.bounds,
+        sampleWalk: m.sampleWalk,
+      };
     }
 
     /** 离散倾角（约 4° 一档）+ 统一字号阶梯，接近活字排版 */
@@ -919,7 +999,8 @@
         this._applyMoodChars("annoyed", 1.8);
         this._rumbleAmp = Math.max(this._rumbleAmp || 0, 0.85);
         this._glyphFlash = Math.max(this._glyphFlash || 0, 0.6);
-        const pick = alt[Math.floor(Math.random() * alt.length)];
+        const morphAlt = FORM_ORDER.filter((k) => k !== this.form && FORMS[k]);
+        const pick = morphAlt[Math.floor(Math.random() * morphAlt.length)] || "blob";
         if (FORMS[pick]) this.setForm(pick, true);
         this.annoyance = 0.45;
         setTimeout(() => {
@@ -1377,6 +1458,7 @@
       this._rumbleAmp = Math.max(0, (this._rumbleAmp || 0) - 1.8 * dt);
       this._glyphFlash = Math.max(0, (this._glyphFlash || 0) - 2.2 * dt);
       this._layoutSettle = Math.max(0, (this._layoutSettle || 0) - dt * 1.1);
+      this._shapeMutationT = Math.max(0, (this._shapeMutationT || 0) - dt);
 
       if (this.form === "snake") this._updateSnakeTargets(t);
       if (this.faceLayerMode) this._syncFaceGlyphTargets(t);
@@ -1394,6 +1476,7 @@
         (this.mode === "feeding" ? 7 : 5.2) * (1 + (this._layoutSettle || 0) * 0.35);
       const rumble = (this._rumbleAmp || 0) * this.gridCell * 0.22;
       const flash = this._glyphFlash || 0;
+      const texMul = this._textureBudgetMul();
 
       const eyeClearR = this.size * 0.08;
       const useEyeClear = !this.faceLayerMode;
@@ -1417,10 +1500,20 @@
         const ty = g.ty;
         const wx = bx + (tx * cos - ty * sin);
         const wy = by + (tx * sin + ty * cos);
-        // 轻微呼吸扰动（按深度参数差异化）；规整格下减弱
-        const bw = Math.sin(t * 2 + g.depth * 6) * (this.gridSnapping ? 0.35 : 1.2);
-        const rx = rumble ? (Math.sin(t * 31 + g.depth * 17) * rumble) : 0;
-        const ry = rumble ? (Math.cos(t * 29 + g.depth * 13) * rumble) : 0;
+        const shellBw = g.shapeBand === "shell" ? 0.35 : 1;
+        const shellRu = g.shapeBand === "shell" ? 0.42 : 1;
+        // 轻微呼吸扰动（按深度参数差异化）；规整格下减弱；壳层与换形后预算再减弱
+        const bw =
+          Math.sin(t * 2 + g.depth * 6) *
+          (this.gridSnapping ? 0.35 : 1.2) *
+          texMul *
+          shellBw;
+        const rx = rumble
+          ? Math.sin(t * 31 + g.depth * 17) * rumble * texMul * shellRu
+          : 0;
+        const ry = rumble
+          ? Math.cos(t * 29 + g.depth * 13) * rumble * texMul * shellRu
+          : 0;
         let ax = (wx + rx - g.x) * springK - g.vx * damping + bw;
         let ay = (wy + ry - g.y) * springK - g.vy * damping;
         // 眼睛"清场"：离眼太近的字会被温柔推开
@@ -1729,5 +1822,9 @@
     DIGEST_RULES,
     CHAR_DIGEST_HINT,
     CHAR_FORM_BIAS,
+    /** 与形场模块同源；未加载 script 时为 undefined */
+    get ShapeField() {
+      return typeof window !== "undefined" ? window.ZiLingShapeField : undefined;
+    },
   };
 })();
