@@ -88,6 +88,12 @@
 | 输入形状拟合仍差 | 壳层采样与 `enforceSpacing` 张力（粒子数 × 最小间距 × 宏字笔画复杂度） | **略增** `enforceSpacingPasses`（呈现）；后续：**笔画感知间距**、动态粒子预算 |
 | 运动单调或疲劳 | 单一谐波或单一蛇速 | **螺旋走廊** + **索引去重**；后续：Perlin 导向场、真 Hamilton 覆盖 |
 
+### 2.7b 外部 walk Consumer（辨形 · 矩阵伏笔，3.28）
+
+- **结构**：`ZiLingShapeFieldConsumer.create()` 持有 **二值密铺** `Uint8Array`，对 Producer 每帧输入用 `MatrixBridge.exponentialHold` 做时间低通，减轻 API 抖动。  
+- **对齐**：若外部网格与本地 `packWalkGrid` 宽高不一致，先用 **`MatrixBridge.resampleBinaryPacked`** 最近邻重采样（与经典图像最近邻缩放同构，便于与任意分辨率矩阵对接）。  
+- **Pet**：`ingestExternalWalkPacked` / `resetExternalWalkConsumer`；`dumpShapeField().externalWalk`；换形后若本地密铺尺寸变化则 **清空**外部 Consumer，避免轮廓错位。真网络 Producer **尚未**接入。
+
 ### 2.8 后续扩展（占位）
 
 - 日程 App 深度接入、真实 AI 接口、视频轮廓驱动等：见 `PLAN.md` 优先级表；**不**在本设计书展开实现细节。
@@ -98,7 +104,8 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.27.0**：**形场模块** `shape-field.js`（可走格 `Set` + 拓扑壳层 + `packWalkGrid` / `hashPackedGrid`）；**矩阵桥占位** `matrix-bridge.js`（二值栅格混合、指数持有、置信度门限）。**纹理体动** 侧栏「紊」：`spring_flow` / `adjacent_swap`（关 `gridMarch` 时芯层邻格换位）；换形 **纹理预算** `_textureBudgetMul`；`?textureMotion=`、`?shapeDebug=1` → `_shapeDump()`。 |
+| 最新 | **3.28.0**：**形场 Consumer** `shape-consumer.js`（`ZiLingShapeFieldConsumer.create`：指数平滑 + 与本地 packed **最近邻对齐**）；`matrix-bridge.resampleBinaryPacked`。**Pet**：`ingestExternalWalkPacked` / `resetExternalWalkConsumer`；换形若 packed 尺寸变化则清外部态；`dumpShapeField` 含 `externalWalk`；`?shapeDebug=1` 提供 `_ingestDemoWalk()`。 |
+| 先前 | **3.27.0**：**形场模块** `shape-field.js`（可走格 `Set` + 拓扑壳层 + `packWalkGrid` / `hashPackedGrid`）；**矩阵桥占位** `matrix-bridge.js`（二值栅格混合、指数持有、置信度门限）。**纹理体动** 侧栏「紊」：`spring_flow` / `adjacent_swap`（关 `gridMarch` 时芯层邻格换位）；换形 **纹理预算** `_textureBudgetMul`；`?textureMotion=`、`?shapeDebug=1` → `_shapeDump()`。 |
 | 先前 | **3.26.0**：**谐波默认严格格点**（`silhouetteStrictHarmonicGrid`）：连续谐波/流体 **不** 叠在 march 前坐标上；**ensemble 离散 ±1 格** 驱动曼哈顿步进。**亚格颤抖** 独立为侧栏 **「颤」**（`_arcPrefs.glyphsJitter`）+ URL `glyphsJitter`。**性能**：巨字 / mask 叠分 **6→4**、**5→3** 遍。蛇行亚格微摆随「颤」。 |
 | 先前 | **3.25.0**：**流线蛇行** 默认 **螺旋走廊**（切比雪夫环 + 极角）；**弓字** `zigzag` 保留为 `snakePathVariant`。**蛇行目标格去重**（`_snakeResolvedIdx` 每帧贪心顺延）。**URL**：`motionStyle` / `bodyMotion`、`snakePath`。`setSnakePathVariant`。 |
 | 先前 | **3.24.0**：侧栏 **「轨」** `bodyMotionStyle`（`_arcPrefs` 分套）：**谐波亚格** / **流线蛇行**（`_rebuildMaskSnakeWalkPath` 弓字走廊 + `_snakePhase` + 序连线）/ **轮廓游走**（mask 内恢复游走）。**叠分** mask **5 遍**；蛇行后 **再分离**；lifecycle **更慢**淡出。**巨字** `enforceSpacingPasses` 略增。`DESIGN` **§2.6～2.7** 记录范式与迭代负优化审视。 |

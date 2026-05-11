@@ -64,9 +64,36 @@
     return out;
   }
 
+  /**
+   * 最近邻重采样二值 packed（行主序），用于外部矩阵与本地 `packWalkGrid` 尺寸对齐。
+   * @param {Uint8Array} src
+   * @param {number} sw
+   * @param {number} sh
+   * @param {number} dw
+   * @param {number} dh
+   */
+  function resampleBinaryPacked(src, sw, sh, dw, dh) {
+    if (!src || sw < 1 || sh < 1 || dw < 1 || dh < 1) {
+      return { packed: new Uint8Array(0), width: 0, height: 0 };
+    }
+    if (src.length !== sw * sh) {
+      return { packed: new Uint8Array(0), width: 0, height: 0 };
+    }
+    const dst = new Uint8Array(dw * dh);
+    for (let y = 0; y < dh; y++) {
+      const sy = Math.min(sh - 1, Math.floor(((y + 0.5) * sh) / dh));
+      for (let x = 0; x < dw; x++) {
+        const sx = Math.min(sw - 1, Math.floor(((x + 0.5) * sw) / dw));
+        dst[y * dw + x] = src[sy * sw + sx] ? 1 : 0;
+      }
+    }
+    return { packed: dst, width: dw, height: dh };
+  }
+
   global.ZiLingMatrixBridge = {
     blendBinaryGrids,
     exponentialHold,
     applyConfidenceThreshold,
+    resampleBinaryPacked,
   };
 })(typeof window !== "undefined" ? window : globalThis);

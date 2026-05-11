@@ -2692,6 +2692,9 @@
       this.shapeShellDampen = opts.shapeShellDampen !== false;
       this.textureMotionMode = normalizeTextureMotionMode(opts.textureMotionMode);
       this._swapNextAt = 0;
+      /** 外部 walk 密铺 Consumer（平滑 + 重采样对齐）；见 `shape-consumer.js` */
+      this._shapeConsumer = null;
+      this._externalWalkSnapshot = null;
       applyArcVisualPrefsToPet(this);
       this.onUiArcModeChange =
         typeof opts.onUiArcModeChange === "function"
@@ -3126,6 +3129,15 @@
 
       this._shapeMutationT = 0.72;
       this._rebuildShapeFieldFromForm();
+      if (
+        this._externalWalkSnapshot &&
+        this.shapeField &&
+        this.shapeField.packedWidth > 0 &&
+        (this._externalWalkSnapshot.width !== this.shapeField.packedWidth ||
+          this._externalWalkSnapshot.height !== this.shapeField.packedHeight)
+      ) {
+        this.resetExternalWalkConsumer();
+      }
     }
 
     /**
@@ -3207,7 +3219,54 @@
           bytes: this.shapeField.packed ? this.shapeField.packed.length : 0,
         },
         textureMotion: normalizeTextureMotionMode(this.textureMotionMode),
+        externalWalk: this._externalWalkSnapshot,
       };
+    }
+
+    _ensureShapeConsumer() {
+      const SC =
+        typeof window !== "undefined" ? window.ZiLingShapeFieldConsumer : null;
+      if (!SC || this._shapeConsumer) return;
+      this._shapeConsumer = SC.create();
+    }
+
+    /**
+     * 注入外部二值 walk 密铺（未来 AI 矩阵帧）。尺寸与当前本地 packed 不一致时最近邻重采样。
+     * @param {Uint8Array} packed
+     * @param {number} width
+     * @param {number} height
+     * @param {number} [smoothAlpha] 0..1
+     * @returns {boolean}
+     */
+    ingestExternalWalkPacked(packed, width, height, smoothAlpha) {
+      const SC =
+        typeof window !== "undefined" ? window.ZiLingShapeFieldConsumer : null;
+      if (!SC || !packed) return false;
+      this._ensureShapeConsumer();
+      const td =
+        this.shapeField &&
+        this.shapeField.packedWidth > 0 &&
+        this.shapeField.packedHeight > 0
+          ? {
+              width: this.shapeField.packedWidth,
+              height: this.shapeField.packedHeight,
+            }
+          : null;
+      const snap = this._shapeConsumer.pushObservation(
+        { packed, width: width | 0, height: height | 0 },
+        smoothAlpha,
+        td
+      );
+      this._externalWalkSnapshot = snap || null;
+      if (this._externalWalkSnapshot) {
+        this._shapeMutationT = Math.max(this._shapeMutationT || 0, 0.55);
+      }
+      return !!this._externalWalkSnapshot;
+    }
+
+    resetExternalWalkConsumer() {
+      if (this._shapeConsumer) this._shapeConsumer.reset();
+      this._externalWalkSnapshot = null;
     }
 
     /**
@@ -6612,6 +6671,11 @@
     },
     get MatrixBridge() {
       return typeof window !== "undefined" ? window.ZiLingMatrixBridge : undefined;
+    },
+    get ShapeFieldConsumer() {
+      return typeof window !== "undefined"
+        ? window.ZiLingShapeFieldConsumer
+        : undefined;
     },
   };
 })();

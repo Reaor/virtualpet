@@ -103,7 +103,24 @@
   syncRailUiArcClass(pet);
   if (params.get("shapeDebug") === "1") {
     window._shapeDump = () => pet.dumpShapeField();
-    console.info("[ZiLing] shapeDebug=1 → 控制台执行 _shapeDump() 查看形场摘要");
+    window._ingestDemoWalk = () => {
+      const w = 8;
+      const h = 8;
+      const u8 = new Uint8Array(w * h);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const ring = x === 0 || x === w - 1 || y === 0 || y === h - 1;
+          u8[y * w + x] = ring ? 1 : 0;
+        }
+      }
+      const ok = pet.ingestExternalWalkPacked(u8, w, h, 0.4);
+      const d = pet.dumpShapeField();
+      console.info("[ZiLing] _ingestDemoWalk ok=", ok, d);
+      return d;
+    };
+    console.info(
+      "[ZiLing] shapeDebug=1 → _shapeDump() 、 _ingestDemoWalk()（外部 walk Consumer）"
+    );
   }
 
   function syncUiMode() {
