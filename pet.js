@@ -2275,6 +2275,7 @@
     );
     b.bodyMotionStyle = normalizeBodyMotionStyle(self.bodyMotionStyle);
     b.glyphsJitter = !!self.silhouetteGlyphJitter;
+    b.silhouetteMatteUnderlay = !!self.silhouetteMatteUnderlay;
   }
 
   function applyArcVisualPrefsToPet(self) {
@@ -2295,6 +2296,7 @@
     );
     self.bodyMotionStyle = normalizeBodyMotionStyle(b.bodyMotionStyle);
     self.silhouetteGlyphJitter = !!b.glyphsJitter;
+    self.silhouetteMatteUnderlay = !!b.silhouetteMatteUnderlay;
     self.motionProfile =
       self.uiArcMode === "presentation" ? "display" : "standby";
   }
@@ -2662,6 +2664,7 @@
           megaParticleMul: 1,
           bodyMotionStyle: "harmonic",
           glyphsJitter: false,
+          silhouetteMatteUnderlay: false,
         },
         presentation: {
           glyphMotionSpeed: _sp0,
@@ -2673,6 +2676,7 @@
           megaParticleMul: 1,
           bodyMotionStyle: "harmonic",
           glyphsJitter: false,
+          silhouetteMatteUnderlay: true,
         },
       };
       const _jitInit = opts.silhouetteGlyphJitter === true;
@@ -2695,6 +2699,8 @@
       /** 外部 walk 密铺 Consumer（平滑 + 重采样对齐）；见 `shape-consumer.js` */
       this._shapeConsumer = null;
       this._externalWalkSnapshot = null;
+      /** 呈现剪影静态垫底（maskDraw 离屏缓存，每换形重建） */
+      this._silhouetteMatteLayer = null;
       applyArcVisualPrefsToPet(this);
       this.onUiArcModeChange =
         typeof opts.onUiArcModeChange === "function"
@@ -2995,9 +3001,11 @@
         this._maskPack = rasterizeMask(data.maskDraw, S);
         this._maskFormKey = name;
         this._maskSizeIdx = Math.round(S * 10);
+        this._rebuildMatteLayerCanvas(data.maskDraw, S);
       } else {
         this._maskPack = null;
         this._maskFormKey = "";
+        this._silhouetteMatteLayer = null;
       }
 
       if (this.faceLayerMode && name !== "script") this._assignFaceGlyphs();
@@ -5924,6 +5932,48 @@
       });
     }
 
+    _rebuildMatteLayerCanvas(maskDrawFn, S) {
+      if (typeof maskDrawFn !== "function" || !S) {
+        this._silhouetteMatteLayer = null;
+        return;
+      }
+      const sw = Math.max(8, Math.ceil(S));
+      const c = document.createElement("canvas");
+      c.width = sw;
+      c.height = sw;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      if (!g) {
+        this._silhouetteMatteLayer = null;
+        return;
+      }
+      g.clearRect(0, 0, sw, sw);
+      try {
+        maskDrawFn(g, S);
+      } catch (_) {
+        this._silhouetteMatteLayer = null;
+        return;
+      }
+      this._silhouetteMatteLayer = c;
+    }
+
+    /**
+     * 呈现层：在字粒之下绘制半透明 mask 剪影，提供「近似静态」轮廓锚点（字粒仍可动）。
+     */
+    _drawSilhouetteMatteUnderlay(ctx, light, bx, by, rot) {
+      if (!this.silhouetteMatteUnderlay) return;
+      if (!isMaskBackedMegaKao(this)) return;
+      if (!this._silhouetteMatteLayer) return;
+      const S = this.size;
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.rotate(rot);
+      ctx.translate(-S / 2, -S / 2);
+      ctx.globalAlpha = light ? 0.16 : 0.26;
+      ctx.drawImage(this._silhouetteMatteLayer, 0, 0, S, S);
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
     _render(now) {
       const ctx = this.ctx;
       const W = this.width;
@@ -6026,6 +6076,11 @@
       const flash = isMaskBackedMegaKao(this)
         ? (this._glyphFlash || 0) * 0.22
         : this._glyphFlash || 0;
+
+      const bxR = this.pos.x;
+      const byR = this.pos.y;
+      const rotR = this.rotation;
+      this._drawSilhouetteMatteUnderlay(ctx, light, bxR, byR, rotR);
 
       const drawGlyph = (g, opts) => {
         const crispForm = isGridLayoutImmutableForm(this.form);
@@ -6457,6 +6512,14 @@
       this.silhouetteGlyphJitter = !this.silhouetteGlyphJitter;
       snapshotArcVisualPrefs(this);
       return this.silhouetteGlyphJitter;
+    }
+
+    /** 侧栏「廓」：呈现层剪影下，mask 形状静态垫底（分套记忆） */
+    cycleSilhouetteMatteUnderlay() {
+      const b = this._arcPrefs[this.uiArcMode];
+      b.silhouetteMatteUnderlay = !b.silhouetteMatteUnderlay;
+      applyArcVisualPrefsToPet(this);
+      return this.silhouetteMatteUnderlay;
     }
 
     /** 侧栏「紊」：弹簧纹理流 ↔ 芯层邻接换位（关格移时生效） */
