@@ -2287,6 +2287,7 @@
     b.bodyMotionStyle = normalizeBodyMotionStyle(self.bodyMotionStyle);
     b.glyphsJitter = !!self.silhouetteGlyphJitter;
     b.silhouetteMatteUnderlay = !!self.silhouetteMatteUnderlay;
+    b.outlineContourFirst = !!self.outlineContourFirst;
     b.textureMotionMode = normalizeTextureMotionMode(self.textureMotionMode);
   }
 
@@ -2309,6 +2310,7 @@
     self.bodyMotionStyle = normalizeBodyMotionStyle(b.bodyMotionStyle);
     self.silhouetteGlyphJitter = !!b.glyphsJitter;
     self.silhouetteMatteUnderlay = !!b.silhouetteMatteUnderlay;
+    self.outlineContourFirst = !!b.outlineContourFirst;
     self.textureMotionMode = normalizeTextureMotionMode(b.textureMotionMode);
     self.motionProfile =
       self.uiArcMode === "presentation" ? "display" : "standby";
@@ -2678,7 +2680,8 @@
           megaParticleMul: 1,
           bodyMotionStyle: "harmonic",
           glyphsJitter: false,
-          silhouetteMatteUnderlay: false,
+          silhouetteMatteUnderlay: true,
+          outlineContourFirst: true,
           textureMotionMode: _tex0,
         },
         presentation: {
@@ -2692,9 +2695,14 @@
           bodyMotionStyle: "harmonic",
           glyphsJitter: false,
           silhouetteMatteUnderlay: true,
+          outlineContourFirst: true,
           textureMotionMode: _tex0,
         },
       };
+      if (opts.outlineContourFirst === false) {
+        this._arcPrefs.standby.outlineContourFirst = false;
+        this._arcPrefs.presentation.outlineContourFirst = false;
+      }
       const _jitInit = opts.silhouetteGlyphJitter === true;
       this._arcPrefs.standby.glyphsJitter = _jitInit;
       this._arcPrefs.presentation.glyphsJitter = _jitInit;
@@ -5203,11 +5211,19 @@
       }
 
       const gms = gms0 * motionTimeBlend(mk.timeScale);
+      const contourStatic =
+        !!this.outlineContourFirst &&
+        silMaskPet &&
+        this.viewMode === "pet";
+      const gmsSil = contourStatic ? gms * 0.32 : gms;
       const ensBoost = silMaskPet
         ? 0.62 + 0.48 * clamp(gms0, 0.35, 2.5)
         : 1;
       this._ensemblePhase +=
-        dt * (0.78 + 0.12 * Math.sin(t * 0.17)) * gms * ensBoost;
+        dt *
+          (0.78 + 0.12 * Math.sin(t * 0.17)) *
+          (silMaskPet ? gmsSil : gms) *
+          ensBoost;
 
       if (this.viewMode !== "intro") {
         this.ripples.length = 0;
@@ -5448,16 +5464,17 @@
       let waveAmpEff =
         waveAmp *
         maskFluidMul *
-        gms *
+        (silMaskPet ? gmsSil : gms) *
         (presSilHarm || silMaskPet ? 0.1 : 1);
       if (strictSilGrid) waveAmpEff = 0;
       if (!strictSilGrid) {
         this._fluidPhase +=
-          dt * (presSilHarm || silMaskPet ? 0.09 : 0.48) * gms;
+          dt * (presSilHarm || silMaskPet ? 0.09 : 0.48) * (silMaskPet ? gmsSil : gms);
       }
 
       if (this.gridMarch && this.gridSnapping) {
-        const marchGms = gms * 0.55 + gms0 * 0.45;
+        const marchGms =
+          (gms * 0.55 + gms0 * 0.45) * (contourStatic ? 0.5 : 1);
         const stepBudget = Math.max(
           1,
           Math.min(
@@ -5478,7 +5495,8 @@
           this._snakePhase +=
             dt *
             (0.28 + 0.46 * gms0) *
-            (0.4 + 0.36 * clamp(this.gridMarchSpeed || 2, 0.85, 3.6));
+            (0.4 + 0.36 * clamp(this.gridMarchSpeed || 2, 0.85, 3.6)) *
+            (contourStatic ? 0.42 : 1);
           const pathSnake = this._snakeWalkPath;
           if (pathSnake && pathSnake.length > 1) {
             const L = pathSnake.length;
@@ -5575,19 +5593,21 @@
             !g.faceRole &&
             !isMotionLayoutLockedForm(this.form)
           ) {
+            const gmsPat = silMaskPet ? gmsSil : gms;
             const pAmpBase =
               cell *
               0.072 *
               (this._patrolAmp || 1) *
               (this.dragging ? 1.15 : 1) *
-              gms *
+              gmsPat *
               mk.ampScale;
             if (
               (presSilHarm || silMaskPet) &&
               !snakeStream &&
               !strictSilGrid
             ) {
-              const phase = this._ensemblePhase * 0.58 + t * 0.06 * gms;
+              const phase =
+                this._ensemblePhase * 0.58 + t * 0.06 * (silMaskPet ? gmsSil : gms);
               const spat = g.tx * 0.013 + g.ty * 0.0105;
               const tight = presSilHarm ? 1 : 1.06;
               const speedVis = clamp(0.68 + 0.44 * gms0, 0.62, 2.15);
@@ -5989,8 +6009,10 @@
      * 在字粒之下绘制半透明 mask，提供静态辨形锚点（与 `_maskPack` 同源几何）。
      */
     _drawSilhouetteMatteUnderlay(ctx, light, bx, by, rot) {
-      if (!this.silhouetteMatteUnderlay) return;
       if (!isMaskBackedMegaKao(this)) return;
+      const show =
+        !!this.silhouetteMatteUnderlay || !!this.outlineContourFirst;
+      if (!show) return;
       const lay = this._silhouetteMatteLayer;
       if (!lay || !lay.width) return;
       const S = this.size;
@@ -5998,7 +6020,13 @@
       ctx.translate(bx, by);
       ctx.rotate(rot);
       ctx.translate(-S / 2, -S / 2);
-      ctx.globalAlpha = light ? 0.17 : 0.27;
+      let a = light ? 0.17 : 0.27;
+      if (this.outlineContourFirst && this.silhouetteMatteUnderlay) {
+        a += light ? 0.035 : 0.045;
+      } else if (this.outlineContourFirst && !this.silhouetteMatteUnderlay) {
+        a = light ? 0.15 : 0.24;
+      }
+      ctx.globalAlpha = a;
       ctx.drawImage(lay, 0, 0, lay.width, lay.height, 0, 0, S, S);
       ctx.globalAlpha = 1;
       ctx.restore();
@@ -6547,12 +6575,22 @@
       return this.silhouetteGlyphJitter;
     }
 
-    /** 侧栏「廓」：mask 静态垫底（分套记忆；与可走格栅格对齐） */
+    /** 侧栏「廓」：mask 静态垫底强度（分套；「辨」开时仍建议开以增强对比） */
     cycleSilhouetteMatteUnderlay() {
       const b = this._arcPrefs[this.uiArcMode];
       b.silhouetteMatteUnderlay = !b.silhouetteMatteUnderlay;
       applyArcVisualPrefsToPet(this);
       return this.silhouetteMatteUnderlay;
+    }
+
+    /**
+     * 侧栏「辨」：**轮廓优先**（默认开）— mask 巨字/颜下先保证静态剪影可读，体内动态压低；关后便于调试全动态。
+     */
+    cycleOutlineContourFirst() {
+      const b = this._arcPrefs[this.uiArcMode];
+      b.outlineContourFirst = !b.outlineContourFirst;
+      applyArcVisualPrefsToPet(this);
+      return this.outlineContourFirst;
     }
 
     /** 侧栏「紊」：弹簧纹理流 ↔ 芯层邻接换位（关格移时生效；分套记忆） */
