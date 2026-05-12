@@ -2245,6 +2245,17 @@
     };
   }
 
+  /**
+   * 层级 `mk.timeScale`（待机 1、呈现压低、剪影再压低）与侧栏「速」`gms0` 的组合：
+   * 旧实现用 `gms = gms0 * timeScale`，在呈现+剪影下 timeScale 可至 ~0.14，导致节拍/格移/流体相位几乎不随「速」变化。
+   * 这里用 **凸组合** 保留「层越冷静越快不起来」的趋势，但为 `gms0` 留出下限通道，使速键始终可感知。
+   */
+  function motionTimeBlend(mkTimeScale) {
+    const ts = clamp(mkTimeScale != null ? +mkTimeScale : 1, 0.12, 1);
+    const floor = 0.37;
+    return floor + (1 - floor) * ts;
+  }
+
   /** 兼容旧调用 / 调试：按形态名推测内核（不等同于运行时逻辑）。 */
   function getMotionProfileKernels(form) {
     return isDisplayPresentationForm(form)
@@ -2275,6 +2286,8 @@
     );
     b.bodyMotionStyle = normalizeBodyMotionStyle(self.bodyMotionStyle);
     b.glyphsJitter = !!self.silhouetteGlyphJitter;
+    b.silhouetteMatteUnderlay = !!self.silhouetteMatteUnderlay;
+    b.textureMotionMode = normalizeTextureMotionMode(self.textureMotionMode);
   }
 
   function applyArcVisualPrefsToPet(self) {
@@ -2295,6 +2308,8 @@
     );
     self.bodyMotionStyle = normalizeBodyMotionStyle(b.bodyMotionStyle);
     self.silhouetteGlyphJitter = !!b.glyphsJitter;
+    self.silhouetteMatteUnderlay = !!b.silhouetteMatteUnderlay;
+    self.textureMotionMode = normalizeTextureMotionMode(b.textureMotionMode);
     self.motionProfile =
       self.uiArcMode === "presentation" ? "display" : "standby";
   }
@@ -2651,6 +2666,7 @@
         0.85,
         3.6
       );
+      const _tex0 = normalizeTextureMotionMode(opts.textureMotionMode);
       this._arcPrefs = {
         standby: {
           glyphMotionSpeed: _sp0,
@@ -2662,6 +2678,8 @@
           megaParticleMul: 1,
           bodyMotionStyle: "harmonic",
           glyphsJitter: false,
+          silhouetteMatteUnderlay: false,
+          textureMotionMode: _tex0,
         },
         presentation: {
           glyphMotionSpeed: _sp0,
@@ -2673,6 +2691,8 @@
           megaParticleMul: 1,
           bodyMotionStyle: "harmonic",
           glyphsJitter: false,
+          silhouetteMatteUnderlay: true,
+          textureMotionMode: _tex0,
         },
       };
       const _jitInit = opts.silhouetteGlyphJitter === true;
@@ -2690,11 +2710,13 @@
       this.shapeField = null;
       this._shapeMutationT = 0;
       this.shapeShellDampen = opts.shapeShellDampen !== false;
-      this.textureMotionMode = normalizeTextureMotionMode(opts.textureMotionMode);
+      this.textureMotionMode = _tex0;
       this._swapNextAt = 0;
       /** 外部 walk 密铺 Consumer（平滑 + 重采样对齐）；见 `shape-consumer.js` */
       this._shapeConsumer = null;
       this._externalWalkSnapshot = null;
+      /** 呈现剪影静态垫底（与 `rasterizeMask` 同尺度绘制，换形重建） */
+      this._silhouetteMatteLayer = null;
       applyArcVisualPrefsToPet(this);
       this.onUiArcModeChange =
         typeof opts.onUiArcModeChange === "function"
@@ -2995,9 +3017,11 @@
         this._maskPack = rasterizeMask(data.maskDraw, S);
         this._maskFormKey = name;
         this._maskSizeIdx = Math.round(S * 10);
+        this._rebuildMatteLayerCanvas(data.maskDraw, S);
       } else {
         this._maskPack = null;
         this._maskFormKey = "";
+        this._silhouetteMatteLayer = null;
       }
 
       if (this.faceLayerMode && name !== "script") this._assignFaceGlyphs();
@@ -3926,8 +3950,13 @@
     /** 呈现层剪影（巨字/颜）：离轮廓淡出 → 登记空位 → 壳上重生并换新字 */
     _updatePresentationSilhouetteGlyphLifecycle(dt, bx, by, cos, sin, flip) {
       if (!this._maskPack || !this._maskPack.grid) return;
-      const fadeOut = 0.38;
-      const fadeIn = 1.05;
+      const spd = clamp(
+        this.glyphMotionSpeed != null ? this.glyphMotionSpeed : 1,
+        0.25,
+        2.5
+      );
+      const fadeOut = 0.26 / (0.62 + 0.38 * spd);
+      const fadeIn = 0.58 + 0.35 * spd;
       const tWall = performance.now() / 1000;
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
@@ -3969,7 +3998,7 @@
           if (isPresentationSilhouetteHarm(this)) {
             g.char = this._randomChar();
           }
-          g.alpha = Math.min(0.22, g._megaBaseAlpha * 0.28);
+          g.alpha = clamp(g._megaBaseAlpha * 0.48, 0.14, 0.5);
           g._megaOutsideAcc = 0;
           g.wgx = 0;
           g.wgy = 0;
@@ -5173,7 +5202,7 @@
         }
       }
 
-      const gms = gms0 * mk.timeScale;
+      const gms = gms0 * motionTimeBlend(mk.timeScale);
       const ensBoost = silMaskPet
         ? 0.62 + 0.48 * clamp(gms0, 0.35, 2.5)
         : 1;
@@ -5924,6 +5953,57 @@
       });
     }
 
+    /**
+     * 与 `rasterizeMask` 相同缩放绘制 mask，保证垫底与可走格几何一致；画布为降采样方形。
+     */
+    _rebuildMatteLayerCanvas(maskDrawFn, S) {
+      if (typeof maskDrawFn !== "function" || !S) {
+        this._silhouetteMatteLayer = null;
+        return;
+      }
+      const cap = 280;
+      const sampleS = Math.min(Math.max(8, Math.round(S)), cap);
+      const scale = sampleS / S;
+      const c = document.createElement("canvas");
+      c.width = sampleS;
+      c.height = sampleS;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      if (!g) {
+        this._silhouetteMatteLayer = null;
+        return;
+      }
+      g.clearRect(0, 0, sampleS, sampleS);
+      try {
+        g.save();
+        g.scale(scale, scale);
+        maskDrawFn(g, S);
+        g.restore();
+      } catch (_) {
+        this._silhouetteMatteLayer = null;
+        return;
+      }
+      this._silhouetteMatteLayer = c;
+    }
+
+    /**
+     * 在字粒之下绘制半透明 mask，提供静态辨形锚点（与 `_maskPack` 同源几何）。
+     */
+    _drawSilhouetteMatteUnderlay(ctx, light, bx, by, rot) {
+      if (!this.silhouetteMatteUnderlay) return;
+      if (!isMaskBackedMegaKao(this)) return;
+      const lay = this._silhouetteMatteLayer;
+      if (!lay || !lay.width) return;
+      const S = this.size;
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.rotate(rot);
+      ctx.translate(-S / 2, -S / 2);
+      ctx.globalAlpha = light ? 0.17 : 0.27;
+      ctx.drawImage(lay, 0, 0, lay.width, lay.height, 0, 0, S, S);
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
     _render(now) {
       const ctx = this.ctx;
       const W = this.width;
@@ -6026,6 +6106,14 @@
       const flash = isMaskBackedMegaKao(this)
         ? (this._glyphFlash || 0) * 0.22
         : this._glyphFlash || 0;
+
+      this._drawSilhouetteMatteUnderlay(
+        ctx,
+        light,
+        this.pos.x,
+        this.pos.y,
+        this.rotation
+      );
 
       const drawGlyph = (g, opts) => {
         const crispForm = isGridLayoutImmutableForm(this.form);
@@ -6459,12 +6547,22 @@
       return this.silhouetteGlyphJitter;
     }
 
-    /** 侧栏「紊」：弹簧纹理流 ↔ 芯层邻接换位（关格移时生效） */
+    /** 侧栏「廓」：mask 静态垫底（分套记忆；与可走格栅格对齐） */
+    cycleSilhouetteMatteUnderlay() {
+      const b = this._arcPrefs[this.uiArcMode];
+      b.silhouetteMatteUnderlay = !b.silhouetteMatteUnderlay;
+      applyArcVisualPrefsToPet(this);
+      return this.silhouetteMatteUnderlay;
+    }
+
+    /** 侧栏「紊」：弹簧纹理流 ↔ 芯层邻接换位（关格移时生效；分套记忆） */
     cycleTextureMotionMode() {
-      const cur = normalizeTextureMotionMode(this.textureMotionMode);
+      const b = this._arcPrefs[this.uiArcMode];
+      const cur = normalizeTextureMotionMode(b.textureMotionMode);
       const ix = TEXTURE_MOTION_MODES.indexOf(cur);
-      this.textureMotionMode =
+      b.textureMotionMode =
         TEXTURE_MOTION_MODES[(ix + 1) % TEXTURE_MOTION_MODES.length];
+      applyArcVisualPrefsToPet(this);
       return this.textureMotionMode;
     }
 
@@ -6665,6 +6763,7 @@
     TEXTURE_MOTION_LABELS,
     getMotionProfileKernels,
     getMotionProfileKernelsForPet,
+    motionTimeBlend,
     getFormOrderForUiArcMode,
     get ShapeField() {
       return typeof window !== "undefined" ? window.ZiLingShapeField : undefined;
