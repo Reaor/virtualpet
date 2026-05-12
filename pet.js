@@ -5819,13 +5819,13 @@
 
           const tgtX = g.mgx * cell;
           const tgtY = g.mgy * cell;
-          const useEase = this.gridCellMotionEase && !mT;
+          /** mask 巨字/颜：禁用格间绘制 ease，否则对角插值会把字粒画出笔画轮廓外（辨形破坏） */
+          const useEase =
+            this.gridCellMotionEase && !mT && !silMaskPet;
           if (useEase) {
             const gEase = clamp(gms0, 0.35, 2.5);
             const rate =
-              (10.5 + 8.5 * gEase) *
-              (this.mode === "sleep" ? 0.62 : 1) *
-              (silMaskPet ? 0.95 : 1);
+              (10.5 + 8.5 * gEase) * (this.mode === "sleep" ? 0.62 : 1);
             const sm = 1 - Math.exp(-rate * dt);
             if (g.x == null || g.y == null || Number.isNaN(g.x)) {
               g.x = tgtX;
