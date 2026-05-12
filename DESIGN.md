@@ -104,7 +104,7 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.29.0**：**剪影静态垫底** 侧栏「廓」：`silhouetteMatteUnderlay` 写入 `_arcPrefs`（呈现层默认开、待机默认关）；换形时 `_rebuildMatteLayerCanvas` 缓存 `maskDraw` 离屏图，`_drawSilhouetteMatteUnderlay` 在字粒下以低 alpha 叠绘，强化 **辨形**（巨字 / 有 mask 的颜文字）。 |
+| 最新 | **3.31.0**：合并 **廓** 剪影静态垫底（`_arcPrefs`、`silhouetteMatteUnderlay`、`_rebuildMatteLayerCanvas` / `_drawSilhouetteMatteUnderlay`）与 **plan-followup**：**格移绘制平滑**（`gridCellMotionEase`，`?gridEase=0` 关）、**clock 秒级**（`?clockGranularity=sec` / `?clockSec=1`）、**觅食贝塞尔路径**、**睡眠体内压低**、**游走方向惯性**、**拖拽 lag 略加强**。 |
 | 先前 | **3.28.0**：**形场 Consumer** `shape-consumer.js`（`ZiLingShapeFieldConsumer.create`：指数平滑 + 与本地 packed **最近邻对齐**）；`matrix-bridge.resampleBinaryPacked`。**Pet**：`ingestExternalWalkPacked` / `resetExternalWalkConsumer`；换形若 packed 尺寸变化则清外部态；`dumpShapeField` 含 `externalWalk`；`?shapeDebug=1` 提供 `_ingestDemoWalk()`。 |
 | 先前 | **3.27.0**：**形场模块** `shape-field.js`（可走格 `Set` + 拓扑壳层 + `packWalkGrid` / `hashPackedGrid`）；**矩阵桥占位** `matrix-bridge.js`（二值栅格混合、指数持有、置信度门限）。**纹理体动** 侧栏「紊」：`spring_flow` / `adjacent_swap`（关 `gridMarch` 时芯层邻格换位）；换形 **纹理预算** `_textureBudgetMul`；`?textureMotion=`、`?shapeDebug=1` → `_shapeDump()`。 |
 | 先前 | **3.26.0**：**谐波默认严格格点**（`silhouetteStrictHarmonicGrid`）：连续谐波/流体 **不** 叠在 march 前坐标上；**ensemble 离散 ±1 格** 驱动曼哈顿步进。**亚格颤抖** 独立为侧栏 **「颤」**（`_arcPrefs.glyphsJitter`）+ URL `glyphsJitter`。**性能**：巨字 / mask 叠分 **6→4**、**5→3** 遍。蛇行亚格微摆随「颤」。 |

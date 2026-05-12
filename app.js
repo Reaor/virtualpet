@@ -71,6 +71,27 @@
       : urlTexMot === "flow" || urlTexMot === "spring_flow"
         ? "spring_flow"
         : undefined;
+  const clockGr = (
+    params.get("clockGranularity") ||
+    params.get("clockSec") ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+  const clockGranularityFromUrl =
+    clockGr === "sec" ||
+    clockGr === "second" ||
+    clockGr === "seconds" ||
+    params.get("clockSec") === "1"
+      ? "sec"
+      : undefined;
+  const gridEaseRaw = (params.get("gridEase") || "").trim().toLowerCase();
+  const gridCellMotionEaseFromUrl =
+    gridEaseRaw === "0" ||
+    gridEaseRaw === "false" ||
+    gridEaseRaw === "off"
+      ? false
+      : undefined;
 
   function syncRailUiArcClass(p) {
     const appRoot = document.querySelector(".app");
@@ -90,6 +111,8 @@
     snakePathVariant: snakePathFromUrl,
     silhouetteGlyphJitter: urlGlyphsJit ? true : undefined,
     textureMotionMode: textureMotionFromUrl,
+    clockGranularity: clockGranularityFromUrl,
+    gridCellMotionEase: gridCellMotionEaseFromUrl,
     showPlayfieldGuide: devHud,
     onFormChange(key) {
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
@@ -746,13 +769,27 @@
 
     const W = canvas.clientWidth;
     const H = canvas.clientHeight;
-    const count = 7;
+    // 低曲率路径：三次贝塞尔均匀采样，避免正弦折返带来的「锯齿巡游」感（计划书 P1）
     const pad = 50;
+    const p0 = { x: pad, y: H * 0.52 };
+    const p1 = { x: W * 0.28, y: H * 0.36 };
+    const p2 = { x: W * 0.72, y: H * 0.64 };
+    const p3 = { x: W - pad, y: H * 0.5 };
+    const count = 9;
     const path = [];
     for (let i = 0; i < count; i++) {
       const t = i / (count - 1);
-      const x = pad + (W - pad * 2) * t;
-      const y = H * 0.5 + Math.sin(i * 1.1) * H * 0.22;
+      const u = 1 - t;
+      const x =
+        u * u * u * p0.x +
+        3 * u * u * t * p1.x +
+        3 * u * t * t * p2.x +
+        t * t * t * p3.x;
+      const y =
+        u * u * u * p0.y +
+        3 * u * u * t * p1.y +
+        3 * u * t * t * p2.y +
+        t * t * t * p3.y;
       path.push({ x, y });
     }
 
@@ -778,7 +815,7 @@
         bait.forEach((b) => b.el.remove());
       }
     );
-    toast("觅食中 · 沿路径巡游");
+    toast("觅食中 · 沿低曲率贝塞尔路径巡游");
   }
 
   function spawnBaits(path) {
