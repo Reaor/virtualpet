@@ -2585,6 +2585,8 @@
       this.gridMarch = opts.gridMarch !== false;
       /** 沿格线移动速度（格/秒） */
       this.gridMarchSpeed = opts.gridMarchSpeed != null ? opts.gridMarchSpeed : 2;
+      /** 格移后 `g.x/y` 向 `(mgx,mgy)*cell` 平滑贴靠，减轻一步一格的锯齿感（计划 P2）；`false` 关闭 */
+      this.gridCellMotionEase = opts.gridCellMotionEase !== false;
       /** 每字体内运动总倍率（格移、波纹、巡逻） */
       this.glyphMotionSpeed =
         opts.glyphMotionSpeed != null
@@ -3539,6 +3541,20 @@
             ? 40
             : 48;
       for (let k = 0; k < maxK; k++) {
+        if (
+          k === 0 &&
+          Math.random() < 0.36 &&
+          g._lastWdx != null &&
+          g._lastWdy != null
+        ) {
+          const tgx = anchorGx + g._lastWdx;
+          const tgy = anchorGy + g._lastWdy;
+          if (this._worldCellWalkable(tgx, tgy, bx, by, cos, sin, flip)) {
+            g.wtgx = g._lastWdx;
+            g.wtgy = g._lastWdy;
+            return;
+          }
+        }
         const ddx = Math.floor(rand(-rad, rad + 1));
         const ddy = Math.floor(rand(-rad, rad + 1));
         if (ddx * ddx + ddy * ddy > rad * rad) continue;
@@ -3547,6 +3563,8 @@
         if (this._worldCellWalkable(tgx, tgy, bx, by, cos, sin, flip)) {
           g.wtgx = ddx;
           g.wtgy = ddy;
+          g._lastWdx = ddx;
+          g._lastWdy = ddy;
           return;
         }
       }
@@ -5428,7 +5446,7 @@
         const dvy = this.dragging ? this.dragVel.y : 0;
         for (const g of this.glyphs) {
           const rateBase = 4 + g.lagK * 6;
-          const rate = this.dragging ? 20 + g.lagK * 26 : rateBase;
+          const rate = this.dragging ? 24 + g.lagK * 30 : rateBase;
           const sp = 1 - Math.exp(-rate * dt);
           g.lagX = lerp(g.lagX, bx, sp);
           g.lagY = lerp(g.lagY, by, sp);
@@ -5791,8 +5809,30 @@
             }
           }
 
-          g.x = g.mgx * cell;
-          g.y = g.mgy * cell;
+          const tgtX = g.mgx * cell;
+          const tgtY = g.mgy * cell;
+          const useEase = this.gridCellMotionEase && !mT;
+          if (useEase) {
+            const gEase = clamp(gms0, 0.35, 2.5);
+            const rate =
+              (10.5 + 8.5 * gEase) *
+              (this.mode === "sleep" ? 0.62 : 1) *
+              (silMaskPet ? 0.95 : 1);
+            const sm = 1 - Math.exp(-rate * dt);
+            if (g.x == null || g.y == null || Number.isNaN(g.x)) {
+              g.x = tgtX;
+              g.y = tgtY;
+            } else {
+              g.x = lerp(g.x, tgtX, sm);
+              g.y = lerp(g.y, tgtY, sm);
+              const eps = Math.max(0.05, cell * 0.045);
+              if (Math.abs(g.x - tgtX) < eps) g.x = tgtX;
+              if (Math.abs(g.y - tgtY) < eps) g.y = tgtY;
+            }
+          } else {
+            g.x = tgtX;
+            g.y = tgtY;
+          }
           g.vx = 0;
           g.vy = 0;
 

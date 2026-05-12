@@ -85,6 +85,13 @@
     params.get("clockSec") === "1"
       ? "sec"
       : undefined;
+  const gridEaseRaw = (params.get("gridEase") || "").trim().toLowerCase();
+  const gridCellMotionEaseFromUrl =
+    gridEaseRaw === "0" ||
+    gridEaseRaw === "false" ||
+    gridEaseRaw === "off"
+      ? false
+      : undefined;
 
   function syncRailUiArcClass(p) {
     const appRoot = document.querySelector(".app");
@@ -105,6 +112,7 @@
     silhouetteGlyphJitter: urlGlyphsJit ? true : undefined,
     textureMotionMode: textureMotionFromUrl,
     clockGranularity: clockGranularityFromUrl,
+    gridCellMotionEase: gridCellMotionEaseFromUrl,
     showPlayfieldGuide: devHud,
     onFormChange(key) {
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;

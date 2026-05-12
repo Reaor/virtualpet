@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.29.0** 起）。  
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.30.0** 起）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
@@ -31,7 +31,7 @@
 | 容易切到龙 / 龙形态可见 | **已移除（3.6.0）** | 动物类形态下线；`CHAR_FORM_BIAS` 中 **龙→傅里叶形** 等已重映射 |
 | 变形跑左上角 | **已完成（2.8.0）** | **根因**：渐进换形目标曾用**局部格**与 **世界格 `mgx/mgy`** 混比。现 `_computeMorphGridTargets` 输出 **`twx/twy` 世界格心**，步进与完成判定一致；`_finishMorph` 反算局部 `tx/ty` 并同步 `mgx/mgy` |
 | 字灵/文稿整体贴画布左上（非中心） | **已完成（3.4.0）** | `_resize` 中补写 **`center = (width/2,height/2)`**；`script`/`pet` 模式下将 **`pos`/`anchor` 拉回中心**（此前 `center` 未随画布更新，恒为 0,0） |
-| 运动美感、凑成形体的紧凑感 | **部分完成** | 已 **降低** `fluidStrength` 默认、**减小**巡逻 `pAmp`，减轻「散」；**未做**：轮廓内二次聚类、速度场、B-spline 格路径等 |
+| 运动美感、凑成形体的紧凑感 | **部分完成** | 已 **降低** `fluidStrength` 默认、**减小**巡逻 `pAmp`，减轻「散」；**3.30.0**：mask 内游走带 **方向惯性**；**未做**：轮廓内二次聚类、速度场、B-spline 格路径等 |
 
 ### 1.1～1.8 历史条目（摘要）
 
@@ -47,8 +47,8 @@
 | 初始画布空白 | **已完成** | `viewMode=intro`：仅背景 + 涟漪；`Pet` 不绘制字粒子 |
 | 预设字段整齐呈现 | **已完成** | 形态 **`script`** + `buildScriptLayout`；textarea「呈现文稿」→ `enterScriptMode` |
 | 化为字灵 / 回空白 | **已完成** | 「化为字灵」→ `awakenPet`（默认 `?form=` 或软团）；「空白」→ `enterIntroMode` |
-| 轮廓内游走 | **部分完成** | `maskDraw` + `rasterizeMask`；曼哈顿累积偏移 `wgx/wgy`；目标格经 `_worldCellWalkable` 筛选 |
-| 拖拽非整块平移 | **部分完成** | 每字 `lagX/lagY` 弹簧追 `pos`，`lagK` 差异化 + 指针速度侧向冲量 |
+| 轮廓内游走 | **部分完成（3.30.0）** | `maskDraw` + `rasterizeMask`；曼哈顿 `wgx/wgy`；`_worldCellWalkable`；**游走目标**约 **36%** 优先延续上一合法方向，路径更顺 |
+| 拖拽非整块平移 | **部分完成（3.30.0）** | `lagX/lagY` 弹簧；**拖拽**时收敛率略升（更跟手） |
 
 URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定初始字灵形态。
 
@@ -287,7 +287,7 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 
 | 优先级 | 项 | 说明 |
 | P1 | **觅食/睡眠「像动物」** | **部分加强（3.29.0）**：觅食锚点路径改为 **三次贝塞尔均匀采样**（低曲率、少折返）；睡眠时 **压低** `_ensemblePhase` / 流体 / 格移 / 蛇行 / 巡逻幅（`sleepMul`≈0.32）并 **略缩** `targetScale`≤0.88；仍可做卧姿剪影等 |
-| P2 | **格路径平滑** | **未做**：ease 格间插值仍待后续；当前仍以离散格为主 |
+| P2 | **格路径平滑** | **部分完成（3.30.0）**：`gridMarch` 下 `g.x/y` **指数贴向** `(mgx,mgy)*cell`（随「速」略调率，睡眠略慢）；逻辑格仍为 `mgx`；URL **`?gridEase=0`** 关平滑；**未做**：B-spline 与最少弯折分配 |
 | P2 | **计时形态秒级可选** | **已完成（3.29.0）**：`clockGranularity: "sec"`（URL **`?clockGranularity=sec`** 或 **`?clockSec=1`**）在 **`form=clock`** 下复用时分秒点阵与秒级 `setForm` 刷新；独立 **`chrono`** 形态不变 |
 | P3 | **真 AI** | 需 endpoint / 密钥；前端只接协议 |
 

@@ -104,7 +104,8 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.28.0**：**形场 Consumer** `shape-consumer.js`（`ZiLingShapeFieldConsumer.create`：指数平滑 + 与本地 packed **最近邻对齐**）；`matrix-bridge.resampleBinaryPacked`。**Pet**：`ingestExternalWalkPacked` / `resetExternalWalkConsumer`；换形若 packed 尺寸变化则清外部态；`dumpShapeField` 含 `externalWalk`；`?shapeDebug=1` 提供 `_ingestDemoWalk()`。 |
+| 最新 | **3.30.0**：**格移绘制平滑**（`gridCellMotionEase`，默认开）：`mgx/mgy` 逻辑格不变，`g.x/y` 指数贴向格心，减轻一步一格锯齿；**URL** `?gridEase=0` 关闭。**轮廓游走**：`_pickWanderDelta` 约 **36%** 延续上一合法方向。**拖拽**：`lag` 收敛略加快。 |
+| 先前 | **3.28.0**：**形场 Consumer** `shape-consumer.js`（`ZiLingShapeFieldConsumer.create`：指数平滑 + 与本地 packed **最近邻对齐**）；`matrix-bridge.resampleBinaryPacked`。**Pet**：`ingestExternalWalkPacked` / `resetExternalWalkConsumer`；换形若 packed 尺寸变化则清外部态；`dumpShapeField` 含 `externalWalk`；`?shapeDebug=1` 提供 `_ingestDemoWalk()`。 |
 | 先前 | **3.27.0**：**形场模块** `shape-field.js`（可走格 `Set` + 拓扑壳层 + `packWalkGrid` / `hashPackedGrid`）；**矩阵桥占位** `matrix-bridge.js`（二值栅格混合、指数持有、置信度门限）。**纹理体动** 侧栏「紊」：`spring_flow` / `adjacent_swap`（关 `gridMarch` 时芯层邻格换位）；换形 **纹理预算** `_textureBudgetMul`；`?textureMotion=`、`?shapeDebug=1` → `_shapeDump()`。 |
 | 先前 | **3.26.0**：**谐波默认严格格点**（`silhouetteStrictHarmonicGrid`）：连续谐波/流体 **不** 叠在 march 前坐标上；**ensemble 离散 ±1 格** 驱动曼哈顿步进。**亚格颤抖** 独立为侧栏 **「颤」**（`_arcPrefs.glyphsJitter`）+ URL `glyphsJitter`。**性能**：巨字 / mask 叠分 **6→4**、**5→3** 遍。蛇行亚格微摆随「颤」。 |
 | 先前 | **3.25.0**：**流线蛇行** 默认 **螺旋走廊**（切比雪夫环 + 极角）；**弓字** `zigzag` 保留为 `snakePathVariant`。**蛇行目标格去重**（`_snakeResolvedIdx` 每帧贪心顺延）。**URL**：`motionStyle` / `bodyMotion`、`snakePath`。`setSnakePathVariant`。 |
