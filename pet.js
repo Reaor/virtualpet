@@ -2335,6 +2335,24 @@
         snapToShell: true,
       });
     }
+    if (name === "clock") {
+      const sec = self.clockGranularity === "sec";
+      const rows = sec ? getLiveChronoRows() : getLiveClockRows();
+      const cellRel = sec ? 0.042 : 0.05;
+      const cell = S * cellRel;
+      const jitter = sec ? 0.045 : 0.05;
+      const targets = rowsToTargets(rows, cell, n, jitter);
+      return {
+        targets,
+        ordered: true,
+        eyes: [
+          { x: -S * 0.25, y: -S * 0.32 },
+          { x: S * 0.25, y: -S * 0.32 },
+        ],
+        eyeSize: 1,
+        maskDraw: digitRowsMaskDraw(rows, cellRel),
+      };
+    }
     if (!FORMS[name]) return null;
     return FORMS[name].build(n, S);
   }
@@ -2477,6 +2495,9 @@
         typeof Set !== "undefined" ? new Set() : { add() {}, has() { return false; } };
       /** 计时形态刷新间隔（秒） */
       this.clockRefreshSec = opts.clockRefreshSec != null ? opts.clockRefreshSec : 30;
+      /** `min`：计时形态仅时分；`sec`：仍用 `clock` 键但布局与刷新同「时分秒」点阵（计划书 P2） */
+      this.clockGranularity =
+        opts.clockGranularity === "sec" ? "sec" : "min";
       this._lastClockTick = 0;
       this._clockMinuteSlot = -1;
       this._chronoSecondSlot = -1;
@@ -2524,6 +2545,7 @@
       this.breath = 0;
       this.scale = 1;
       this.targetScale = 1;
+      this._targetScaleBeforeSleep = null;
 
       // 头朝向
       this.rotation = 0;
@@ -2896,7 +2918,10 @@
       } else if (name === "mega") {
         this.gridCell = clamp(Math.round(S * 0.044), 14, 21);
       } else if (name === "clock") {
-        this.gridCell = clamp(Math.round(S * 0.05), 14, 24);
+        this.gridCell =
+          this.clockGranularity === "sec"
+            ? clamp(Math.round(S * 0.042), 13, 22)
+            : clamp(Math.round(S * 0.05), 14, 24);
       } else if (name === "chrono") {
         this.gridCell = clamp(Math.round(S * 0.042), 13, 22);
       } else {
@@ -2918,11 +2943,12 @@
           this._initGlyphs();
         }
       } else if (name === "clock") {
-        const on = countTimerOnes(getLiveClockRows());
+        const sec = this.clockGranularity === "sec";
+        const on = countTimerOnes(sec ? getLiveChronoRows() : getLiveClockRows());
         const want = clamp(
-          Math.max(this.particleCount, Math.min(on * 3, on + 100)),
-          Math.min(on, 72),
-          340
+          Math.max(this.particleCount, Math.min(on * 3, on + (sec ? 120 : 100))),
+          Math.min(on, sec ? 80 : 72),
+          sec ? 360 : 340
         );
         if (want !== this.glyphs.length) {
           this.particleCount = want;
@@ -2953,7 +2979,12 @@
       this.formStartTime = performance.now();
       if (name === "clock") {
         const d = new Date();
-        this._clockMinuteSlot = d.getHours() * 60 + d.getMinutes();
+        if (this.clockGranularity === "sec") {
+          this._chronoSecondSlot =
+            d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+        } else {
+          this._clockMinuteSlot = d.getHours() * 60 + d.getMinutes();
+        }
       }
       if (name === "chrono") {
         const d = new Date();
@@ -4939,9 +4970,15 @@
         if (this.viewMode !== "pet") this.awakenPet(null, true);
         this.mode = "sleep";
         this.setExpression("sleep");
+        this._targetScaleBeforeSleep = this.targetScale;
+        this.targetScale = Math.min(this.targetScale, 0.88);
       } else {
         this.mode = "idle";
         this.setExpression("normal");
+        if (this._targetScaleBeforeSleep != null) {
+          this.targetScale = this._targetScaleBeforeSleep;
+          this._targetScaleBeforeSleep = null;
+        }
       }
     }
 
@@ -5174,11 +5211,18 @@
       }
 
       const gms = gms0 * mk.timeScale;
+      const sleepMul =
+        this.mode === "sleep" && this.viewMode === "pet" ? 0.32 : 1;
+      this._sleepMotionMul = sleepMul;
       const ensBoost = silMaskPet
         ? 0.62 + 0.48 * clamp(gms0, 0.35, 2.5)
         : 1;
       this._ensemblePhase +=
-        dt * (0.78 + 0.12 * Math.sin(t * 0.17)) * gms * ensBoost;
+        dt *
+        (0.78 + 0.12 * Math.sin(t * 0.17)) *
+        gms *
+        ensBoost *
+        sleepMul;
 
       if (this.viewMode !== "intro") {
         this.ripples.length = 0;
@@ -5281,10 +5325,19 @@
         !this.morphGlyphToTarget
       ) {
         const d = new Date();
-        const slot = d.getHours() * 60 + d.getMinutes();
-        if (slot !== this._clockMinuteSlot) {
-          this._clockMinuteSlot = slot;
-          this.setForm("clock", true);
+        if (this.clockGranularity === "sec") {
+          const slot =
+            d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+          if (slot !== this._chronoSecondSlot) {
+            this._chronoSecondSlot = slot;
+            this.setForm("clock", true);
+          }
+        } else {
+          const slot = d.getHours() * 60 + d.getMinutes();
+          if (slot !== this._clockMinuteSlot) {
+            this._clockMinuteSlot = slot;
+            this.setForm("clock", true);
+          }
         }
       }
 
@@ -5420,20 +5473,27 @@
         waveAmp *
         maskFluidMul *
         gms *
-        (presSilHarm || silMaskPet ? 0.1 : 1);
+        (presSilHarm || silMaskPet ? 0.1 : 1) *
+        (this._sleepMotionMul || 1);
       if (strictSilGrid) waveAmpEff = 0;
       if (!strictSilGrid) {
         this._fluidPhase +=
-          dt * (presSilHarm || silMaskPet ? 0.09 : 0.48) * gms;
+          dt *
+          (presSilHarm || silMaskPet ? 0.09 : 0.48) *
+          gms *
+          (this._sleepMotionMul || 1);
       }
 
       if (this.gridMarch && this.gridSnapping) {
-        const marchGms = gms * 0.55 + gms0 * 0.45;
+        const marchGms =
+          (gms * 0.55 + gms0 * 0.45) * (this._sleepMotionMul || 1);
         const stepBudget = Math.max(
           1,
           Math.min(
             presSilHarm || silMaskPet ? 4 : 6,
-            Math.round((this.gridMarchSpeed || 2) * marchGms * dt * 6)
+            Math.round(
+              (this.gridMarchSpeed || 2) * marchGms * dt * 6 * (this._sleepMotionMul || 1)
+            )
           )
         );
         const crispMotion = isGridLayoutImmutableForm(this.form);
@@ -5449,7 +5509,8 @@
           this._snakePhase +=
             dt *
             (0.28 + 0.46 * gms0) *
-            (0.4 + 0.36 * clamp(this.gridMarchSpeed || 2, 0.85, 3.6));
+            (0.4 + 0.36 * clamp(this.gridMarchSpeed || 2, 0.85, 3.6)) *
+            (this._sleepMotionMul || 1);
           const pathSnake = this._snakeWalkPath;
           if (pathSnake && pathSnake.length > 1) {
             const L = pathSnake.length;
@@ -5552,7 +5613,8 @@
               (this._patrolAmp || 1) *
               (this.dragging ? 1.15 : 1) *
               gms *
-              mk.ampScale;
+              mk.ampScale *
+              (this._sleepMotionMul || 1);
             if (
               (presSilHarm || silMaskPet) &&
               !snakeStream &&
@@ -5570,7 +5632,8 @@
                 mk.ampScale *
                 mk.crispMicroScale *
                 speedVis *
-                tight;
+                tight *
+                (this._sleepMotionMul || 1);
               const ph2 = phase + spat * 1.72;
               wx += Math.sin(ph2) * uAmp;
               wx += Math.sin(ph2 * 2 + gi * 0.41) * uAmp * 0.16;
