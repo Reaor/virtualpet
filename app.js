@@ -64,6 +64,13 @@
   const urlGlyphsJit =
     params.get("glyphsJitter") === "1" ||
     params.get("silhouetteJitter") === "1";
+  const outlineFirstRaw = (params.get("outlineFirst") || "").trim().toLowerCase();
+  const outlineContourFirstFromUrl =
+    outlineFirstRaw === "0" ||
+    outlineFirstRaw === "false" ||
+    outlineFirstRaw === "off"
+      ? false
+      : undefined;
   const urlTexMot = (params.get("textureMotion") || params.get("motion") || "").trim();
   const textureMotionFromUrl =
     urlTexMot === "swap" || urlTexMot === "adjacent_swap"
@@ -113,6 +120,7 @@
     textureMotionMode: textureMotionFromUrl,
     clockGranularity: clockGranularityFromUrl,
     gridCellMotionEase: gridCellMotionEaseFromUrl,
+    outlineContourFirst: outlineContourFirstFromUrl,
     showPlayfieldGuide: devHud,
     onFormChange(key) {
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
@@ -609,7 +617,7 @@
         pet.cycleUiArcMode();
         const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
         toast(
-          `层级 · ${lab}（色/速/轨/颤/紊/廓/墨/浮/波/徙/粒 分套保留）`
+          `层级 · ${lab}（色/速/轨/颤/紊/廓/辨/墨/浮/波/徙/粒 分套保留）`
         );
       } else if (action === "morph") {
         pet.abortFeeding();
@@ -644,7 +652,7 @@
       } else if (action === "speed") {
         const v = pet.cycleGlyphMotionSpeed();
         toast(
-          `运动 ×${v.toFixed(2)}（${arcLayerZh()}；节拍 / 格移 / 谐波亚格见「颤」）`
+          `运动 ×${v.toFixed(2)}（${arcLayerZh()}；调制节拍/格移/流体相位，与「徙」格移倍率独立）`
         );
       } else if (action === "motionStyle") {
         const k = pet.cycleBodyMotionStyle();
@@ -661,13 +669,20 @@
       } else if (action === "textureMotion") {
         const k = pet.cycleTextureMotionMode();
         const lab = (TEXTURE_MOTION_LABELS && TEXTURE_MOTION_LABELS[k]) || k;
-        toast(`纹理体动 · ${lab}`);
+        toast(`纹理体动 · ${lab}（${arcLayerZh()}）`);
       } else if (action === "silhouetteMatteUnderlay") {
         const on = pet.cycleSilhouetteMatteUnderlay();
         toast(
           on
-            ? `剪影垫底：开（${arcLayerZh()}；巨字/颜 mask 下半透明静态轮廓）`
-            : `剪影垫底：关（${arcLayerZh()}）`
+            ? `剪影垫底：开（${arcLayerZh()}；与 mask 可走格对齐的静态轮廓）`
+            : `剪影垫底：关（${arcLayerZh()}；「辨」开时仍会画弱静态轮廓）`
+        );
+      } else if (action === "outlineContourFirst") {
+        const on = pet.cycleOutlineContourFirst();
+        toast(
+          on
+            ? `辨形优先：开（${arcLayerZh()}；巨字/颜先静态轮廓、体内动压低）`
+            : `辨形优先：关（${arcLayerZh()}；全动态，「廓」单独控垫底强度）`
         );
       } else if (action === "fluid") {
         const v = pet.cycleArcFluidStrength();

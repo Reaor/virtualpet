@@ -104,7 +104,8 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.31.0**：合并 **廓** 剪影静态垫底（`_arcPrefs`、`silhouetteMatteUnderlay`、`_rebuildMatteLayerCanvas` / `_drawSilhouetteMatteUnderlay`）与 **plan-followup**：**格移绘制平滑**（`gridCellMotionEase`，`?gridEase=0` 关）、**clock 秒级**（`?clockGranularity=sec` / `?clockSec=1`）、**觅食贝塞尔路径**、**睡眠体内压低**、**游走方向惯性**、**拖拽 lag 略加强**。 |
+| 最新 | **3.32.0**：**巨字/颜 mask 剪影禁用 `gridCellMotionEase`**，避免格间对角插值把字粒画到笔画轮廓外；**主线合并** `motion-shape-framework`：**辨** `outlineContourFirst`（`_arcPrefs`、弱静态垫底、`motionTimeBlend`、紊 分套）与 **plan-followup**（非 mask 格 ease、`?gridEase=0`、clock 秒、`?outlineFirst=0`、贝塞尔觅食、睡眠压低、游走惯性、拖拽）。 |
+| 先前 | **3.31.0**：**廓** 剪影静态垫底；**辨** + `motionTimeBlend` + 紊 `_arcPrefs`；clock 秒、格 ease（曾误作用于 mask）、贝塞尔觅食、睡眠、惯性。 |
 | 先前 | **3.28.0**：**形场 Consumer** `shape-consumer.js`（`ZiLingShapeFieldConsumer.create`：指数平滑 + 与本地 packed **最近邻对齐**）；`matrix-bridge.resampleBinaryPacked`。**Pet**：`ingestExternalWalkPacked` / `resetExternalWalkConsumer`；换形若 packed 尺寸变化则清外部态；`dumpShapeField` 含 `externalWalk`；`?shapeDebug=1` 提供 `_ingestDemoWalk()`。 |
 | 先前 | **3.27.0**：**形场模块** `shape-field.js`（可走格 `Set` + 拓扑壳层 + `packWalkGrid` / `hashPackedGrid`）；**矩阵桥占位** `matrix-bridge.js`（二值栅格混合、指数持有、置信度门限）。**纹理体动** 侧栏「紊」：`spring_flow` / `adjacent_swap`（关 `gridMarch` 时芯层邻格换位）；换形 **纹理预算** `_textureBudgetMul`；`?textureMotion=`、`?shapeDebug=1` → `_shapeDump()`。 |
 | 先前 | **3.26.0**：**谐波默认严格格点**（`silhouetteStrictHarmonicGrid`）：连续谐波/流体 **不** 叠在 march 前坐标上；**ensemble 离散 ±1 格** 驱动曼哈顿步进。**亚格颤抖** 独立为侧栏 **「颤」**（`_arcPrefs.glyphsJitter`）+ URL `glyphsJitter`。**性能**：巨字 / mask 叠分 **6→4**、**5→3** 遍。蛇行亚格微摆随「颤」。 |

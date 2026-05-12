@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.31.0** 起）。  
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.32.0** 起）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
@@ -287,7 +287,7 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 
 | 优先级 | 项 | 说明 |
 | P1 | **觅食/睡眠「像动物」** | **部分加强（3.29.0）**：觅食锚点路径改为 **三次贝塞尔均匀采样**（低曲率、少折返）；睡眠时 **压低** `_ensemblePhase` / 流体 / 格移 / 蛇行 / 巡逻幅（`sleepMul`≈0.32）并 **略缩** `targetScale`≤0.88；仍可做卧姿剪影等 |
-| P2 | **格路径平滑** | **部分完成（3.30.0）**：`gridMarch` 下 `g.x/y` **指数贴向** `(mgx,mgy)*cell`（随「速」略调率，睡眠略慢）；逻辑格仍为 `mgx`；URL **`?gridEase=0`** 关平滑；**未做**：B-spline 与最少弯折分配 |
+| P2 | **格路径平滑** | **部分完成（3.32.0）**：`gridCellMotionEase` **仅非 mask 形态**；巨字/颜 mask 剪影 **禁用 ease**（修复对角插值字粒画出笔画外）。URL **`?gridEase=0`** 关平滑；**未做**：B-spline 与最少弯折分配 |
 | P2 | **计时形态秒级可选** | **已完成（3.29.0）**：`clockGranularity: "sec"`（URL **`?clockGranularity=sec`** 或 **`?clockSec=1`**）在 **`form=clock`** 下复用时分秒点阵与秒级 `setForm` 刷新；独立 **`chrono`** 形态不变 |
 | P3 | **真 AI** | 需 endpoint / 密钥；前端只接协议 |
 
