@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.32.1" />
+  <meta name="ziling-build" content="3.32.2" />
   <title>字灵 · 开发者页控制台</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.32.1" />
+  <link rel="stylesheet" href="./styles.css?v=3.32.2" />
 </head>
 <body>
   <div class="app" data-ui-arc="standby">
@@ -44,6 +44,7 @@
           <button type="button" class="rail-tool" data-action="textureMotion" title="纹理体动（分套）：流=弹簧；序=芯层邻格换位（巨字/颜 mask 或开格移时序不生效）">紊</button>
           <button type="button" class="rail-tool" data-action="silhouetteMatteUnderlay" title="剪影静态垫底：字下叠半透明 mask（与可走格同几何）；「辨」开时仍可加浓">廓</button>
           <button type="button" class="rail-tool" data-action="outlineContourFirst" title="辨形优先（默认开）：巨字/颜先静态轮廓、体内动压低；关=全动态调试">辨</button>
+          <button type="button" class="rail-tool" data-action="presentationDynamics" title="呈现层·体内字粒动态（分套）：关=先静辨形（垫底+格位）；开=谐波/流体/蛇行等按轨与速">动</button>
           <button type="button" class="rail-tool" data-action="fluid" title="当前层·液体波纹强度">波</button>
           <button type="button" class="rail-tool" data-action="gridMarch" title="当前层·格点移动速度">徙</button>
           <button type="button" class="rail-tool" data-action="megaPack" title="当前层·巨字粒数倍率（巨字形下刷新）">粒</button>
@@ -83,7 +84,7 @@
         <div class="stage-main" id="stageMain" aria-hidden="false">
           <canvas id="petCanvas" aria-label="字灵画布"></canvas>
           <div class="form-label" id="formLabel">软团</div>
-            <div class="hint" id="hint">按住字灵约0.6秒出现「松手还原文稿」后松手即还原；超过约8px移动为拖动 · 「层」切换待机/呈现（色/速/轨/颤/紊/廓/辨/墨/浮/波/徙/粒 分套保留）· 「辨」默认开：巨字/颜先静态轮廓、体内动压低；关后全动态 · 「轨」谐波 / 蛇行 / 轮廓游走；「紊」流/序纹理体动；「廓」调节垫底浓淡 · 形场 <code>?shapeDebug=1</code> → <code>_shapeDump()</code> 、<code>_ingestDemoWalk()</code> · URL <code>?textureMotion=swap</code> · <code>?clockGranularity=sec</code> 或 <code>?clockSec=1</code>：「计时」按秒刷新 · <code>?gridEase=0</code>：关非 mask 形态的格移绘制平滑（巨字/颜 mask 内始终格点对齐） · <code>?outlineFirst=0</code>：初次即关「辨」 · 见 DESIGN / PLAN · 调试 <code>?dev=1</code></div>
+            <div class="hint" id="hint">按住字灵约0.6秒出现「松手还原文稿」后松手即还原；超过约8px移动为拖动 · 「层」切换待机/呈现（色/速/轨/颤/紊/廓/辨/动/墨/浮/波/徙/粒 分套保留）· 「辨」默认开：巨字/颜先静态轮廓、体内动压低；关后全动态 · 「动」呈现层体内字粒：默认关（先静后动），开则谐波/流体/蛇行等按轨与速 · 「轨」谐波 / 蛇行 / 轮廓游走；「紊」流/序纹理体动；「廓」调节垫底浓淡 · 形场 <code>?shapeDebug=1</code> → <code>_shapeDump()</code> 、<code>_ingestDemoWalk()</code> · URL <code>?textureMotion=swap</code> · <code>?clockGranularity=sec</code> 或 <code>?clockSec=1</code>：「计时」按秒刷新 · <code>?gridEase=0</code>：关非 mask 形态的格移绘制平滑（巨字/颜 mask 内始终格点对齐） · <code>?outlineFirst=0</code>：初次即关「辨」 · <code>?presDyn=1</code>：初次即开「动」 · 见 DESIGN / PLAN · 调试 <code>?dev=1</code></div>
         </div>
       </section>
 
@@ -212,11 +213,11 @@
     </div>
   </div>
 
-  <script src="./js/ziling/play-bounds.js?v=3.32.1"></script>
-  <script src="./js/ziling/shape-field.js?v=3.32.1"></script>
-  <script src="./js/ziling/matrix-bridge.js?v=3.32.1"></script>
-  <script src="./js/ziling/shape-consumer.js?v=3.32.1"></script>
-  <script src="./pet.js?v=3.32.1"></script>
-  <script src="./app.js?v=3.32.1"></script>
+  <script src="./js/ziling/play-bounds.js?v=3.32.2"></script>
+  <script src="./js/ziling/shape-field.js?v=3.32.2"></script>
+  <script src="./js/ziling/matrix-bridge.js?v=3.32.2"></script>
+  <script src="./js/ziling/shape-consumer.js?v=3.32.2"></script>
+  <script src="./pet.js?v=3.32.2"></script>
+  <script src="./app.js?v=3.32.2"></script>
 </body>
 </html>

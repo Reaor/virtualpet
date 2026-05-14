@@ -99,6 +99,19 @@
     gridEaseRaw === "off"
       ? false
       : undefined;
+  const presDynRaw = (
+    params.get("presentationDynamics") ||
+    params.get("presDyn") ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+  const presentationGlyphDynamicsFromUrl =
+    presDynRaw === "1" || presDynRaw === "true" || presDynRaw === "on"
+      ? true
+      : presDynRaw === "0" || presDynRaw === "false" || presDynRaw === "off"
+        ? false
+        : undefined;
 
   function syncRailUiArcClass(p) {
     const appRoot = document.querySelector(".app");
@@ -121,6 +134,7 @@
     clockGranularity: clockGranularityFromUrl,
     gridCellMotionEase: gridCellMotionEaseFromUrl,
     outlineContourFirst: outlineContourFirstFromUrl,
+    presentationGlyphDynamics: presentationGlyphDynamicsFromUrl,
     showPlayfieldGuide: devHud,
     onFormChange(key) {
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
@@ -617,7 +631,7 @@
         pet.cycleUiArcMode();
         const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
         toast(
-          `层级 · ${lab}（色/速/轨/颤/紊/廓/辨/墨/浮/波/徙/粒 分套保留）`
+          `层级 · ${lab}（色/速/轨/颤/紊/廓/辨/动/墨/浮/波/徙/粒 分套保留）`
         );
       } else if (action === "morph") {
         pet.abortFeeding();
@@ -683,6 +697,13 @@
           on
             ? `辨形优先：开（${arcLayerZh()}；巨字/颜先静态轮廓、体内动压低）`
             : `辨形优先：关（${arcLayerZh()}；全动态，「廓」单独控垫底强度）`
+        );
+      } else if (action === "presentationDynamics") {
+        const on = pet.cyclePresentationGlyphDynamics();
+        toast(
+          on
+            ? `体内动：开（呈现层偏好；谐波/流体/蛇行等按轨与速）`
+            : `体内动：关（呈现层偏好；先静辨形，垫底轮廓为主）`
         );
       } else if (action === "fluid") {
         const v = pet.cycleArcFluidStrength();
@@ -908,6 +929,7 @@
   // ---------- 自动换形 / 偶发表情 ----------
   setInterval(() => {
     if (pet.viewMode !== "pet") return;
+    if (pet.uiArcMode === "presentation") return;
     if (pet.mode !== "idle" || pet.dragging || pet.morphGlyphToTarget) return;
     if (Math.random() < 0.18) {
       const cur = pet.form;

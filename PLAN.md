@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.32.1** 起）。  
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.32.2** 起）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
@@ -281,6 +281,8 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 |--------|------|------|
 | 待机态（曲线/抽象） | **保持** | **3.17.0**：由侧栏 **待机层**（`uiArcMode=standby`）驱动 → `STANDBY_MOTION_KERNELS` 全 1；不再按形态名误判 |
 | 呈现态（计时/巨字/颜文字轮廓） | **已完成** | **3.17.0**：**呈现层**（`uiArcMode=presentation`）→ `DISPLAY_MOTION_KERNELS`；解决计时因 `layoutLock` 未吃到缩放、曲线却被压慢的错位 |
+| 呈现层 idle 误换待机形 | **已完成（3.32.2）** | `pickBiasedForm` 仅用 **`getFormOrderForUiArcMode(uiArcMode)`**；`app.js` 约 11s 自动换形在 **presentation** 下 **整段跳过**，避免「像自动回待机」 |
+| 呈现层先静后动 | **已完成（3.32.2）** | **`presentationGlyphDynamics`**（侧栏 **动**，`_arcPrefs.presentation`；默认关）；与 **`presGlyphSleep`** 门控体内谐波/流体；蛇行 `_snakePhase` 在呈现开「动」时 **×1.55** 与谐波/轮廓游走振幅倍率拉开；URL **`?presDyn=1`** |
 | 侧栏层级与参数分套 | **已完成** | **层** 切换互斥形态区；`_arcPrefs`：**速 / 颜 / 墨 / 浮** 分套；「变」仅当前层 `getFormOrderForUiArcMode` |
 | 可观测 | **已完成** | `pet.uiArcMode`；`ZiLing.getMotionProfileKernelsForPet`（运行时）；`getMotionProfileKernels(form)` 仅兼容/调试 |
 
