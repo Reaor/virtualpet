@@ -104,7 +104,8 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.32.0**：**巨字/颜 mask 剪影禁用 `gridCellMotionEase`**，避免格间对角插值把字粒画到笔画轮廓外；**主线合并** `motion-shape-framework`：**辨** `outlineContourFirst`（`_arcPrefs`、弱静态垫底、`motionTimeBlend`、紊 分套）与 **plan-followup**（非 mask 格 ease、`?gridEase=0`、clock 秒、`?outlineFirst=0`、贝塞尔觅食、睡眠压低、游走惯性、拖拽）。 |
+| 最新 | **3.32.1**：**`_enforceMaskBackedGlyphWalkable`**：叠分 / 华容 / 滑步后若 `(mgx,mgy)` 仍落在 mask 外，则 **snap 到 `_nearestWalkableMarchCell`** 并清零亚格绘制偏移，与 `_worldCellWalkable` 同源兜底；眼窝斥力 **420→340** 减轻与辨形弹簧对冲。 |
+| 先前 | **3.32.0**：**巨字/颜 mask 剪影禁用 `gridCellMotionEase`**，避免格间对角插值把字粒画到笔画轮廓外；**主线合并** `motion-shape-framework`：**辨** `outlineContourFirst`（`_arcPrefs`、弱静态垫底、`motionTimeBlend`、紊 分套）与 **plan-followup**（非 mask 格 ease、`?gridEase=0`、clock 秒、`?outlineFirst=0`、贝塞尔觅食、睡眠压低、游走惯性、拖拽）。 |
 | 先前 | **3.31.0**：**廓** 剪影静态垫底；**辨** + `motionTimeBlend` + 紊 `_arcPrefs`；clock 秒、格 ease（曾误作用于 mask）、贝塞尔觅食、睡眠、惯性。 |
 | 先前 | **3.28.0**：**形场 Consumer** `shape-consumer.js`（`ZiLingShapeFieldConsumer.create`：指数平滑 + 与本地 packed **最近邻对齐**）；`matrix-bridge.resampleBinaryPacked`。**Pet**：`ingestExternalWalkPacked` / `resetExternalWalkConsumer`；换形若 packed 尺寸变化则清外部态；`dumpShapeField` 含 `externalWalk`；`?shapeDebug=1` 提供 `_ingestDemoWalk()`。 |
 | 先前 | **3.27.0**：**形场模块** `shape-field.js`（可走格 `Set` + 拓扑壳层 + `packWalkGrid` / `hashPackedGrid`）；**矩阵桥占位** `matrix-bridge.js`（二值栅格混合、指数持有、置信度门限）。**纹理体动** 侧栏「紊」：`spring_flow` / `adjacent_swap`（关 `gridMarch` 时芯层邻格换位）；换形 **纹理预算** `_textureBudgetMul`；`?textureMotion=`、`?shapeDebug=1` → `_shapeDump()`。 |

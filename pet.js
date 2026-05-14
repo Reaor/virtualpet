@@ -3493,6 +3493,31 @@
     }
 
     /**
+     * 叠分 / 华容 / 滑步之后，个别 `(mgx,mgy)` 可能落在 mask 外（与 `_worldCellWalkable` 不一致）。
+     * 按 PLAN「形场与判定同源」：强制 snap 到最近可走格并同步 `g.x/y`，避免字粒长期停在剪影外。
+     */
+    _enforceMaskBackedGlyphWalkable(bx, by, cos, sin, flip) {
+      if (!isMaskBackedMegaKao(this)) return;
+      const cell = this.gridCell;
+      for (const g of this.glyphs) {
+        if (g.faceRole) continue;
+        const gx = g.mgx;
+        const gy = g.mgy;
+        if (gx == null || gy == null) continue;
+        if (this._worldCellWalkable(gx, gy, bx, by, cos, sin, flip)) continue;
+        const sn = this._nearestWalkableMarchCell(gx, gy, bx, by, cos, sin, flip);
+        g.mgx = sn.gx;
+        g.mgy = sn.gy;
+        g.x = sn.gx * cell;
+        g.y = sn.gy * cell;
+        g.vx = 0;
+        g.vy = 0;
+        g._silDrawOx = 0;
+        g._silDrawOy = 0;
+      }
+    }
+
+    /**
      * 将 mask 内可走世界格排成走廊：`spiral` 切比雪夫环 + 极角（由心向外「挤满」感）；
      * `zigzag` 为弓字形行扫描（旧版）。
      */
@@ -5921,6 +5946,10 @@
           this._separateOverlappingGridGlyphs();
         }
 
+        if (silMaskPet) {
+          this._enforceMaskBackedGlyphWalkable(bx, by, cos, sin, flip);
+        }
+
         if (this.morphGlyphToTarget) {
           let all = true;
           const mt = this.morphGlyphToTarget;
@@ -6002,7 +6031,7 @@
               const dy = g.y - e.y;
               const d = Math.hypot(dx, dy);
               if (d < eyeClearR && d > 0.01) {
-                const push = ((eyeClearR - d) / eyeClearR) * 420;
+                const push = ((eyeClearR - d) / eyeClearR) * 340;
                 ax += (dx / d) * push;
                 ay += (dy / d) * push;
               }

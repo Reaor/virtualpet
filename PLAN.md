@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.32.0** 起）。  
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.32.1** 起）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
@@ -244,6 +244,7 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 | 子需求 | 状态 | 说明 |
 |--------|------|------|
 | march 目标格不出 mask | **已完成** | `_nearestWalkableMarchCell`：最近可走格螺旋搜索 |
+| 叠分/华容后格仍偶发越界 | **已完成（3.32.1）** | `_enforceMaskBackedGlyphWalkable`：每帧末对 `silMaskPet` 用 `_worldCellWalkable` 校验 `(mgx,mgy)`，越界则 snap 并清 `_silDrawOx/Oy` |
 | 待机层关游走 + 同相位体内波 | **已完成** | `isMaskBackedMegaKao`：剪影下跳过格子游走；`presSilHarm` 与 `silMaskPet` 均走 ensemble 体内波支 |
 | 淡出/补步/重生兜底到待机 | **已完成** | `silMaskPet` 跑 inpull + lifecycle；重生 `_randomChar()` 仅 `isPresentationSilhouetteHarm` |
 | 交互与流体收紧 | **已完成** | `scatterTapBurst` / `_wallShatter` / `flash` / 流体 / `rumble` 按 mask 剪影分级 |
