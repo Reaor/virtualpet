@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.32.2** 起）。  
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.32.3** 起）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
 ## 0. 如何确认你看到的是「本计划对应的构建」
@@ -31,7 +31,7 @@
 | 容易切到龙 / 龙形态可见 | **已移除（3.6.0）** | 动物类形态下线；`CHAR_FORM_BIAS` 中 **龙→傅里叶形** 等已重映射 |
 | 变形跑左上角 | **已完成（2.8.0）** | **根因**：渐进换形目标曾用**局部格**与 **世界格 `mgx/mgy`** 混比。现 `_computeMorphGridTargets` 输出 **`twx/twy` 世界格心**，步进与完成判定一致；`_finishMorph` 反算局部 `tx/ty` 并同步 `mgx/mgy` |
 | 字灵/文稿整体贴画布左上（非中心） | **已完成（3.4.0）** | `_resize` 中补写 **`center = (width/2,height/2)`**；`script`/`pet` 模式下将 **`pos`/`anchor` 拉回中心**（此前 `center` 未随画布更新，恒为 0,0） |
-| 运动美感、凑成形体的紧凑感 | **部分完成** | 已 **降低** `fluidStrength` 默认、**减小**巡逻 `pAmp`，减轻「散」；**3.30.0**：mask 内游走带 **方向惯性**；**未做**：轮廓内二次聚类、速度场、B-spline 格路径等 |
+| 运动美感、凑成形体的紧凑感 | **部分完成（3.32.3）** | 已 **降低** `fluidStrength` 默认、**减小**巡逻 `pAmp`；**3.32.3**：呈现层剪影 **格移每帧最多 1 步**（匀速曼哈顿）；叠字疏散 **优先正交邻格 + 多遍**；**开「动」时压低静态 mask 垫底**减轻双轮廓；**淡出/淡入**节奏按 PLAN 收紧（难辨区快出、重生慢现）；**未做**：B-spline 格路径、速度场等 |
 
 ### 1.1～1.8 历史条目（摘要）
 
@@ -283,6 +283,7 @@ URL：`?skipIntro=1` 或 `?pet=1` 跳过开场；`?form=lissajous` 等仍指定�
 | 呈现态（计时/巨字/颜文字轮廓） | **已完成** | **3.17.0**：**呈现层**（`uiArcMode=presentation`）→ `DISPLAY_MOTION_KERNELS`；解决计时因 `layoutLock` 未吃到缩放、曲线却被压慢的错位 |
 | 呈现层 idle 误换待机形 | **已完成（3.32.2）** | `pickBiasedForm` 仅用 **`getFormOrderForUiArcMode(uiArcMode)`**；`app.js` 约 11s 自动换形在 **presentation** 下 **整段跳过**，避免「像自动回待机」 |
 | 呈现层先静后动 | **已完成（3.32.2）** | **`presentationGlyphDynamics`**（侧栏 **动**，`_arcPrefs.presentation`；默认关）；与 **`presGlyphSleep`** 门控体内谐波/流体；蛇行 `_snakePhase` 在呈现开「动」时 **×1.55** 与谐波/轮廓游走振幅倍率拉开；URL **`?presDyn=1`** |
+| 呈现层格移 / 叠字 / 淡入淡出 | **加强（3.32.3）** | 剪影呈现：**每字每帧最多迈一格**；`_separateOverlappingGridGlyphs` **优先随机正交邻空位**并 **6 遍**；**体内动开** 时 **mask 垫底 α 大幅压低**（辨开时仍留弱影）；生命周期 **快淡出 / 慢淡入**、重生 **更低起 α** |
 | 侧栏层级与参数分套 | **已完成** | **层** 切换互斥形态区；`_arcPrefs`：**速 / 颜 / 墨 / 浮** 分套；「变」仅当前层 `getFormOrderForUiArcMode` |
 | 可观测 | **已完成** | `pet.uiArcMode`；`ZiLing.getMotionProfileKernelsForPet`（运行时）；`getMotionProfileKernels(form)` 仅兼容/调试 |
 
