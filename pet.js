@@ -3681,7 +3681,8 @@
       const mega = this.form === "mega";
       const kaoMask = useMask && String(this.form || "").startsWith("kao_");
       const rMax = mega ? 90 : kaoMask ? 52 : useMask ? 40 : 22;
-      const passes = mega ? 4 : useMask ? 3 : 1;
+      const presDense = isPresentationSilhouetteHarm(this);
+      const passes = presDense ? 6 : mega ? 4 : useMask ? 3 : 1;
       const key = (gx, gy) => `${gx},${gy}`;
 
       for (let pass = 0; pass < passes; pass++) {
@@ -3701,12 +3702,45 @@
             const gx = g.mgx;
             const gy = g.mgy;
             let found = null;
+            /** 呈现层：优先正交邻格（曼哈顿 1），规整且少「大跳」叠乱 */
+            if (presDense) {
+              const orth = [
+                [1, 0],
+                [-1, 0],
+                [0, 1],
+                [0, -1],
+              ];
+              for (let u = orth.length - 1; u > 0; u--) {
+                const q = Math.floor(Math.random() * (u + 1));
+                const t = orth[u];
+                orth[u] = orth[q];
+                orth[q] = t;
+              }
+              for (const [dx, dy] of orth) {
+                const nx = gx + dx;
+                const ny = gy + dy;
+                const nk = key(nx, ny);
+                const list = occ.get(nk);
+                if (list && list.length) continue;
+                if (
+                  useMask &&
+                  !this._worldCellWalkable(nx, ny, bx, by, cos, sin, flip)
+                ) {
+                  continue;
+                }
+                found = { nx, ny, nk };
+                break;
+              }
+            }
             for (let r = 1; r < rMax && !found; r++) {
               for (let dx = -r; dx <= r && !found; dx++) {
                 for (let dy = -r; dy <= r && !found; dy++) {
                   if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
                   const nx = gx + dx;
                   const ny = gy + dy;
+                  if (presDense && Math.abs(nx - gx) + Math.abs(ny - gy) === 1) {
+                    continue;
+                  }
                   const nk = key(nx, ny);
                   const list = occ.get(nk);
                   if (list && list.length) continue;
@@ -4060,8 +4094,9 @@
         0.25,
         2.5
       );
-      const fadeOut = 0.26 / (0.62 + 0.38 * spd);
-      const fadeIn = 0.58 + 0.35 * spd;
+      /** 轮廓难辨 / 越界时：略快淡出；合法区内：慢淡入减轻闪现与叠乱感 */
+      const fadeOut = 0.4 / (0.62 + 0.38 * spd);
+      const fadeIn = 0.26 + 0.22 * spd;
       const tWall = performance.now() / 1000;
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
@@ -4103,7 +4138,12 @@
           if (isPresentationSilhouetteHarm(this)) {
             g.char = this._randomChar();
           }
-          g.alpha = clamp(g._megaBaseAlpha * 0.48, 0.14, 0.5);
+          const presL = isPresentationSilhouetteHarm(this);
+          g.alpha = clamp(
+            g._megaBaseAlpha * (presL ? 0.32 : 0.48),
+            presL ? 0.08 : 0.14,
+            presL ? 0.36 : 0.5
+          );
           g._megaOutsideAcc = 0;
           g.wgx = 0;
           g.wgy = 0;
@@ -5606,15 +5646,23 @@
           (gms * 0.55 + gms0 * 0.45) *
           (contourStatic ? 0.5 : 1) *
           (this._sleepMotionMul || 1);
-        const stepBudget = Math.max(
-          1,
-          Math.min(
-            presSilHarm || silMaskPet ? 4 : 6,
-            Math.round(
-              (this.gridMarchSpeed || 2) * marchGms * dt * 6 * (this._sleepMotionMul || 1)
-            )
-          )
+        /** 呈现层剪影：每字每帧最多迈一格（匀速曼哈顿），避免多步追赶造成叠乱 */
+        const rawMarchSteps = Math.round(
+          (this.gridMarchSpeed || 2) *
+            marchGms *
+            dt *
+            6 *
+            (this._sleepMotionMul || 1)
         );
+        const stepBudget = presSilHarm
+          ? 1
+          : Math.max(
+              1,
+              Math.min(
+                silMaskPet ? 4 : 6,
+                rawMarchSteps
+              )
+            );
         const crispMotion = isGridLayoutImmutableForm(this.form);
 
         if (snakeStream) {
@@ -5734,9 +5782,9 @@
             const gmsPat = silMaskPet ? gmsSil : gms;
             let silStyleHarmMul = 1;
             if (silMaskPet && presSilHarm) {
-              if (snakeStream) silStyleHarmMul = 0.52;
-              else if (contourDrift) silStyleHarmMul = 1.24;
-              else silStyleHarmMul = 0.74;
+              if (snakeStream) silStyleHarmMul = 0.4;
+              else if (contourDrift) silStyleHarmMul = 1.38;
+              else silStyleHarmMul = 0.66;
             }
             const pAmpBase =
               cell *
@@ -6205,6 +6253,13 @@
         !this.presentationGlyphDynamics
       ) {
         a += light ? 0.055 : 0.075;
+      }
+      /** 开「体内动」时压低静态 mask 垫底，避免与字粒叠成「双轮廓」 */
+      if (
+        isPresentationSilhouetteHarm(this) &&
+        this.presentationGlyphDynamics
+      ) {
+        a *= this.outlineContourFirst ? 0.26 : 0.12;
       }
       ctx.globalAlpha = a;
       ctx.drawImage(lay, 0, 0, lay.width, lay.height, 0, 0, S, S);
