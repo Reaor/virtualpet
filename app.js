@@ -719,7 +719,7 @@
         const on = pet.cyclePresentationGlyphDynamics();
         toast(
           on
-            ? `体内动：开（呈现层；谐波/流体/蛇行等；不叠整张巨字 mask 垫底）`
+            ? `体内动：开（呈现层；谐波/流体/蛇行等；不叠整张巨字 mask 垫底；字粒略闪一下作确认）`
             : `体内动：关（呈现层；开「辨」有极弱垫底；强轮廓开「廓」）`
         );
       } else if (action === "megaScale") {

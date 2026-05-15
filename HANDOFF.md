@@ -166,7 +166,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ---
 
-## 12. 控件映射与维护约定（3.33.4）
+## 12. 控件映射与维护约定（3.33.5）
 
 ### 12.1 左栏四块（`index.html` → `data-action` → `app.js` → `pet.js`）
 
@@ -179,7 +179,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 | | 速 / 眠 / 抖 | `speed` / `sleep` / `shake` | 速度挡 / sleep 模式 / 抖擞 |
 | ② 格点 · 躯体轨 · 纹理与粒数 | 轨 / 颤 / 紊 | `motionStyle` / `glyphsJitter` / `textureMotion` | 躯体范式 / 亚格颤 / 纹理体动 |
 | | 波 / 徙 / 粒 | `fluid` / `gridMarch` / `megaPack` | 流体强度 / 格移倍率 / 巨字粒数 |
-| ③ 巨字/颜：垫底 · 辨形 · 体内动 | 廓 / 辨 / 动 | `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationDynamics` | **廓**：显式整 mask 垫底。**辨**：压低体内动；呈现关「动」且未开「廓」时 **极弱整 mask**。**动**：呈现体内动；开时 **不画整 mask** |
+| ③ 巨字/颜：垫底 · 辨形 · 体内动 | 廓 / 辨 / 动 | `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationDynamics` | **廓**：显式整 mask 垫底。**辨**：压低体内动；呈现关「动」且未开「廓」时 **极弱整 mask**。**动**：呈现体内动；开时 **不画整 mask**；**关→开** 短时弱 **`_glyphFlash`** 作确认（mask 剪影仍压低闪光） |
 | ④ 呈现层 · 巨字排版 | 字比 / 容纳 | `megaScale` / `macroFit` | `megaLayoutScale` / `macroFitMode` |
 
 **维护规则**：新增侧栏键时，必须同时写 **长 `title`**（一句以上，说明层级与副作用）并在本表增行；Toast 文案可在 `app.js` 与 `title` 对齐。
@@ -195,9 +195,9 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 ### 12.3 近期代码向计划（写入 `PLAN.md` 对照）
 
 - [ ] 可选：**自定义悬停层**（比原生 `title` 延迟更短）——需防遮挡画布。  
-- [ ] 呈现层：「动」从关→开时 **一帧弱闪光** 提示状态切换（产品待批）。  
+- [x] 呈现层：「动」从关→开时 **短时弱 `_glyphFlash`** 提示状态切换（**3.33.5**；mask 剪影仍压低闪光）。  
 - [ ] 性能：评估 **双次** `_separateOverlappingGridGlyphs` 可否在待机 mask 路径合并。
 
 ---
 
-*文档版本随构建迭代；最后更新意图：与 `ziling-build` **3.33.4** 对齐。*
+*文档版本随构建迭代；最后更新意图：与 `ziling-build` **3.33.5** 对齐。*

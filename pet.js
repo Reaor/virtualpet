@@ -7061,11 +7061,17 @@
      */
     cyclePresentationGlyphDynamics() {
       const b = this._arcPrefs.presentation;
+      const prev = !!b.presentationGlyphDynamics;
       b.presentationGlyphDynamics = !b.presentationGlyphDynamics;
+      const next = !!b.presentationGlyphDynamics;
+      if (next && !prev) {
+        // 画布可感知：关→开体内动时略提亮一瞬（mask 剪影在 _render 内对 flash 再压低）
+        this._glyphFlash = Math.min(0.34, Math.max(this._glyphFlash || 0, 0.22));
+      }
       if (this.uiArcMode === "presentation") {
         applyArcVisualPrefsToPet(this);
       }
-      return !!b.presentationGlyphDynamics;
+      return next;
     }
 
     /** 巨字相对身幅缩放挡；与 `gridCell` 决定的下限取 max；换形巨字时生效 */
