@@ -3239,11 +3239,12 @@
         this._silhouetteMatteLayer = null;
       }
 
-      /** 巨字/颜：粒子数不得超过 mask 内大致可分的格位，避免蛇轨 / 叠分天然不可能唯一位 → 重叠卡顿 */
+      /** 呈现层巨字/颜：粒子数不得超过 mask 内大致可分的格位（待机层不截，避免「字变少」与待机观感劣化） */
       if (
         this._maskPack &&
         this._maskPack.fillCount != null &&
         this.viewMode === "pet" &&
+        this.uiArcMode === "presentation" &&
         (name === "mega" || String(name).startsWith("kao_"))
       ) {
         const cellW = this.gridCell || 12;
@@ -4272,6 +4273,7 @@
 
     /** 呈现层剪影（巨字/颜）：离轮廓淡出 → 登记空位 → 壳上重生并换新字 */
     _updatePresentationSilhouetteGlyphLifecycle(dt, bx, by, cos, sin, flip) {
+      if (!isPresentationSilhouetteHarm(this)) return;
       if (!this._maskPack || !this._maskPack.grid) return;
       const spd = clamp(
         this.glyphMotionSpeed != null ? this.glyphMotionSpeed : 1,
@@ -5546,11 +5548,8 @@
       }
 
       const gms = gms0 * motionTimeBlend(mk.timeScale);
-      const contourStatic =
-        presGlyphSleep ||
-        (!!this.outlineContourFirst &&
-          silMaskPet &&
-          this.viewMode === "pet");
+      /** 仅「呈现层剪影 + 关体内动」走强静态门控；勿把「辨」对折到待机 mask，否则待机巨字/颜会像被拖慢、与格移打架 */
+      const contourStatic = !!presGlyphSleep;
       const gmsSil = contourStatic ? gms * 0.32 : gms;
       const sleepMul =
         this.mode === "sleep" && this.viewMode === "pet" ? 0.32 : 1;
@@ -5814,13 +5813,13 @@
         waveAmp *
         maskFluidMul *
         (silMaskPet ? gmsSil : gms) *
-        (presSilHarm || silMaskPet ? 0.1 : 1) *
+        (presSilHarm ? 0.1 : 1) *
         (this._sleepMotionMul || 1);
       if (strictSilGrid) waveAmpEff = 0;
       if (!strictSilGrid) {
         this._fluidPhase +=
           dt *
-          (presSilHarm || silMaskPet ? 0.09 : 0.48) *
+          (presSilHarm ? 0.09 : 0.48) *
           (silMaskPet ? gmsSil : gms) *
           (this._sleepMotionMul || 1);
       }
@@ -6208,14 +6207,16 @@
         }
         if (silMaskPet) {
           this._stepSilhouetteVacancyInpull(t, gms, bx, by, cos, sin, flip);
-          this._updatePresentationSilhouetteGlyphLifecycle(
-            dt,
-            bx,
-            by,
-            cos,
-            sin,
-            flip
-          );
+          if (isPresentationSilhouetteHarm(this)) {
+            this._updatePresentationSilhouetteGlyphLifecycle(
+              dt,
+              bx,
+              by,
+              cos,
+              sin,
+              flip
+            );
+          }
           this._separateOverlappingGridGlyphs();
         }
 

@@ -104,7 +104,8 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.33.1**：**热修**：`app.js` 中误删的 **`syncRailUiArcClass` 函数声明** 导致整页脚本语法错误（按钮/版本号/字灵均未初始化）；已恢复。构建号 **3.33.1** 便于强刷缓存。 |
+| 最新 | **3.33.2**：**待机 / 呈现隔离**：`contourStatic` 不再把「辨」误用到待机 mask（仅 `presGlyphSleep`）；流体阻尼 **`presSilHarm` 限定**（避免待机巨字/颜流体被 ×0.1）；**`fillCount` 截断粒子** 仅 **呈现层**；**`_updatePresentationSilhouetteGlyphLifecycle`** 仅 **呈现剪影**（防待机层被淡出/重生打乱）。**文档**：新增 **`HANDOFF.md`** 解任/接手说明。 |
+| 先前 | **3.33.1**：**热修**：`app.js` 误删的 **`syncRailUiArcClass`** 导致整页脚本失败。 |
 | 先前 | **3.33.0**：**整块巨字灰轮廓**：**仅「廓」**（`silhouetteMatteUnderlay`）开时 `_drawSilhouetteMatteUnderlay`；**辨** 不再单独触发整块 mask；呈现层 **「廓」默认关**。**巨字排版**：`megaLayoutScale`（侧栏 **字比**，与 `gridCell` 推得的下限取 max）、`macroFitMode`（**容纳**：`shrink` / `truncate` / `wrap2`，多行 `createMacroTextDraw`）；URL **`?megaScale=`**、**`?macroFit=`**。**UI**：左栏 **分区标题 + 双列按钮**、主容器加宽。 |
 | 先前 | **3.32.4**：**根因收敛**：（1）**粒子数 > 可走格/蛇轨槽位** → 必然共格重叠；现 **`rasterizeMask.fillCount`** 按格距估算 **上限并截断 `glyphs`**。（2）**整张巨字/颜 mask 垫底 + 字粒** → 双轮廓；**呈现层开「体内动」** 时 **跳过 `_drawSilhouetteMatteUnderlay`**。（3）**卡顿**：合并多余 `separate` 调用、**提高单函数内遍数**、重载呈现时 **跳过背景装饰格线**、mask 离屏 **`willReadFrequently:false`**。 |
 | 先前 | **3.32.3**：**呈现层剪影格移**：每字 **每帧最多 1 格** 曼哈顿步进（匀速、少叠乱）。**叠字疏散**：`isPresentationSilhouetteHarm` 下 **优先正交邻空位**（随机序）再 Chebyshev 扩环，**6 遍**分离。**双轮廓**：开「体内动」时 **mask 静态垫底 α 乘子压低**（辨开时仍留弱影）。**淡入淡出**：离轮廓/非法格 **更快淡出**、区内 **更慢淡入**、重生 **更低起 α**（减闪现混乱）。**轨** 谐波/蛇行/轮廓 振幅对比略拉开。 |
