@@ -702,8 +702,8 @@
         const on = pet.cyclePresentationGlyphDynamics();
         toast(
           on
-            ? `体内动：开（呈现层偏好；谐波/流体/蛇行等按轨与速）`
-            : `体内动：关（呈现层偏好；先静辨形，垫底轮廓为主）`
+            ? `体内动：开（呈现层；谐波/流体/蛇行等；不叠整张巨字 mask 垫底）`
+            : `体内动：关（呈现层；可按「廓」「辨」叠弱静态垫底）`
         );
       } else if (action === "fluid") {
         const v = pet.cycleArcFluidStrength();
