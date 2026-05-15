@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.34.0" />
+  <meta name="ziling-build" content="3.34.1" />
   <title>字灵 · 开发者页控制台</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.34.0" />
+  <link rel="stylesheet" href="./styles.css?v=3.34.1" />
 </head>
 <body>
   <div class="app" data-ui-arc="standby">
@@ -31,7 +31,7 @@
           <div class="rail-section">
             <div class="rail-section-title">① 层级 · 日常互动 · 墨色光色</div>
             <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="层级与外观">
-              <button type="button" class="rail-tool" data-action="arcMode" title="【层】待机 ⟷ 呈现：两套参数分记（色/速/轨/颤/紊/廓/辨/动/墨/浮/波/徙/粒/字比/容纳）。呈现层含巨字、计时、颜文字等；待机层为曲线与软团。">层</button>
+              <button type="button" class="rail-tool" data-action="arcMode" title="【层】待机 ⟷ 呈现：两套参数分记。下方「走格/灰底/淡影/内动」等亦分套；待机仅曲线，呈现为巨字/计时/颜。">层</button>
               <button type="button" class="rail-tool" data-action="morph" title="【变】仅在当前层内随机换形（不跨层）。呈现层不会跳到待机曲线。">变</button>
               <button type="button" class="rail-tool" data-action="feed" title="【觅】觅食：字灵沿路径巡游，吸收下方诗笺/标签中的字入字池。">觅</button>
               <button type="button" class="rail-tool" data-action="ink" title="【墨】躯体墨色场：在几种水墨渐变模式间循环（当前层记忆）。">墨</button>
@@ -43,9 +43,9 @@
             </nav>
           </div>
           <div class="rail-section">
-            <div class="rail-section-title">② 格点 · 躯体轨 · 纹理与粒数</div>
+            <div class="rail-section-title">② 格点 · 走格 · 纹理与粒数</div>
             <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="格点与纹理">
-              <button type="button" class="rail-tool" data-action="motionStyle" title="【轨】躯体运动范式（巨字/颜 mask 内）：谐波=格点节拍位移；蛇行=沿走廊序格滑动；轮廓游走=mask 内曼哈顿游走（与谐波并存时略增叠字风险）。">轨</button>
+              <button type="button" class="rail-tool" data-action="motionStyle" title="【走格】巨字/颜 mask 内躯体怎么动：横竖格·谐步=一格一格匀速挪（推荐）；流线蛇行=沿走廊序格滑；轮廓游走=mask 内随机游走（易叠字，少用）。">走格</button>
               <button type="button" class="rail-tool" data-action="glyphsJitter" title="【颤】亚格颤抖：开时字粒可有亚像素微振（谐波轨下仍建议先关以获得严格格点）。">颤</button>
               <button type="button" class="rail-tool" data-action="textureMotion" title="【紊】纹理体动：流=弹簧式纹理相位；序=芯层邻格换位（巨字/颜 mask 或格移关闭时序不生效）。">紊</button>
               <button type="button" class="rail-tool" data-action="fluid" title="【波】液体波纹强度：影响非 mask 或 mask 内允许的相位摆动（当前层记忆）。">波</button>
@@ -54,11 +54,12 @@
             </nav>
           </div>
           <div class="rail-section">
-            <div class="rail-section-title">③ 巨字/颜：垫底 · 辨形 · 体内动</div>
-            <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="剪影辨形">
-              <button type="button" class="rail-tool" data-action="silhouetteMatteUnderlay" title="【廓】剪影静态垫底：开时在字粒下方绘制整张 mask 半透明图（与可走格同几何）。默认关以避免整块灰字；需强辨形时再开。">廓</button>
-              <button type="button" class="rail-tool" data-action="outlineContourFirst" title="【辨】辨形优先：压低体内谐波/流体等。呈现层关「动」时，若未开「廓」，会叠一层极弱整 mask 垫底（先见轮廓）；开「廓」则改用显式垫底强度。">辨</button>
-              <button type="button" class="rail-tool" data-action="presentationDynamics" title="【动】呈现层专用：体内字粒是否跑谐波/流体/蛇行等。关=先静后动（推荐默认）；开=动态构形。开「动」时不叠整张 mask 垫底以免双轮廓。关→开时字粒短时略闪作确认（Toast 同步提示）。">动</button>
+            <div class="rail-section-title">③ 巨字/颜 · 垫底与动静</div>
+            <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="巨字颜剪影">
+              <button type="button" class="rail-tool" data-action="silhouetteMatteUnderlay" title="【整块灰底】在字粒下绘制整张巨字/颜 mask（半透明，与可走格对齐）。需要强轮廓对比时开；默认关以免「第二重剪影」。">灰底</button>
+              <button type="button" class="rail-tool" data-action="outlineContourFirst" title="【淡影垫底】关「内动」且未开「整块灰底」时，可叠极弱整 mask（默认关）。仅当你需要隐约看到外形时再开。">淡影</button>
+              <button type="button" class="rail-tool" data-action="presentationDynamics" title="【字内动】开=体内谐波/流体/蛇行等；关=全静（仅格点，推荐巨字默认可读）。关→开时字粒略闪确认。">内动</button>
+              <button type="button" class="rail-tool rail-tool-span2" data-action="silhouetteCalm" title="【规整】呈现层一键：横竖格·谐步 + 关内动 + 关亚格颤 + 纹理回「流」+ 略抑流体，并立刻疏散叠格。不切「层」。">规整</button>
             </nav>
           </div>
           <div class="rail-section ui-arc-present-only">
@@ -71,20 +72,20 @@
         </div>
         <div class="rail-divider" role="presentation"></div>
         <div class="rail-groups" id="railGroups" aria-label="形态分类">
-          <details class="rail-group ui-arc-standby-only" open>
-            <summary title="展开后点数字按钮切换待机曲线（仅待机层）">① 待机曲线形态</summary>
-            <p class="rail-group-hint">① 起为软团；数字序悬停看全名 · 李萨如/蔷薇/旋轮/经典闭曲线等</p>
+          <details class="rail-group rail-group-standby ui-arc-standby-only" open>
+            <summary title="仅「待机层」可用：数学曲线与软团。若当前在呈现层，请先点左侧「层」切回待机。">待机 · 曲线形态</summary>
+            <p class="rail-group-hint">仅待机层；① 起为软团；数字序悬停看全名</p>
             <div class="rail-group-btns rail-standby-scroll" id="railStandbyBtns"></div>
           </details>
-          <details class="rail-group ui-arc-present-only">
-            <summary title="时分显示，点「钟」切换">② 计时（时分）</summary>
+          <details class="rail-group rail-group-present ui-arc-present-only">
+            <summary title="仅「呈现层」：画布计时。请先点左侧「层」→ 呈现。">呈现 · 计时</summary>
             <div class="rail-group-btns">
               <button type="button" class="rail-form compact" data-form="clock" title="【钟】计时形态：画布显示当前时分（约每分钟刷新）。">钟</button>
               <button type="button" class="rail-form compact" data-form="chrono" title="【秒】计时形态：画布显示时分秒（秒级刷新，略多算力）。">秒</button>
             </div>
           </details>
-          <details class="rail-group ui-arc-present-only">
-            <summary title="颜文字 mask 剪影">③ 颜文字</summary>
+          <details class="rail-group rail-group-present ui-arc-present-only">
+            <summary title="仅「呈现层」：颜文字 mask 剪影">呈现 · 颜文字</summary>
             <div class="rail-group-btns">
               <button type="button" class="rail-form compact" data-form="kao_joy" title="【喜】颜文字：喜形 mask 剪影。">喜</button>
               <button type="button" class="rail-form compact" data-form="kao_sweat" title="【汗】颜文字：汗颜 mask 剪影。">汗</button>
@@ -104,7 +105,7 @@
         <div class="stage-main" id="stageMain" aria-hidden="false">
           <canvas id="petCanvas" aria-label="字灵画布"></canvas>
           <div class="form-label" id="formLabel">软团</div>
-          <div class="hint" id="hint">点页眉 <strong>?</strong> 打开入门说明 · 侧栏<strong>悬停</strong>可看参数 · 「层」待机 ⟷ 呈现（分套）· 呈现关「动」且开「辨」：极弱整 mask；要强轮廓再开「廓」· URL 例 <code>?macroFit=</code> <code>?megaScale=</code> 见 PLAN（<strong>3.34.0</strong>）</div>
+          <div class="hint" id="hint">点页眉 <strong>?</strong> 入门 · 「层」分清待机/呈现 · 巨字乱：先试 <strong>规整</strong>，再走 <strong>走格</strong> 横竖谐步 · 灰底/淡影默认关防重影 · <strong>3.34.1</strong></div>
         </div>
       </section>
 
@@ -238,7 +239,7 @@
           <ol class="help-dialog-ol">
             <li>底部输入文稿 → 右侧点<strong>「呈」</strong>，画布出现与输入行序一致的字列（一格一字）。</li>
             <li>点<strong>「灵」</strong>或<strong>双击</strong>文稿区 → 化为字灵。</li>
-            <li>左侧<strong>「层」</strong>在<strong>待机</strong>（数学曲线、软团）与<strong>呈现</strong>（巨字、计时、颜文字）之间切换；色、速、轨等<strong>分套记忆</strong>。</li>
+            <li>左侧<strong>「层」</strong>在<strong>待机</strong>（数学曲线、软团）与<strong>呈现</strong>（巨字、计时、颜文字）之间切换；色、速、走格、灰底/淡影/内动等<strong>分套记忆</strong>。</li>
           </ol>
         </section>
         <section class="help-dialog-section">
@@ -250,7 +251,7 @@
         <section class="help-dialog-section">
           <h3 class="help-dialog-h3">巨字 / 颜文字与「先静后动」</h3>
           <p class="help-dialog-p">
-            呈现层剪影以<strong>辨形优先</strong>。侧栏<strong>「辨」「廓」「动」</strong>控制弱垫底、整块 mask 垫底与体内谐波/蛇行等；默认关<strong>「动」</strong>以减少乱颤。将<strong>「动」</strong>从关切到开时，字粒会<strong>短时略闪</strong>作状态确认（mask 路径仍压低闪光）。
+            巨字乱时先点<strong>「规整」</strong>（横竖格谐步 + 关内动 + 疏散叠格）。<strong>「整块灰底」</strong>与<strong>「淡影垫底」</strong>默认关，避免第二重剪影抢读；需要外形锚点再按需开。<strong>「内动」</strong>开时体内跑谐波/流体/蛇行等；关切到开时字粒会<strong>短时略闪</strong>确认（mask 路径仍压低闪光）。
           </p>
         </section>
         <section class="help-dialog-section">
@@ -301,11 +302,11 @@
     </div>
   </div>
 
-  <script src="./js/ziling/play-bounds.js?v=3.34.0"></script>
-  <script src="./js/ziling/shape-field.js?v=3.34.0"></script>
-  <script src="./js/ziling/matrix-bridge.js?v=3.34.0"></script>
-  <script src="./js/ziling/shape-consumer.js?v=3.34.0"></script>
-  <script src="./pet.js?v=3.34.0"></script>
-  <script src="./app.js?v=3.34.0"></script>
+  <script src="./js/ziling/play-bounds.js?v=3.34.1"></script>
+  <script src="./js/ziling/shape-field.js?v=3.34.1"></script>
+  <script src="./js/ziling/matrix-bridge.js?v=3.34.1"></script>
+  <script src="./js/ziling/shape-consumer.js?v=3.34.1"></script>
+  <script src="./pet.js?v=3.34.1"></script>
+  <script src="./app.js?v=3.34.1"></script>
 </body>
 </html>

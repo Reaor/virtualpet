@@ -2259,7 +2259,7 @@
   const BODY_MOTION_STYLES = ["harmonic", "snake_stream", "contour_drift"];
 
   const BODY_MOTION_LABELS = {
-    harmonic: "谐波亚格",
+    harmonic: "横竖格·谐步（匀速迈格）",
     snake_stream: "流线蛇行",
     contour_drift: "轮廓游走",
   };
@@ -2865,15 +2865,15 @@
           bodyTintHex: this.bodyTintHex,
           glowMode: this.glowMode | 0,
           bodyColorMode: this.bodyColorMode | 0,
-          fluidStrength: _fs0,
+          fluidStrength: clamp(Math.min(_fs0, 0.11), 0, 0.55),
           gridMarchSpeed: _gm0,
           megaParticleMul: 1,
           bodyMotionStyle: "harmonic",
           glyphsJitter: false,
           silhouetteMatteUnderlay: false,
-          outlineContourFirst: true,
+          outlineContourFirst: false,
           textureMotionMode: _tex0,
-          /** 巨字/颜呈现层：体内字粒是否跑谐波/流体/游走（关=先静后动，仅轮廓垫底+格点） */
+          /** 巨字/颜呈现层：体内字粒是否跑谐波/流体/游走（关=先静后动，仅格位/垫底） */
           presentationGlyphDynamics: false,
           macroFitMode: "shrink",
           megaLayoutScale: 1,
@@ -3257,7 +3257,7 @@
         const approxCells = Math.floor(
           mp.fillCount / Math.max(1, stepPx * stepPx)
         );
-        const capG = clamp(Math.floor(approxCells * 0.82), 26, 220);
+        const capG = clamp(Math.floor(approxCells * 0.72), 26, 200);
         if (this.glyphs.length > capG) {
           this.glyphs.length = capG;
           this.particleCount = capG;
@@ -3861,7 +3861,7 @@
       const silMask = isMaskBackedMegaKao(this);
       const passes =
         presDense
-          ? 12
+          ? 16
           : usesMaskSnakeStream(this) && silMask
             ? 7
             : mega
@@ -4813,11 +4813,19 @@
             g.size = em * 1.04;
           } else {
             g.targetRot = 0;
-            const edgeMul =
-              isMaskBackedMegaKao(this) && this.viewMode === "pet"
-                ? lerp(0.99, 0.93, g.edge)
-                : lerp(1.02, 0.94, g.edge);
-            g.size = em * edgeMul;
+            if (
+              isPresentationSilhouetteHarm(this) &&
+              isMaskBackedMegaKao(this)
+            ) {
+              /** 呈现层巨字/颜：字身统一字号，避免边缘缩放导致「大小不一、难辨整体」 */
+              g.size = em;
+            } else {
+              const edgeMul =
+                isMaskBackedMegaKao(this) && this.viewMode === "pet"
+                  ? lerp(0.99, 0.93, g.edge)
+                  : lerp(1.02, 0.94, g.edge);
+              g.size = em * edgeMul;
+            }
           }
         }
         return;
@@ -6463,7 +6471,8 @@
       ctx.translate(-S / 2, -S / 2);
       let a;
       if (weakGhost) {
-        a = light ? 0.044 : 0.062;
+        /** 极弱垫底：再压低 α，避免「整块巨字剪影莫名浮现」抢读字粒 */
+        a = light ? 0.015 : 0.022;
       } else {
         a = light ? 0.19 : 0.29;
         if (this.outlineContourFirst) a += light ? 0.04 : 0.05;
@@ -6618,12 +6627,17 @@
               : crispForm
                 ? 1
                 : lerp(1.28, 0.72, edge);
+        const megaSilPres =
+          isPresentationSilhouetteHarm(this) &&
+          crispForm &&
+          isMaskBackedMegaKao(this) &&
+          !g.faceRole;
         const baseSize = g.size * this.scale * (opts.sizeMul || 1);
-        let size = baseSize * roleMul;
+        let size = baseSize * (megaSilPres ? 1 : roleMul);
         if (this.gridUnity && this.gridCell) {
           let cap = this.gridCell * (crispForm ? 0.92 : 0.88) * this.scale;
           if (isPresentationSilhouetteHarm(this) && crispForm) {
-            cap *= 0.93;
+            cap *= megaSilPres ? 0.96 : 0.93;
           }
           if (size > cap) size = cap;
         }
@@ -6639,7 +6653,11 @@
         const flashBoost = silDraw
           ? 1
           : 1 + Math.min(flash, 0.52) * flashW * 0.42;
-        const edgeAlpha = crispForm ? lerp(0.99, 0.92, edge) : lerp(0.94, 0.42, edge);
+        const edgeAlpha = megaSilPres
+          ? lerp(0.98, 0.94, edge)
+          : crispForm
+            ? lerp(0.99, 0.92, edge)
+            : lerp(0.94, 0.42, edge);
         const glowMul = g.faceRole ? 1 : this._glowAlphaMul(g, t);
         const presBodyAlphaMul =
           isPresentationSilhouetteHarm(this) &&
@@ -7037,7 +7055,7 @@
       return this.silhouetteGlyphJitter;
     }
 
-    /** 侧栏「廓」：mask 静态垫底（分套；「辨」开时仍建议开以增强对比） */
+    /** 侧栏「整块灰底」：mask 静态垫底（分套；与「淡影」二选一强度链） */
     cycleSilhouetteMatteUnderlay() {
       const b = this._arcPrefs[this.uiArcMode];
       b.silhouetteMatteUnderlay = !b.silhouetteMatteUnderlay;
@@ -7046,7 +7064,7 @@
     }
 
     /**
-     * 侧栏「辨」：**轮廓优先**（默认开）— mask 巨字/颜下先保证静态剪影可读，体内动态压低；关后便于调试全动态。
+     * 侧栏「淡影」：**可选**叠极弱整幅 mask 垫底（与「整块灰底」二选一强度链；默认关，防「第二重剪影」抢读）。
      */
     cycleOutlineContourFirst() {
       const b = this._arcPrefs[this.uiArcMode];
@@ -7056,7 +7074,7 @@
     }
 
     /**
-     * 侧栏「动」：**呈现层**巨字/颜体内字粒是否跑谐波/流体/蛇行等（分套；默认关=先静后动）。
+     * 侧栏「内动」：**呈现层**巨字/颜体内字粒是否跑谐波/流体/蛇行等（分套；默认关=先静后动）。
      * 待机层无此概念，仍写入呈现层偏好供下次切入呈现层生效。
      */
     cyclePresentationGlyphDynamics() {
@@ -7072,6 +7090,28 @@
         applyArcVisualPrefsToPet(this);
       }
       return next;
+    }
+
+    /**
+     * 侧栏「规整」：写入 **呈现层**偏好 — 横竖格谐步、关体内动、关亚格颤、纹理回到流、略抑流体；不切「层」、不换形。
+     * 若当前已在呈现层且为巨字/颜 mask，会立刻重算字号并 **双遍疏散叠格**。
+     */
+    applyPresentationSilhouetteHarmonicCalm() {
+      const b = this._arcPrefs.presentation;
+      b.bodyMotionStyle = "harmonic";
+      b.glyphsJitter = false;
+      b.presentationGlyphDynamics = false;
+      b.textureMotionMode = normalizeTextureMotionMode("spring_flow");
+      b.fluidStrength = clamp(Math.min(+b.fluidStrength || 0, 0.1), 0, 0.55);
+      if (this.uiArcMode === "presentation") {
+        applyArcVisualPrefsToPet(this);
+        this._applyGridTypography();
+        if (this.gridMarch && this.gridSnapping && this.glyphs && this.glyphs.length) {
+          this._separateOverlappingGridGlyphs();
+          this._separateOverlappingGridGlyphs();
+        }
+      }
+      return true;
     }
 
     /** 巨字相对身幅缩放挡；与 `gridCell` 决定的下限取 max；换形巨字时生效 */

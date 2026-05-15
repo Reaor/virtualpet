@@ -648,7 +648,7 @@
         pet.cycleUiArcMode();
         const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
         toast(
-          `层级 · ${lab}（色/速/轨/颤/紊/廓/辨/动/墨/浮/波/徙/粒/字比/容纳 分套保留）`
+          `层级 · ${lab}（色/速/走格/颤/紊/灰底/淡影/内动/规整/墨/浮/波/徙/粒/字比/容纳 分套保留）`
         );
       } else if (action === "morph") {
         pet.abortFeeding();
@@ -701,26 +701,37 @@
         const k = pet.cycleTextureMotionMode();
         const lab = (TEXTURE_MOTION_LABELS && TEXTURE_MOTION_LABELS[k]) || k;
         toast(`纹理体动 · ${lab}（${arcLayerZh()}）`);
+      } else if (action === "silhouetteCalm") {
+        pet.applyPresentationSilhouetteHarmonicCalm();
+        if (pet.uiArcMode === "presentation") {
+          toast(
+            "已规整呈现层：横竖格谐步 · 关内动 · 纹理流 · 流体略收（巨字/颜下叠格已疏散）"
+          );
+        } else {
+          toast(
+            "已写入呈现层偏好（横竖格谐步·全静）。请点「层」→ 呈现后在巨字/颜下生效。"
+          );
+        }
       } else if (action === "silhouetteMatteUnderlay") {
         const on = pet.cycleSilhouetteMatteUnderlay();
         toast(
           on
-            ? `剪影垫底：开（${arcLayerZh()}；整张巨字/颜 mask 半透明垫底，与可走格对齐）`
-            : `剪影垫底：关（${arcLayerZh()}；默认不叠整块轮廓，仅字粒构形）`
+            ? `整块灰底：开（${arcLayerZh()}；整张巨字/颜 mask 半透明垫底）`
+            : `整块灰底：关（${arcLayerZh()}；默认不叠第二重剪影）`
         );
       } else if (action === "outlineContourFirst") {
         const on = pet.cycleOutlineContourFirst();
         toast(
           on
-            ? `辨形优先：开（${arcLayerZh()}；体内动压低；呈现关「动」且未开「廓」时叠极弱整 mask 垫底）`
-            : `辨形优先：关（${arcLayerZh()}；无弱垫底；强轮廓请开「廓」）`
+            ? `淡影垫底：开（${arcLayerZh()}；关内动且未开整块灰底时可叠极弱整 mask）`
+            : `淡影垫底：关（${arcLayerZh()}；无弱垫底；要强对比开「整块灰底」）`
         );
       } else if (action === "presentationDynamics") {
         const on = pet.cyclePresentationGlyphDynamics();
         toast(
           on
-            ? `体内动：开（呈现层；谐波/流体/蛇行等；不叠整张巨字 mask 垫底；字粒略闪一下作确认）`
-            : `体内动：关（呈现层；开「辨」有极弱垫底；强轮廓开「廓」）`
+            ? `字内动：开（呈现层；谐波/流体/蛇行等；不叠整张巨字 mask 垫底；略闪确认）`
+            : `字内动：关（呈现层；全静；可配合「淡影」「整块灰底」看外形）`
         );
       } else if (action === "megaScale") {
         const v = pet.cycleMegaLayoutScale();

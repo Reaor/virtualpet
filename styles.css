@@ -221,6 +221,25 @@ body {
   font-size: 15px;
   font-weight: 700;
 }
+
+.rail-tools-grid .rail-tool.rail-tool-span2 {
+  grid-column: 1 / -1;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+/** 侧栏底部「待机 / 呈现」折叠区：色条区分，减少与上方通用工具混读 */
+.rail-group.rail-group-standby > summary {
+  border-left: 3px solid #34c759;
+  padding-left: 7px;
+  margin-left: 0;
+}
+
+.rail-group.rail-group-present > summary {
+  border-left: 3px solid #007aff;
+  padding-left: 7px;
+  margin-left: 0;
+}
 .rail-right {
   margin-left: 0;
   border-top-left-radius: 4px;
