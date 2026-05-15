@@ -128,7 +128,8 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 - **3.33.3**：侧栏 **title** 长文案、control-block；关「动」时 mask 垫底 α 略增；`HANDOFF` §12。  
 - **3.33.4**：**先静辨形**（关「动」+「辨」+ 未「廓」→ 极弱整 mask）；**叠分 12**、`fillCount×0.82`、巨字壳 **enforce** 略增；**生命周期 α 限幅**；**待机/巨字 gridCell** 与 **immutable em 混合** 统一字号观感；mask **flash** 再压低。  
 - **3.33.5**：**`DESIGN` §2.2/§2.3** 与回稿实现一致；**「动」关→开** `_glyphFlash` 画布确认。  
-- **3.34.4**：**规整**推迟华容道约 **0.9s**；关内动下 **swap 后 α 淡隐**；呈现剪影拖曳 **`pos` lerp 跟 `_dragTargetPos`**。  
+- **3.34.5**：**`_dragShellWorld` / `_bodyWorldForShell`**：呈现剪影拖曳 **壳心跟手**、**`pos` 松手对齐**；拖曳中仍 **叠分**；单 grapheme 巨字壳 **spread/enforce** 略增；**关内动**下关 **`strictSilGrid` 离散谐扰**；华容道 swap **α×0.78**；关内动 **`mergePresentation… timeScale` ×0.32**（较 0.22 略抬，「速」更可感）。  
+- **3.34.4**：**规整**推迟华容道约 **0.9s**；关内动下 **swap 后 α 压低**（已由 **3.34.5** 略柔为 ×0.78）；~~呈现剪影拖曳 `pos` lerp 跟 `_dragTargetPos`~~ → **3.34.5** 改为 **壳锚解耦**。  
 - **3.34.3**：**呈现巨字「排布」**：拼满画布（短串分行、`gridCell` 按画布收、字比迭代缩）↔ **逐字轮换**；**颤幅** `silhouetteJitterAmpMul`；拖曳 **格向残留**；呈现剪影 **华容道** 启用（静帧冷却放慢）。  
 - **3.34.2**：**呈现不叠整块 mask 底**（仅小字拼形）；**走格三键**（谐步/廊道/待机漫游）+ **字号** `bodyGlyphEmMul`；**颤** 不关离散谐步；叠分 **第二遍隔帧**；灰底/淡影 **仅待机侧栏**。  
 - **3.34.1**：**巨字可读**：淡影默认关、弱 mask α 再收；粒子 cap 更紧、叠分更勤；呈现巨字/颜字身 **统一 em**；**规整** 一键横竖谐步+全静；侧栏易读名与底部 **待机/呈现** 色条分区。  
@@ -172,7 +173,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ---
 
-## 12. 控件映射与维护约定（3.34.4）
+## 12. 控件映射与维护约定（3.34.5）
 
 ### 12.1 左栏四块（`index.html` → `data-action` → `app.js` → `pet.js`）
 
@@ -209,4 +210,4 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ---
 
-*文档版本随构建迭代；最后更新意图：与 `ziling-build` **3.34.4** 对齐。*
+*文档版本随构建迭代；最后更新意图：与 `ziling-build` **3.34.5** 对齐。*

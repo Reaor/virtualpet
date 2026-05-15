@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.34.4" />
+  <meta name="ziling-build" content="3.34.5" />
   <title>字灵 · 开发者页控制台</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.34.4" />
+  <link rel="stylesheet" href="./styles.css?v=3.34.5" />
 </head>
 <body>
   <div class="app" data-ui-arc="standby">
@@ -114,7 +114,7 @@
         <div class="stage-main" id="stageMain" aria-hidden="false">
           <canvas id="petCanvas" aria-label="字灵画布"></canvas>
           <div class="form-label" id="formLabel">软团</div>
-          <div class="hint" id="hint">点页眉 <strong>?</strong> 入门 · <strong>规整</strong>后先静再节律换位（淡隐）· 呈现巨字/颜拖曳<strong>缓跟手</strong> · <strong>排布 / 颤幅</strong> · <strong>3.34.4</strong></div>
+          <div class="hint" id="hint">点页眉 <strong>?</strong> 入门 · <strong>规整</strong>后先静再节律换位（轻淡）· 呈现巨字/颜拖曳<strong>剪影跟手、松手才落锚</strong> · <strong>排布 / 颤幅</strong> · <strong>3.34.5</strong></div>
         </div>
       </section>
 
@@ -260,7 +260,7 @@
         <section class="help-dialog-section">
           <h3 class="help-dialog-h3">巨字 / 颜文字与「先静后动」</h3>
           <p class="help-dialog-p">
-            <strong>呈现层</strong>巨字/颜的轮廓应由<strong>小字拼出</strong>——画布<strong>不</strong>再叠整张 mask 大字底。巨字乱时先点<strong>「规整」</strong>（约 <strong>0.9s</strong> 内不邻格换位，之后节律换位且关内动下会<strong>淡隐</strong>再接淡入），再用<strong>「谐步 / 廊道」</strong>二选一（待机层另有<strong>「漫游」</strong>）；<strong>「字号」</strong>统一调躯体字大小。侧栏<strong>「排布」</strong>在<strong>拼满画布</strong>（短串也分行、按画布收紧格距）与<strong>逐字轮换</strong>之间切换；<strong>「颤幅」</strong>调亚格颤的位移幅度（须开「颤」）。拖曳呈现巨字/颜时<strong>缓跟手</strong>并保留格向扰动，减轻整块剪影平移感。<strong>「整块灰底」「淡影」</strong>仅在<strong>待机层</strong>侧栏出现，用于调试对比。<strong>「内动」</strong>开时体内跑谐波/流体/蛇行等；关切到开时字粒会<strong>短时略闪</strong>确认。
+            <strong>呈现层</strong>巨字/颜的轮廓应由<strong>小字拼出</strong>——画布<strong>不</strong>再叠整张 mask 大字底。巨字乱时先点<strong>「规整」</strong>（约 <strong>0.9s</strong> 内不邻格换位，之后节律换位且关内动下会<strong>淡隐</strong>再接淡入），再用<strong>「谐步 / 廊道」</strong>二选一（待机层另有<strong>「漫游」</strong>）；<strong>「字号」</strong>统一调躯体字大小。侧栏<strong>「排布」</strong>在<strong>拼满画布</strong>（短串也分行、按画布收紧格距）与<strong>逐字轮换</strong>之间切换；<strong>「颤幅」</strong>调亚格颤的位移幅度（须开「颤」）。拖曳呈现巨字/颜时<strong>剪影中心跟手</strong>（每帧格迈与叠分用跟手中心；<strong>松手</strong>才把字灵锚点对齐），格向残差减轻整块平移感；关内动下<strong>谐步微颤略柔</strong>、邻格换位<strong>轻淡</strong>。<strong>「整块灰底」「淡影」</strong>仅在<strong>待机层</strong>侧栏出现，用于调试对比。<strong>「内动」</strong>开时体内跑谐波/流体/蛇行等；关切到开时字粒会<strong>短时略闪</strong>确认。
           </p>
         </section>
         <section class="help-dialog-section">
@@ -311,11 +311,11 @@
     </div>
   </div>
 
-  <script src="./js/ziling/play-bounds.js?v=3.34.4"></script>
-  <script src="./js/ziling/shape-field.js?v=3.34.4"></script>
-  <script src="./js/ziling/matrix-bridge.js?v=3.34.4"></script>
-  <script src="./js/ziling/shape-consumer.js?v=3.34.4"></script>
-  <script src="./pet.js?v=3.34.4"></script>
-  <script src="./app.js?v=3.34.4"></script>
+  <script src="./js/ziling/play-bounds.js?v=3.34.5"></script>
+  <script src="./js/ziling/shape-field.js?v=3.34.5"></script>
+  <script src="./js/ziling/matrix-bridge.js?v=3.34.5"></script>
+  <script src="./js/ziling/shape-consumer.js?v=3.34.5"></script>
+  <script src="./pet.js?v=3.34.5"></script>
+  <script src="./app.js?v=3.34.5"></script>
 </body>
 </html>

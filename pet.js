@@ -2474,7 +2474,7 @@
     if (!self.presentationGlyphDynamics) {
       out = {
         ...out,
-        timeScale: out.timeScale * 0.22,
+        timeScale: out.timeScale * 0.32,
         ampScale: out.ampScale * 0.15,
         crispMicroScale: Math.min(0.08, out.crispMicroScale * 0.4),
         anchorAmpScale: out.anchorAmpScale * 0.35,
@@ -2627,19 +2627,25 @@
           : clamp(Math.round(S * 0.042), 13, 19);
       const pres = self.uiArcMode === "presentation";
       const { Slay, disp } = resolveMegaLayoutInput(self, S);
+      const dispFlat = String(disp || "字").replace(/\n/g, "");
+      const gLen = Math.max(1, Array.from(dispFlat).length);
+      const presOne = pres && gLen <= 1;
       return buildTextSilhouetteLayout(disp, n, Slay, {
         shellSample: true,
         noStroke: true,
         shellMax: 3,
         cap: 420,
-        spreadMin: Math.max(S * (pres ? 0.057 : 0.051), gc * (pres ? 1.14 : 1.02)),
-        spreadPasses: pres ? 20 : 12,
+        spreadMin: Math.max(
+          S * (pres ? 0.057 : 0.051),
+          gc * (pres ? 1.14 : 1.02)
+        ) * (presOne ? 1.1 : 1),
+        spreadPasses: pres ? (presOne ? 26 : 20) : 12,
         jitterScale: pres ? 0.0015 : 0.0022,
         enforceSpacing: Math.max(
           S * (pres ? 0.068 : 0.054),
           gc * (pres ? 1.4 : 1.12)
-        ),
-        enforceSpacingPasses: pres ? 30 : 16,
+        ) * (presOne ? 1.14 : 1),
+        enforceSpacingPasses: pres ? (presOne ? 40 : 30) : 16,
         snapToShell: true,
       });
     }
@@ -2875,6 +2881,8 @@
       /** 拖曳时格向残留，削弱「整块平移」观感 */
       this._dragResidualLx = 0;
       this._dragResidualLy = 0;
+      this._dragShellDecoupled = false;
+      this._dragShellWorld = null;
       this.pointerPos = null;
 
       // 飞行字（被喂食时从屏幕上飞进来的字）
@@ -4023,11 +4031,16 @@
     _separateOverlappingGridGlyphs() {
       if (!this.gridSnapping || !this.gridMarch) return;
       if (this.form === "script") return;
-      if (this.dragging) return;
+      const decoupDrag =
+        this.dragging &&
+        this._dragShellDecoupled &&
+        isPresentationSilhouetteHarm(this);
+      if (this.dragging && !decoupDrag) return;
       const cell = this.gridCell;
       if (!cell) return;
-      const bx = this.pos.x;
-      const by = this.pos.y;
+      const shell = this._bodyWorldForShell();
+      const bx = shell.x;
+      const by = shell.y;
       const flip = this.facingFlip || 1;
       const cos = Math.cos(this.rotation);
       const sin = Math.sin(this.rotation);
@@ -4039,7 +4052,9 @@
       const silMask = isMaskBackedMegaKao(this);
       const passes =
         presDense
-          ? 16
+          ? decoupDrag
+            ? 20
+            : 18
           : usesMaskSnakeStream(this) && silMask
             ? 7
             : mega
@@ -4074,13 +4089,9 @@
                 [0, 1],
                 [0, -1],
               ];
-              for (let u = orth.length - 1; u > 0; u--) {
-                const q = Math.floor(Math.random() * (u + 1));
-                const t = orth[u];
-                orth[u] = orth[q];
-                orth[q] = t;
-              }
-              for (const [dx, dy] of orth) {
+              const rot = (pass + gx + gy) & 3;
+              for (let q = 0; q < 4; q++) {
+                const [dx, dy] = orth[(q + rot) & 3];
                 const nx = gx + dx;
                 const ny = gy + dy;
                 const nk = key(nx, ny);
@@ -4137,11 +4148,15 @@
     }
 
     /**
-     * 华容道式邻格互换：在保持整体形态的前提下，让内部字沿格交换位置（不用于 script / 计时 / 拖拽中）。
+     * 华容道式邻格互换：在保持整体形态的前提下，让内部字沿格交换位置（不用于 script / 计时；普通拖曳中跳过，**呈现剪影拖曳解耦时仍可走**，冷却略放慢）。
      */
     _tryHuarongAdjacentSwaps(now) {
       if (!this.gridMarch || !this.gridSnapping) return;
-      if (this.dragging || this.morphGlyphToTarget) return;
+      const decoupDrag =
+        this.dragging &&
+        this._dragShellDecoupled &&
+        isPresentationSilhouetteHarm(this);
+      if ((this.dragging && !decoupDrag) || this.morphGlyphToTarget) return;
       if (this.viewMode !== "pet" || this.form === "script") return;
       if (isMotionLayoutLockedForm(this.form)) return;
       if (now < this._huarongNextAt) return;
@@ -4156,13 +4171,15 @@
       let hSleep = 1;
       if (presSleep) hSleep = 2.55;
       else if (presL && this.presentationGlyphDynamics) hSleep = 0.88;
+      if (decoupDrag) hSleep *= 1.55;
       this._huarongNextAt =
         now +
         ((260 + Math.random() * 320) * mkH.huarongCooldownMul * hSleep) /
           gmsH;
 
-      const bx = this.pos.x;
-      const by = this.pos.y;
+      const sw = this._bodyWorldForShell();
+      const bx = sw.x;
+      const by = sw.y;
       const cos = Math.cos(this.rotation);
       const sin = Math.sin(this.rotation);
       const flip = this.facingFlip || 1;
@@ -4258,16 +4275,16 @@
         }
         swapPair(gA, gB);
         if (presSleep) {
-          const dip = 0.36;
+          const dip = 0.78;
           gA.alpha = clamp(
             (gA.alpha != null ? gA.alpha : 0.9) * dip,
-            0.045,
-            0.92
+            0.12,
+            0.94
           );
           gB.alpha = clamp(
             (gB.alpha != null ? gB.alpha : 0.9) * dip,
-            0.045,
-            0.92
+            0.12,
+            0.94
           );
         }
         return;
@@ -4511,7 +4528,7 @@
           if (a > tgt) a = tgt;
         }
         let aNext = clamp(a, 0, 1);
-        const maxStep = (presSleep ? 0.72 : 1.15) * dt;
+        const maxStep = (presSleep ? 0.5 : 1.12) * dt;
         if (aNext - prevA > maxStep) aNext = prevA + maxStep;
         if (prevA - aNext > maxStep) aNext = prevA - maxStep;
         g.alpha = aNext;
@@ -4551,10 +4568,12 @@
     /** 呈现巨字：拖曳格向扰动衰减；逐字模式定时换形。 */
     _tickPresentationMegaAux(dt) {
       if (this.viewMode !== "pet") return;
+      if (isPresentationSilhouetteHarm(this) && isMaskBackedMegaKao(this)) {
+        const dcc = dt * 2.35;
+        this._dragResidualLx = (this._dragResidualLx || 0) * Math.exp(-dcc);
+        this._dragResidualLy = (this._dragResidualLy || 0) * Math.exp(-dcc);
+      }
       if (!isPresentationSilhouetteHarm(this) || this.form !== "mega") return;
-      const dcc = dt * 2.35;
-      this._dragResidualLx = (this._dragResidualLx || 0) * Math.exp(-dcc);
-      this._dragResidualLy = (this._dragResidualLy || 0) * Math.exp(-dcc);
       if (
         normalizeMegaPresentationLayoutMode(this.presentationMegaLayoutMode) !==
         "sequential_chars"
@@ -5705,8 +5724,21 @@
       const b = this._playBounds();
       const r = this._bodyClampRadius();
       if (this.dragging) {
-        this.pos.x = clamp(this.pos.x, b.minX + r, b.maxX - r);
-        this.pos.y = clamp(this.pos.y, b.minY + r, b.maxY - r);
+        if (this._dragShellDecoupled && this._dragShellWorld) {
+          this._dragShellWorld.x = clamp(
+            this._dragShellWorld.x,
+            b.minX + r,
+            b.maxX - r
+          );
+          this._dragShellWorld.y = clamp(
+            this._dragShellWorld.y,
+            b.minY + r,
+            b.maxY - r
+          );
+        } else {
+          this.pos.x = clamp(this.pos.x, b.minX + r, b.maxX - r);
+          this.pos.y = clamp(this.pos.y, b.minY + r, b.maxY - r);
+        }
         return;
       }
       const hit = PB.resolve(this.pos, this.vel, b, r, 0.38, 155);
@@ -5721,11 +5753,24 @@
       }
     }
 
+    /** 剪影 / mask 格迈与绘制的世界中心：呈现层拖曳解耦时为 `_dragShellWorld`，否则为 `pos` */
+    _bodyWorldForShell() {
+      if (
+        this.dragging &&
+        this._dragShellDecoupled &&
+        this._dragShellWorld
+      ) {
+        return this._dragShellWorld;
+      }
+      return this.pos;
+    }
+
     /** 交互命中：按当前字形包围球估计，避免巨字/扁形时「点不中拖不动」 */
     pointerInnerRadius() {
       const cell = this.gridCell || 12;
-      const bx = this.pos.x;
-      const by = this.pos.y;
+      const w = this._bodyWorldForShell();
+      const bx = w.x;
+      const by = w.y;
       const flip = this.facingFlip || 1;
       const cos = Math.cos(this.rotation);
       const sin = Math.sin(this.rotation);
@@ -5750,10 +5795,17 @@
       this.dragOffset.y = this.pos.y - y;
       this._dragResidualLx = 0;
       this._dragResidualLy = 0;
-      /** 呈现巨字拖曳：手指目标中心（`pos` 每帧 lerp 靠近，减轻整块瞬移） */
-      this._dragTargetPos = { x: this.pos.x, y: this.pos.y };
+      this._dragShellDecoupled =
+        isPresentationSilhouetteHarm(this) &&
+        this.gridMarch &&
+        this.gridSnapping;
+      this._dragShellWorld = { x: this.pos.x, y: this.pos.y };
       this._dragPrevPos = { x: this.pos.x, y: this.pos.y };
       this.dragVel = { x: 0, y: 0 };
+      if (this._dragShellDecoupled) {
+        this.vel.x = 0;
+        this.vel.y = 0;
+      }
       this.setExpression("shy");
       for (const g of this.glyphs) {
         g.lagX = this.pos.x;
@@ -5787,16 +5839,11 @@
         this._dragPrevPos.x = nx;
         this._dragPrevPos.y = ny;
       }
-      const megaPresLag =
-        isPresentationSilhouetteHarm(this) && this.gridMarch;
-      if (megaPresLag) {
-        if (!this._dragTargetPos) {
-          this._dragTargetPos = { x: this.pos.x, y: this.pos.y };
-        }
-        const ptx = this._dragTargetPos.x;
-        const pty = this._dragTargetPos.y;
-        this._dragTargetPos.x = nx;
-        this._dragTargetPos.y = ny;
+      if (this._dragShellDecoupled && this._dragShellWorld) {
+        const ptx = this._dragShellWorld.x;
+        const pty = this._dragShellWorld.y;
+        this._dragShellWorld.x = nx;
+        this._dragShellWorld.y = ny;
         const cell = this.gridCell || 12;
         const cos = Math.cos(this.rotation);
         const sin = Math.sin(this.rotation);
@@ -5812,7 +5859,7 @@
       } else {
         this.pos.x = nx;
         this.pos.y = ny;
-        this._dragTargetPos = null;
+        this._dragShellWorld = null;
       }
     }
     endDrag() {
@@ -5820,11 +5867,12 @@
       this._pendingScriptReturn = false;
       this.dragging = false;
       this._dragPrevPos = null;
-      if (this._dragTargetPos) {
-        this.pos.x = this._dragTargetPos.x;
-        this.pos.y = this._dragTargetPos.y;
-        this._dragTargetPos = null;
+      if (this._dragShellDecoupled && this._dragShellWorld) {
+        this.pos.x = this._dragShellWorld.x;
+        this.pos.y = this._dragShellWorld.y;
       }
+      this._dragShellWorld = null;
+      this._dragShellDecoupled = false;
       if (pending && this.scriptLines && this.scriptLines.length) {
         this.revertToScript(true);
       }
@@ -5876,27 +5924,6 @@
       }
 
       this._tickPresentationMegaAux(dt);
-
-      if (
-        this.dragging &&
-        isPresentationSilhouetteHarm(this) &&
-        this.form === "mega" &&
-        this._dragTargetPos &&
-        this.gridMarch
-      ) {
-        const tx = this._dragTargetPos.x;
-        const ty = this._dragTargetPos.y;
-        const k = 1 - Math.exp(-dt * 12.8);
-        this.pos.x = lerp(this.pos.x, tx, k);
-        this.pos.y = lerp(this.pos.y, ty, k);
-        if (
-          Math.abs(tx - this.pos.x) + Math.abs(ty - this.pos.y) <
-          0.55
-        ) {
-          this.pos.x = tx;
-          this.pos.y = ty;
-        }
-      }
 
       if (!silMaskPet) {
         for (const g of this.glyphs) {
@@ -6012,8 +6039,10 @@
         this.vel.x *= 0.85;
         this.vel.y *= 0.85;
       }
-      this.pos.x += this.vel.x * dt;
-      this.pos.y += this.vel.y * dt;
+      if (!(this.dragging && this._dragShellDecoupled)) {
+        this.pos.x += this.vel.x * dt;
+        this.pos.y += this.vel.y * dt;
+      }
       this._applyPlayfieldBounds(dt, now);
 
       if (
@@ -6079,15 +6108,18 @@
 
       if (this.faceLayerMode) this._syncFaceGlyphTargets(t);
 
-      const bx = this.pos.x;
-      const by = this.pos.y;
+      const shell = this._bodyWorldForShell();
+      const bx = shell.x;
+      const by = shell.y;
       const rot = this.rotation;
       const flip = 1;
       const cos = Math.cos(rot);
       const sin = Math.sin(rot);
       const contourDrift = usesContourDrift(this);
       const snakeStream = usesMaskSnakeStream(this);
-      const strictSilGrid = silhouetteStrictHarmonicGrid(this);
+      const strictSilGrid =
+        silhouetteStrictHarmonicGrid(this) &&
+        !(presSilHarm && presGlyphSleep);
       const silJit = !!this.silhouetteGlyphJitter;
       const allowGridWander =
         !presSilHarm &&
@@ -6561,7 +6593,7 @@
             const cap = cell * 0.46 * jitAmp;
             const tox = clamp(txo, -cap, cap);
             const toy = clamp(tyo, -cap, cap);
-            const sm = 1 - Math.exp(-dt * 22);
+            const sm = 1 - Math.exp(-dt * (presGlyphSleep ? 13.5 : 22));
             g._silDrawOx = lerp(g._silDrawOx || 0, tox, sm);
             g._silDrawOy = lerp(g._silDrawOy || 0, toy, sm);
           } else {
