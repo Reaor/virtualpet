@@ -131,6 +131,18 @@
     if (!appRoot || !p) return;
     appRoot.dataset.uiArc =
       p.uiArcMode === "presentation" ? "presentation" : "standby";
+    syncMotionStyleRail(p);
+  }
+
+  function syncMotionStyleRail(p) {
+    if (!p || !window.ZiLing || !ZiLing.normalizeBodyMotionStyle) return;
+    const cur = ZiLing.normalizeBodyMotionStyle(p.bodyMotionStyle);
+    document.querySelectorAll('[data-action="setMotionStyle"]').forEach((btn) => {
+      const m = btn.dataset.motion;
+      const on = m === cur;
+      btn.classList.toggle("rail-tool--active", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
   }
 
   const pet = new Pet(canvas, {
@@ -154,6 +166,7 @@
     onFormChange(key) {
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
       syncUiMode();
+      syncMotionStyleRail(pet);
     },
     onUiArcModeChange() {
       syncRailUiArcClass(pet);
@@ -366,6 +379,7 @@
     pet.setForm(key);
     formLabel.textContent = FORMS[key].label;
     syncUiMode();
+    syncMotionStyleRail(pet);
     if (announce) toast("换形 · " + FORMS[key].label);
   }
 
@@ -375,6 +389,7 @@
     if (pet.gridMarch && pet.gridSnapping && pet.startMorphTo(key)) {
       formLabel.textContent = FORMS[key].label;
       syncUiMode();
+      syncMotionStyleRail(pet);
       if (announce) toast("换形中 · " + FORMS[key].label);
       return;
     }
@@ -648,8 +663,9 @@
         pet.cycleUiArcMode();
         const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
         toast(
-          `层级 · ${lab}（色/速/走格/颤/紊/灰底/淡影/内动/规整/墨/浮/波/徙/粒/字比/容纳 分套保留）`
+          `层级 · ${lab}（色/速/谐步·廊道/字号/颤/紊/灰底·淡影/内动/规整/墨/浮/波/徙/粒/字比/容纳 分套保留）`
         );
+        syncMotionStyleRail(pet);
       } else if (action === "morph") {
         pet.abortFeeding();
         const order = getFormOrderForUiArcMode(pet.uiArcMode);
@@ -685,11 +701,23 @@
         toast(
           `运动 ×${v.toFixed(2)}（${arcLayerZh()}；调制节拍/格移/流体相位，与「徙」格移倍率独立）`
         );
-      } else if (action === "motionStyle") {
-        const k = pet.cycleBodyMotionStyle();
+      } else if (action === "setMotionStyle") {
+        const motion = btn.dataset.motion;
+        if (pet.uiArcMode === "presentation" && motion === "contour_drift") {
+          toast("呈现巨字/颜不使用「壳漫游」，已保持谐步（待机层仍可选漫游）");
+          syncMotionStyleRail(pet);
+          return;
+        }
+        pet.setBodyMotionStyle(motion);
         const lab =
-          (BODY_MOTION_LABELS && BODY_MOTION_LABELS[k]) || k;
-        toast(`运动轨：${lab}（${arcLayerZh()}；巨字/颜文字 mask 内）`);
+          (BODY_MOTION_LABELS && BODY_MOTION_LABELS[motion]) || motion;
+        toast(`走格：${lab}（${arcLayerZh()}）`);
+        syncMotionStyleRail(pet);
+      } else if (action === "bodyGlyphEm") {
+        const v = pet.cycleBodyGlyphEmMul();
+        toast(
+          `躯体字号 ×${v.toFixed(2)}（${arcLayerZh()}；文稿/曲线/巨字躯体字统一乘子）`
+        );
       } else if (action === "glyphsJitter") {
         const on = pet.cycleSilhouetteGlyphJitter();
         toast(
@@ -712,6 +740,7 @@
             "已写入呈现层偏好（横竖格谐步·全静）。请点「层」→ 呈现后在巨字/颜下生效。"
           );
         }
+        syncMotionStyleRail(pet);
       } else if (action === "silhouetteMatteUnderlay") {
         const on = pet.cycleSilhouetteMatteUnderlay();
         toast(
@@ -730,9 +759,10 @@
         const on = pet.cyclePresentationGlyphDynamics();
         toast(
           on
-            ? `字内动：开（呈现层；谐波/流体/蛇行等；不叠整张巨字 mask 垫底；略闪确认）`
-            : `字内动：关（呈现层；全静；可配合「淡影」「整块灰底」看外形）`
+            ? `字内动：开（呈现层；谐波/流体/蛇行等；略闪确认）`
+            : `字内动：关（呈现层；全静，仅格点）`
         );
+        syncMotionStyleRail(pet);
       } else if (action === "megaScale") {
         const v = pet.cycleMegaLayoutScale();
         toast(

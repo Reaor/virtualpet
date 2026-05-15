@@ -228,6 +228,30 @@ body {
   letter-spacing: 0.02em;
 }
 
+/** 走格范式：待机三键；呈现仅谐步+廊道（第三键隐藏后由布局自动收为两列） */
+.rail-tools-motion {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+.app[data-ui-arc="presentation"] .rail-tools-motion {
+  grid-template-columns: 1fr 1fr;
+}
+
+.rail-tools-motion .rail-tool {
+  min-height: 36px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.rail-tool--active {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: rgba(0, 122, 255, 0.06);
+}
+
 /** 侧栏底部「待机 / 呈现」折叠区：色条区分，减少与上方通用工具混读 */
 .rail-group.rail-group-standby > summary {
   border-left: 3px solid #34c759;
