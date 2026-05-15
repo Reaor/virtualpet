@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.34.1** 起）。
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.34.2** 起）。
 > **接手说明**：`HANDOFF.md`（架构、常见坑、需求归纳、**侧栏 title 与区块**；**非**完整对话逐字存档）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
@@ -43,6 +43,17 @@
 | 无「全静」入口 | **已完成** | **「内动」** 关即全静；**「规整」** 强制关内动并收敛轨 |
 | 按钮名难联想 | **已完成** | 侧栏易读名：**走格 / 整块灰底 / 淡影 / 内动 / 规整**；`HANDOFF.md` §12 表同步 |
 | 待机与呈现底部按钮混读 | **已完成** | 折叠 summary 改为 **待机·曲线** / **呈现·计时** / **呈现·颜文字**；**绿/蓝左边条**（`styles.css`） |
+
+### 1.06 走格范式 / 呈现轮廓 / 躯体字号 / 叠分性能（3.34.2）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 走格模式区分度低 | **已完成** | 侧栏 **谐步 / 廊道 /（待机）漫游** 三键直达 + `rail-tool--active`；文案与 `BODY_MOTION_LABELS` 对齐 |
+| 呈现轮廓应小字拼、不要整块黑大字 | **已完成** | `isPresentationSilhouetteHarm` 下 **`_drawSilhouetteMatteUnderlay` 直接 return**；灰底/淡影 **仅待机层**显示 |
+| 躯体字大小统一调节 | **已完成** | `_arcPrefs.*.bodyGlyphEmMul` + 侧栏 **「字号」**；`_applyGridTypography` 末尾 `_applyBodyGlyphEmMulToGlyphs` |
+| 呈现壳漫游与拼形冲突 | **已完成** | `applyArcVisualPrefsToPet` **强制 contour→harmonic**；`cycleBodyMotionStyle` 在呈现仅 **谐步↔廊道** |
+| 颤关掉谐步导致不像格点 | **已完成** | `silhouetteStrictHarmonicGrid` **去掉对 jitter 的否定** |
+| 叠分卡顿 | **已完成** | 呈现剪影 **第二遍 `_separateOverlappingGridGlyphs` 隔帧**；cap **×0.68** |
 
 ### 1.9 表情用「字」拼轮廓 · 大字倒计时 · 全身动物剪影 · 去月 · 龙可见 · 换形不挤左上角 · 运动更紧凑
 

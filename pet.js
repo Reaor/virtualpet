@@ -2259,9 +2259,9 @@
   const BODY_MOTION_STYLES = ["harmonic", "snake_stream", "contour_drift"];
 
   const BODY_MOTION_LABELS = {
-    harmonic: "横竖格·谐步（匀速迈格）",
-    snake_stream: "流线蛇行",
-    contour_drift: "轮廓游走",
+    harmonic: "① 横竖谐步（离散格、一字一格）",
+    snake_stream: "② 序贯廊道（可走格走廊、一队字滑移）",
+    contour_drift: "③ 壳内漫游（随机游走，易叠字）",
   };
 
   function normalizeBodyMotionStyle(s) {
@@ -2293,14 +2293,13 @@
     );
   }
 
-  /** 谐波 + 关亚格颤抖：mask 内以离散格目标驱动曼哈顿步进（无默认亚格位移/微振） */
+  /** 谐波：mask 内以离散格目标驱动曼哈顿步进；「颤」只影响亚像素绘制偏移，不再关掉离散谐步（避免叠乱与「不像格点」） */
   function silhouetteStrictHarmonicGrid(self) {
     return (
       isMaskBackedMegaKao(self) &&
       normalizeBodyMotionStyle(self.bodyMotionStyle) === "harmonic" &&
       !usesMaskSnakeStream(self) &&
-      !usesContourDrift(self) &&
-      !self.silhouetteGlyphJitter
+      !usesContourDrift(self)
     );
   }
 
@@ -2428,6 +2427,11 @@
       0.78,
       1.14
     );
+    b.bodyGlyphEmMul = clamp(
+      self.bodyGlyphEmMul != null ? +self.bodyGlyphEmMul : 1,
+      0.82,
+      1.18
+    );
   }
 
   function applyArcVisualPrefsToPet(self) {
@@ -2460,8 +2464,22 @@
       0.78,
       1.14
     );
+    self.bodyGlyphEmMul = clamp(
+      b.bodyGlyphEmMul != null ? +b.bodyGlyphEmMul : 1,
+      0.82,
+      1.18
+    );
     self.motionProfile =
       self.uiArcMode === "presentation" ? "display" : "standby";
+    /** 呈现巨字/颜：壳漫游与「小字拼轮廓」目标冲突，强制回到横竖谐步 */
+    if (
+      self.uiArcMode === "presentation" &&
+      isMaskBackedMegaKao(self) &&
+      normalizeBodyMotionStyle(self.bodyMotionStyle) === "contour_drift"
+    ) {
+      self.bodyMotionStyle = "harmonic";
+      self._arcPrefs.presentation.bodyMotionStyle = "harmonic";
+    }
   }
 
   function buildFormLayoutData(self, name, n, S) {
@@ -2856,6 +2874,7 @@
           silhouetteMatteUnderlay: false,
           outlineContourFirst: true,
           textureMotionMode: _tex0,
+          bodyGlyphEmMul: 1,
           presentationGlyphDynamics: true,
           macroFitMode: "shrink",
           megaLayoutScale: 1,
@@ -2873,6 +2892,8 @@
           silhouetteMatteUnderlay: false,
           outlineContourFirst: false,
           textureMotionMode: _tex0,
+          /** 躯体字统一字号乘子（待机/呈现各记一套；与字比/容纳独立） */
+          bodyGlyphEmMul: 1,
           /** 巨字/颜呈现层：体内字粒是否跑谐波/流体/游走（关=先静后动，仅格位/垫底） */
           presentationGlyphDynamics: false,
           macroFitMode: "shrink",
@@ -2922,6 +2943,14 @@
         const ms = clamp(+opts.megaLayoutScale, 0.78, 1.14);
         this._arcPrefs.standby.megaLayoutScale = ms;
         this._arcPrefs.presentation.megaLayoutScale = ms;
+      }
+      if (
+        opts.bodyGlyphEmMul != null &&
+        !Number.isNaN(Number(opts.bodyGlyphEmMul))
+      ) {
+        const gem = clamp(+opts.bodyGlyphEmMul, 0.82, 1.18);
+        this._arcPrefs.standby.bodyGlyphEmMul = gem;
+        this._arcPrefs.presentation.bodyGlyphEmMul = gem;
       }
       applyArcVisualPrefsToPet(this);
       this.onUiArcModeChange =
@@ -3257,7 +3286,7 @@
         const approxCells = Math.floor(
           mp.fillCount / Math.max(1, stepPx * stepPx)
         );
-        const capG = clamp(Math.floor(approxCells * 0.72), 26, 200);
+        const capG = clamp(Math.floor(approxCells * 0.68), 24, 190);
         if (this.glyphs.length > capG) {
           this.glyphs.length = capG;
           this.particleCount = capG;
@@ -3789,7 +3818,9 @@
       const anchorGx = Math.round(wxb / cell);
       const anchorGy = Math.round(wyb / cell);
       const mkW = getMotionProfileKernelsForPet(this);
-      const rad = (g.wanderRad || 14) * mkW.wanderRadScale;
+      const presW = isPresentationSilhouetteHarm(this);
+      const rad =
+        (g.wanderRad || 14) * mkW.wanderRadScale * (presW ? 0.48 : 1);
       const maxK =
         this.form === "mega" && g._megaDeepInterior
           ? 62
@@ -4788,6 +4819,7 @@
           g.targetRot = 0;
           g.size = em * (0.96 + (1 - g.edge) * 0.08);
         }
+        this._applyBodyGlyphEmMulToGlyphs();
         return;
       }
       if (isGridLayoutImmutableForm(this.form)) {
@@ -4828,6 +4860,7 @@
             }
           }
         }
+        this._applyBodyGlyphEmMulToGlyphs();
         return;
       }
       const emMin = Math.max(8, this.gridCell * 0.68);
@@ -4845,6 +4878,20 @@
           g.targetRot = this._quantizeTargetRot(rand(-spread, spread));
           g.size = em * lerp(1.06, 0.9, g.edge);
         }
+      }
+      this._applyBodyGlyphEmMulToGlyphs();
+    }
+
+    _applyBodyGlyphEmMulToGlyphs() {
+      const b = this._arcPrefs[this.uiArcMode];
+      const mul = clamp(
+        b.bodyGlyphEmMul != null ? +b.bodyGlyphEmMul : 1,
+        0.82,
+        1.18
+      );
+      if (Math.abs(mul - 1) < 0.001) return;
+      for (const g of this.glyphs) {
+        if (g.size != null && !Number.isNaN(g.size)) g.size *= mul;
       }
     }
 
@@ -5890,7 +5937,7 @@
             this._snakePathT = t;
           }
           const snakeVisMul =
-            presSilHarm && !presGlyphSleep ? 1.55 : presSilHarm ? 0.06 : 1;
+            presSilHarm && !presGlyphSleep ? 1.52 : presSilHarm ? 0.34 : 1;
           this._snakePhase +=
             dt *
             (0.28 + 0.46 * gms0) *
@@ -6250,7 +6297,11 @@
               flip
             );
           }
-          this._separateOverlappingGridGlyphs();
+          /** 呈现剪影叠分第二遍隔帧执行，减轻每帧双遍带来的卡顿 */
+          this._sepAltFrame = (this._sepAltFrame || 0) + 1;
+          if (!presSilHarm || (this._sepAltFrame & 1) === 1) {
+            this._separateOverlappingGridGlyphs();
+          }
         }
 
         if (silMaskPet) {
@@ -6447,42 +6498,19 @@
      */
     _drawSilhouetteMatteUnderlay(ctx, light, bx, by, rot) {
       if (!isMaskBackedMegaKao(this)) return;
-      /** 呈现层开「体内动」时不叠整张巨字/颜的填充 mask，避免与字粒形成「双轮廓」与额外合成开销 */
-      if (
-        isPresentationSilhouetteHarm(this) &&
-        this.presentationGlyphDynamics
-      ) {
-        return;
-      }
+      /** 呈现层巨字/颜：轮廓由小字粒拼出，不叠整张 mask「大字底」；待机层仍可用整块灰底/淡影辅助 */
+      if (isPresentationSilhouetteHarm(this)) return;
       const lay = this._silhouetteMatteLayer;
       if (!lay || !lay.width) return;
       const fullMatte = !!this.silhouetteMatteUnderlay;
-      /** 关「廓」时：极弱整 mask 垫底，满足「先见静态轮廓」又不与字粒形成第二重浓墨（可再开「廓」加强） */
-      const weakGhost =
-        !fullMatte &&
-        isPresentationSilhouetteHarm(this) &&
-        !this.presentationGlyphDynamics &&
-        !!this.outlineContourFirst;
-      if (!fullMatte && !weakGhost) return;
+      if (!fullMatte) return;
       const S = this.size;
       ctx.save();
       ctx.translate(bx, by);
       ctx.rotate(rot);
       ctx.translate(-S / 2, -S / 2);
-      let a;
-      if (weakGhost) {
-        /** 极弱垫底：再压低 α，避免「整块巨字剪影莫名浮现」抢读字粒 */
-        a = light ? 0.015 : 0.022;
-      } else {
-        a = light ? 0.19 : 0.29;
-        if (this.outlineContourFirst) a += light ? 0.04 : 0.05;
-        if (
-          isPresentationSilhouetteHarm(this) &&
-          !this.presentationGlyphDynamics
-        ) {
-          a += light ? 0.05 : 0.072;
-        }
-      }
+      let a = light ? 0.19 : 0.29;
+      if (this.outlineContourFirst) a += light ? 0.04 : 0.05;
       ctx.globalAlpha = a;
       ctx.drawImage(lay, 0, 0, lay.width, lay.height, 0, 0, S, S);
       ctx.globalAlpha = 1;
@@ -7038,14 +7066,58 @@
       snapshotArcVisualPrefs(this);
     }
 
-    /** 侧栏「轨」：切换有 mask 的巨字/颜文字躯体运动范式（分套记忆） */
+    /** 侧栏「走格」循环：呈现巨字/颜仅 **谐步 ⟷ 廊道**（壳漫游易与小字拼轮廓冲突，已禁用）。 */
     cycleBodyMotionStyle() {
+      const order =
+        this.uiArcMode === "presentation"
+          ? ["harmonic", "snake_stream"]
+          : BODY_MOTION_STYLES.slice();
       const cur = normalizeBodyMotionStyle(this.bodyMotionStyle);
-      const ix = BODY_MOTION_STYLES.indexOf(cur);
-      const next = BODY_MOTION_STYLES[(ix + 1) % BODY_MOTION_STYLES.length];
+      let ix = order.indexOf(cur);
+      if (ix < 0) ix = 0;
+      const next = order[(ix + 1) % order.length];
       this.bodyMotionStyle = next;
       snapshotArcVisualPrefs(this);
       return this.bodyMotionStyle;
+    }
+
+    /** 显式设置走格范式（侧栏三键直达）；呈现层拒绝 `contour_drift`。 */
+    setBodyMotionStyle(style) {
+      let s = normalizeBodyMotionStyle(style);
+      if (this.uiArcMode === "presentation" && s === "contour_drift") {
+        s = "harmonic";
+      }
+      this.bodyMotionStyle = s;
+      snapshotArcVisualPrefs(this);
+      applyArcVisualPrefsToPet(this);
+      return this.bodyMotionStyle;
+    }
+
+    /** 躯体字统一字号挡（待机/呈现各记一套；与巨字「字比」独立） */
+    cycleBodyGlyphEmMul() {
+      const tiers = [0.86, 0.92, 1, 1.06, 1.12];
+      const b = this._arcPrefs[this.uiArcMode];
+      let cur = b.bodyGlyphEmMul != null ? +b.bodyGlyphEmMul : 1;
+      cur = clamp(cur, 0.82, 1.18);
+      let i = tiers.findIndex((t) => Math.abs(t - cur) < 0.045);
+      if (i < 0) {
+        let best = 0;
+        let bd = Infinity;
+        for (let k = 0; k < tiers.length; k++) {
+          const d = Math.abs(tiers[k] - cur);
+          if (d < bd) {
+            bd = d;
+            best = k;
+          }
+        }
+        i = best;
+      }
+      const next = clamp(tiers[(i + 1) % tiers.length], 0.82, 1.18);
+      b.bodyGlyphEmMul = next;
+      this.bodyGlyphEmMul = next;
+      this._applyGridTypography();
+      snapshotArcVisualPrefs(this);
+      return next;
     }
 
     /** 侧栏「颤」：巨字/颜文字 mask 内亚格绘制位移 + 谐波微振（默认关；谐波轨下关=严格格点） */
@@ -7341,6 +7413,7 @@
     isMaskBackedMegaKao,
     BODY_MOTION_STYLES,
     BODY_MOTION_LABELS,
+    normalizeBodyMotionStyle,
     SNAKE_PATH_VARIANTS,
     normalizeSnakePathVariant,
     usesMaskSnakeStream,
