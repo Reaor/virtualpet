@@ -125,6 +125,8 @@
     megaScaleUrlRaw != null && megaScaleUrlRaw !== "" && !Number.isNaN(+megaScaleUrlRaw)
       ? +megaScaleUrlRaw
       : undefined;
+
+  function syncRailUiArcClass(p) {
     const appRoot = document.querySelector(".app");
     if (!appRoot || !p) return;
     appRoot.dataset.uiArc =
