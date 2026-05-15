@@ -772,6 +772,20 @@
         const m = pet.cycleMacroFitMode();
         const lab = (MACRO_FIT_LABELS && MACRO_FIT_LABELS[m]) || m;
         toast(`巨字容纳：${lab}（${arcLayerZh()}；已巨字则重建）`);
+      } else if (action === "megaPresentLayout") {
+        const mode = pet.cyclePresentationMegaLayoutMode();
+        const Z = window.ZiLing;
+        const lab =
+          (Z &&
+            Z.MEGA_PRESENTATION_LAYOUT_LABELS &&
+            Z.MEGA_PRESENTATION_LAYOUT_LABELS[mode]) ||
+          mode;
+        toast(`巨字排布：${lab}（呈现层偏好；巨字形下已重建）`);
+      } else if (action === "silhouetteJitterAmp") {
+        const v = pet.cycleSilhouetteJitterAmpMul();
+        toast(
+          `颤幅 ×${v.toFixed(2)}（${arcLayerZh()}；与「颤」开关联用亚格绘移幅度）`
+        );
       } else if (action === "fluid") {
         const v = pet.cycleArcFluidStrength();
         toast(`波纹强度 ×${v.toFixed(2)}（${arcLayerZh()}）`);
