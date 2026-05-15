@@ -7065,6 +7065,7 @@
       b.presentationGlyphDynamics = !b.presentationGlyphDynamics;
       const next = !!b.presentationGlyphDynamics;
       if (next && !prev) {
+        // 画布可感知：关→开体内动时略提亮一瞬（mask 剪影在 _render 内对 flash 再压低）
         this._glyphFlash = Math.min(0.34, Math.max(this._glyphFlash || 0, 0.22));
       }
       if (this.uiArcMode === "presentation") {

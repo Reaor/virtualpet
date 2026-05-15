@@ -127,7 +127,8 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 - **3.33.2**：待机/呈现逻辑隔离（`contourStatic`、生命周期、`fillCount` 呈现限定、流体阻尼限定）。  
 - **3.33.3**：侧栏 **title** 长文案、control-block；关「动」时 mask 垫底 α 略增；`HANDOFF` §12。  
 - **3.33.4**：**先静辨形**（关「动」+「辨」+ 未「廓」→ 极弱整 mask）；**叠分 12**、`fillCount×0.82`、巨字壳 **enforce** 略增；**生命周期 α 限幅**；**待机/巨字 gridCell** 与 **immutable em 混合** 统一字号观感；mask **flash** 再压低。  
-- **3.34.0**：**入门 `<dialog>`**（页眉 **?**，与 `DESIGN.md` 对齐）；**`DESIGN` §2.2/§2.3** 回稿手势与实现一致；**桌面主容器加宽**（`max-width` 940px）；**`:focus-visible` 键盘焦点环**、**`prefers-reduced-motion`** 下弱化按钮缩放与过渡；诗笺脚注 **URL 示例** 修正（`mega` 与 `macroText` 组合等）；**「动」关→开** `_glyphFlash` 确认。
+- **3.33.5**：**`DESIGN` §2.2/§2.3** 与回稿实现一致；**「动」关→开** `_glyphFlash` 画布确认。  
+- **3.34.0**：**入门 `<dialog>`**（页眉 **?**，与 `DESIGN.md` 对齐）；**桌面主容器加宽**（`max-width` 940px）；**`:focus-visible` 键盘焦点环**、**`prefers-reduced-motion`** 下弱化按钮缩放与过渡；诗笺脚注 **URL 示例** 修正（`mega` 与 `macroText` 组合等）；与 **3.33.5** 闪动/文档条目合并发布。
 
 ---
 
@@ -180,7 +181,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 | | 速 / 眠 / 抖 | `speed` / `sleep` / `shake` | 速度挡 / sleep 模式 / 抖擞 |
 | ② 格点 · 躯体轨 · 纹理与粒数 | 轨 / 颤 / 紊 | `motionStyle` / `glyphsJitter` / `textureMotion` | 躯体范式 / 亚格颤 / 纹理体动 |
 | | 波 / 徙 / 粒 | `fluid` / `gridMarch` / `megaPack` | 流体强度 / 格移倍率 / 巨字粒数 |
-| ③ 巨字/颜：垫底 · 辨形 · 体内动 | 廓 / 辨 / 动 | `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationDynamics` | **廓**：显式整 mask 垫底。**辨**：压低体内动；呈现关「动」且未开「廓」时 **极弱整 mask**。**动**：呈现体内动；开时 **不画整 mask**；**关→开** 短时弱 **`_glyphFlash`**（mask 剪影仍压低闪光） |
+| ③ 巨字/颜：垫底 · 辨形 · 体内动 | 廓 / 辨 / 动 | `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationDynamics` | **廓**：显式整 mask 垫底。**辨**：压低体内动；呈现关「动」且未开「廓」时 **极弱整 mask**。**动**：呈现体内动；开时 **不画整 mask**；**关→开** 短时弱 **`_glyphFlash`** 作确认（mask 剪影仍压低闪光；Toast 同步提示） |
 | ④ 呈现层 · 巨字排版 | 字比 / 容纳 | `megaScale` / `macroFit` | `megaLayoutScale` / `macroFitMode` |
 
 **维护规则**：新增侧栏键时，必须同时写 **长 `title`**（一句以上，说明层级与副作用）并在本表增行；Toast 文案可在 `app.js` 与 `title` 对齐。
@@ -196,7 +197,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 ### 12.3 近期代码向计划（写入 `PLAN.md` 对照）
 
 - [ ] 可选：**自定义悬停层**（比原生 `title` 延迟更短）——需防遮挡画布。  
-- [x] 呈现层：「动」从关→开时 **短时弱 `_glyphFlash`**（**3.34.0**；mask 剪影仍压低闪光）。  
+- [x] 呈现层：「动」从关→开时 **短时弱 `_glyphFlash`**（**3.33.5**；**3.34.0** 与 Toast/入门 dialog 对齐说明；mask 剪影仍压低闪光）。  
 - [x] **入门说明**：页眉 **?** 打开原生 `<dialog>`，与 `DESIGN.md` 对齐（**3.34.0**）。  
 - [ ] 性能：评估 **双次** `_separateOverlappingGridGlyphs` 可否在待机 mask 路径合并。
 
