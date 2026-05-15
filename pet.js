@@ -4257,6 +4257,19 @@
           }
         }
         swapPair(gA, gB);
+        if (presSleep) {
+          const dip = 0.36;
+          gA.alpha = clamp(
+            (gA.alpha != null ? gA.alpha : 0.9) * dip,
+            0.045,
+            0.92
+          );
+          gB.alpha = clamp(
+            (gB.alpha != null ? gB.alpha : 0.9) * dip,
+            0.045,
+            0.92
+          );
+        }
         return;
       }
     }
@@ -5737,6 +5750,8 @@
       this.dragOffset.y = this.pos.y - y;
       this._dragResidualLx = 0;
       this._dragResidualLy = 0;
+      /** 呈现巨字拖曳：手指目标中心（`pos` 每帧 lerp 靠近，减轻整块瞬移） */
+      this._dragTargetPos = { x: this.pos.x, y: this.pos.y };
       this._dragPrevPos = { x: this.pos.x, y: this.pos.y };
       this.dragVel = { x: 0, y: 0 };
       this.setExpression("shy");
@@ -5753,8 +5768,6 @@
       const wantY = y + this.dragOffset.y;
       const nx = clamp(wantX, b.minX + r, b.maxX - r);
       const ny = clamp(wantY, b.minY + r, b.maxY - r);
-      const ox = this.pos.x;
-      const oy = this.pos.y;
       const nowMs = typeof performance !== "undefined" ? performance.now() : Date.now();
       if (nowMs - this._lastWallFxAt > 70) {
         let wnx = 0;
@@ -5774,19 +5787,21 @@
         this._dragPrevPos.x = nx;
         this._dragPrevPos.y = ny;
       }
-      this.pos.x = nx;
-      this.pos.y = ny;
-      if (
-        isPresentationSilhouetteHarm(this) &&
-        this.form === "mega" &&
-        this.gridMarch
-      ) {
+      const megaPresLag =
+        isPresentationSilhouetteHarm(this) && this.gridMarch;
+      if (megaPresLag) {
+        if (!this._dragTargetPos) {
+          this._dragTargetPos = { x: this.pos.x, y: this.pos.y };
+        }
+        const ptx = this._dragTargetPos.x;
+        const pty = this._dragTargetPos.y;
+        this._dragTargetPos.x = nx;
+        this._dragTargetPos.y = ny;
         const cell = this.gridCell || 12;
         const cos = Math.cos(this.rotation);
         const sin = Math.sin(this.rotation);
-        const flip = this.facingFlip || 1;
-        const dwx = nx - ox;
-        const dwy = ny - oy;
+        const dwx = nx - ptx;
+        const dwy = ny - pty;
         const dlx = (dwx * cos + dwy * sin) / Math.max(cell, 1);
         const dly = (-dwx * sin + dwy * cos) / Math.max(cell, 1);
         this._dragResidualLx = (this._dragResidualLx || 0) - dlx * 0.58;
@@ -5794,6 +5809,10 @@
         const cap = 13;
         this._dragResidualLx = clamp(this._dragResidualLx, -cap, cap);
         this._dragResidualLy = clamp(this._dragResidualLy, -cap, cap);
+      } else {
+        this.pos.x = nx;
+        this.pos.y = ny;
+        this._dragTargetPos = null;
       }
     }
     endDrag() {
@@ -5801,6 +5820,11 @@
       this._pendingScriptReturn = false;
       this.dragging = false;
       this._dragPrevPos = null;
+      if (this._dragTargetPos) {
+        this.pos.x = this._dragTargetPos.x;
+        this.pos.y = this._dragTargetPos.y;
+        this._dragTargetPos = null;
+      }
       if (pending && this.scriptLines && this.scriptLines.length) {
         this.revertToScript(true);
       }
@@ -5852,6 +5876,27 @@
       }
 
       this._tickPresentationMegaAux(dt);
+
+      if (
+        this.dragging &&
+        isPresentationSilhouetteHarm(this) &&
+        this.form === "mega" &&
+        this._dragTargetPos &&
+        this.gridMarch
+      ) {
+        const tx = this._dragTargetPos.x;
+        const ty = this._dragTargetPos.y;
+        const k = 1 - Math.exp(-dt * 12.8);
+        this.pos.x = lerp(this.pos.x, tx, k);
+        this.pos.y = lerp(this.pos.y, ty, k);
+        if (
+          Math.abs(tx - this.pos.x) + Math.abs(ty - this.pos.y) <
+          0.55
+        ) {
+          this.pos.x = tx;
+          this.pos.y = ty;
+        }
+      }
 
       if (!silMaskPet) {
         for (const g of this.glyphs) {
@@ -7475,6 +7520,10 @@
           this._separateOverlappingGridGlyphs();
           this._separateOverlappingGridGlyphs();
         }
+        const nowMs =
+          typeof performance !== "undefined" ? performance.now() : Date.now();
+        /** 先静约 0.9s，再允许邻格互换；互换时在关内动下带一次淡入淡出感 */
+        this._huarongNextAt = nowMs + 900;
       }
       return true;
     }

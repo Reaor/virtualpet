@@ -733,7 +733,7 @@
         pet.applyPresentationSilhouetteHarmonicCalm();
         if (pet.uiArcMode === "presentation") {
           toast(
-            "已规整呈现层：横竖格谐步 · 关内动 · 纹理流 · 流体略收（巨字/颜下叠格已疏散）"
+            "已规整呈现层：横竖格谐步 · 关内动 · 纹理流 · 流体略收（巨字/颜下叠格已疏散）。约 0.9s 后再启邻格互换；关内动下互换带一次淡隐以利辨位。"
           );
         } else {
           toast(
