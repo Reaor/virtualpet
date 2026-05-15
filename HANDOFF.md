@@ -128,8 +128,8 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 - **3.33.3**：侧栏 **title** 长文案、control-block；关「动」时 mask 垫底 α 略增；`HANDOFF` §12。  
 - **3.33.4**：**先静辨形**（关「动」+「辨」+ 未「廓」→ 极弱整 mask）；**叠分 12**、`fillCount×0.82`、巨字壳 **enforce** 略增；**生命周期 α 限幅**；**待机/巨字 gridCell** 与 **immutable em 混合** 统一字号观感；mask **flash** 再压低。  
 - **3.33.5**：**`DESIGN` §2.2/§2.3** 与回稿实现一致；**「动」关→开** `_glyphFlash` 画布确认。  
-- **3.34.2**：**呈现不叠整块 mask 底**（仅小字拼形）；**走格三键**（谐步/廊道/待机漫游）+ **字号** `bodyGlyphEmMul`；**颤** 不再关掉离散谐步；**叠分第二遍隔帧**；**灰底/淡影** 仅待机侧栏。  
-- **3.34.2**：**呈现不叠整块 mask 底**；**走格三键**（谐步/廊道/待机漫游）+ **字号** `bodyGlyphEmMul`；**颤** 不关离散谐步；叠分 **第二遍隔帧**；灰底/淡影 **仅待机侧栏**。  
+- **3.34.3**：**呈现巨字「排布」**：拼满画布（短串分行、`gridCell` 按画布收、字比迭代缩）↔ **逐字轮换**；**颤幅** `silhouetteJitterAmpMul`；拖曳 **格向残留**；呈现剪影 **华容道** 启用（静帧冷却放慢）。  
+- **3.34.2**：**呈现不叠整块 mask 底**（仅小字拼形）；**走格三键**（谐步/廊道/待机漫游）+ **字号** `bodyGlyphEmMul`；**颤** 不关离散谐步；叠分 **第二遍隔帧**；灰底/淡影 **仅待机侧栏**。  
 - **3.34.1**：**巨字可读**：淡影默认关、弱 mask α 再收；粒子 cap 更紧、叠分更勤；呈现巨字/颜字身 **统一 em**；**规整** 一键横竖谐步+全静；侧栏易读名与底部 **待机/呈现** 色条分区。  
 - **3.34.0**：**入门 `<dialog>`**（页眉 **?**，与 `DESIGN.md` 对齐）；**桌面主容器加宽**（`max-width` 940px）；**`:focus-visible` 键盘焦点环**、**`prefers-reduced-motion`** 下弱化按钮缩放与过渡；诗笺脚注 **URL 示例** 修正（`mega` 与 `macroText` 组合等）；与 **3.33.5** 闪动/文档条目合并发布。
 
@@ -171,7 +171,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ---
 
-## 12. 控件映射与维护约定（3.34.2）
+## 12. 控件映射与维护约定（3.34.3）
 
 ### 12.1 左栏四块（`index.html` → `data-action` → `app.js` → `pet.js`）
 
@@ -183,11 +183,11 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 | | 墨 / 颜 / 浮 | `ink` / `tint` / `glow` | 墨色循环 / 色盘 / 浮光循环 |
 | | 速 / 眠 / 抖 | `speed` / `sleep` / `shake` | 速度挡 / sleep 模式 / 抖擞 |
 | ② 格点 · 走格范式 · 躯体字号 | 谐步 / 廊道 / 漫游 | `setMotionStyle` + `data-motion` | `setBodyMotionStyle`；呈现仅 `harmonic`/`snake_stream`，`contour_drift` 回落谐步；**漫游** 按钮 `ui-arc-standby-only` |
-| | 字号 / 颤 / 紊 | `bodyGlyphEm` / `glyphsJitter` / `textureMotion` | `cycleBodyGlyphEmMul` → `_applyGridTypography`；颤 / 纹理体动 |
+| | 字号 / 颤 / 颤幅 / 紊 | `bodyGlyphEm` / `glyphsJitter` / `silhouetteJitterAmp` / `textureMotion` | `cycleBodyGlyphEmMul` → `_applyGridTypography`；颤；**颤幅** `cycleSilhouetteJitterAmpMul`（绘移 cap）；纹理体动 |
 | | 波 / 徙 / 粒 | `fluid` / `gridMarch` / `megaPack` | 流体强度 / 格移倍率 / 巨字粒数 |
 | ③ 巨字/颜 · 垫底（待机）· 动静 | 整块灰底 / 淡影（待机） / 内动 | `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationDynamics` | **灰底/淡影**：`ui-arc-standby-only`+`display:contents`，仅待机层。**内动**：呈现体内动；**关→开** `_glyphFlash` |
 | | 规整 | `silhouetteCalm` | `applyPresentationSilhouetteHarmonicCalm` |
-| ④ 呈现层 · 巨字排版 | 字比 / 容纳 | `megaScale` / `macroFit` | `megaLayoutScale` / `macroFitMode` |
+| ④ 呈现层 · 巨字排版 | 字比 / 容纳 / 排布 | `megaScale` / `macroFit` / `megaPresentLayout` | `megaLayoutScale` / `macroFitMode` / **`cyclePresentationMegaLayoutMode`**（拼满画布 ↔ 逐字轮换） |
 
 **维护规则**：新增侧栏键时，必须同时写 **长 `title`**（一句以上，说明层级与副作用）并在本表增行；Toast 文案可在 `app.js` 与 `title` 对齐。
 
@@ -208,4 +208,4 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ---
 
-*文档版本随构建迭代；最后更新意图：与 `ziling-build` **3.34.2** 对齐。*
+*文档版本随构建迭代；最后更新意图：与 `ziling-build` **3.34.3** 对齐。*

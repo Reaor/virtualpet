@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.34.2** 起）。
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.34.3** 起）。
 > **接手说明**：`HANDOFF.md`（架构、常见坑、需求归纳、**侧栏 title 与区块**；**非**完整对话逐字存档）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
@@ -54,6 +54,17 @@
 | 呈现壳漫游与拼形冲突 | **已完成** | `applyArcVisualPrefsToPet` **强制 contour→harmonic**；`cycleBodyMotionStyle` 在呈现仅 **谐步↔廊道** |
 | 颤关掉谐步导致不像格点 | **已完成** | `silhouetteStrictHarmonicGrid` **去掉对 jitter 的否定** |
 | 叠分卡顿 | **已完成** | 呈现剪影 **第二遍 `_separateOverlappingGridGlyphs` 隔帧**；cap **×0.68** |
+
+### 1.07 呈现巨字排布 / 颤幅 / 拖曳格扰 / 华容道在剪影（3.34.3）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 多字巨字挤一行、三字易乱 | **已完成** | **拼满画布**：`macroTextBalancedWrapShort`（2 字分行；3 字在 `wrap2` 不拆时 **2+1**）；`resolveMegaLayoutInput` 在呈现 **fit_canvas** 下迭代 **略缩字比** 以满足估算粒子下限 |
+| 按画布收紧格距 | **已完成** | `computePresentationMegaGridCell`（`PB.inset` + 字数）在呈现 **fit_canvas** 巨字 `setForm` 时写 `gridCell` |
+| 逐字呈现模式 | **已完成** | `_arcPrefs.presentation.presentationMegaLayoutMode` **`sequential_chars`**；侧栏 **「排布」**；`_megaSeqIdx` + `_tickPresentationMegaAux` 定时 `setForm` |
+| 颤动画幅度可调 | **已完成** | `silhouetteJitterAmpMul` + 侧栏 **「颤幅」**；绘移 `cap` 乘子 |
+| 拖曳不要整块平移感 | **部分** | **`_dragResidualLx/y`** + 每字异相 wx/wy 微偏；仍随 `pos` 跟手，属视觉层扰动 |
+| 规整静态下邻格互换律动 | **已完成** | **华容道**在呈现剪影 **亦启用**；静帧（关内动）**冷却 ×2.55**；开内动略加快（×0.88） |
 
 ### 1.9 表情用「字」拼轮廓 · 大字倒计时 · 全身动物剪影 · 去月 · 龙可见 · 换形不挤左上角 · 运动更紧凑
 
