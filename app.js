@@ -719,7 +719,7 @@
         const on = pet.cyclePresentationGlyphDynamics();
         toast(
           on
-            ? `体内动：开（呈现层；谐波/流体/蛇行等；不叠整张巨字 mask 垫底）`
+            ? `体内动：开（呈现层；谐波/流体/蛇行等；不叠整张巨字 mask 垫底；字粒略闪一下作确认）`
             : `体内动：关（呈现层；开「辨」有极弱垫底；强轮廓开「廓」）`
         );
       } else if (action === "megaScale") {
@@ -1013,8 +1013,24 @@
     });
   }
 
-  // ---------- 说明 ----------
-  document.getElementById("infoBtn").addEventListener("click", () => {
-    toast("拖移 · 戳身边 · 双击觅食 · 躯体可多次写入 · ?form=soft_ray / kao_party / digit_0 / mega&macroText=2026");
-  });
+  const helpDialog = document.getElementById("helpDialog");
+  const infoBtnEl = document.getElementById("infoBtn");
+  if (infoBtnEl && helpDialog && typeof helpDialog.showModal === "function") {
+    infoBtnEl.addEventListener("click", () => {
+      try {
+        helpDialog.showModal();
+      } catch (_) {
+        toast("说明对话框无法打开 · 请使用支持原生 dialog 的浏览器");
+      }
+    });
+    helpDialog.addEventListener("click", (e) => {
+      if (e.target === helpDialog) helpDialog.close();
+    });
+  } else if (infoBtnEl) {
+    infoBtnEl.addEventListener("click", () => {
+      toast(
+        "呈→灵 三步上手 · 长按字灵核心区约 0.58s 后松手回稿 · URL 例 ?skipIntro=1 & ?form=mega&macroText=春"
+      );
+    });
+  }
 })();

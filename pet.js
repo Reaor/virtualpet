@@ -7061,11 +7061,16 @@
      */
     cyclePresentationGlyphDynamics() {
       const b = this._arcPrefs.presentation;
+      const prev = !!b.presentationGlyphDynamics;
       b.presentationGlyphDynamics = !b.presentationGlyphDynamics;
+      const next = !!b.presentationGlyphDynamics;
+      if (next && !prev) {
+        this._glyphFlash = Math.min(0.34, Math.max(this._glyphFlash || 0, 0.22));
+      }
       if (this.uiArcMode === "presentation") {
         applyArcVisualPrefsToPet(this);
       }
-      return !!b.presentationGlyphDynamics;
+      return next;
     }
 
     /** 巨字相对身幅缩放挡；与 `gridCell` 决定的下限取 max；换形巨字时生效 */
