@@ -104,7 +104,8 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.32.3**：**呈现层剪影格移**：每字 **每帧最多 1 格** 曼哈顿步进（匀速、少叠乱）。**叠字疏散**：`isPresentationSilhouetteHarm` 下 **优先正交邻空位**（随机序）再 Chebyshev 扩环，**6 遍**分离。**双轮廓**：开「体内动」时 **mask 静态垫底 α 乘子压低**（辨开时仍留弱影）。**淡入淡出**：离轮廓/非法格 **更快淡出**、区内 **更慢淡入**、重生 **更低起 α**（减闪现混乱）。**轨** 谐波/蛇行/轮廓 振幅对比略拉开。 |
+| 最新 | **3.32.4**：**根因收敛**：（1）**粒子数 > 可走格/蛇轨槽位** → 必然共格重叠；现 **`rasterizeMask.fillCount`** 按格距估算 **上限并截断 `glyphs`**。（2）**整张巨字/颜 mask 垫底 + 字粒** → 双轮廓；**呈现层开「体内动」** 时 **跳过 `_drawSilhouetteMatteUnderlay`**。（3）**卡顿**：合并多余 `separate` 调用、**提高单函数内遍数**、重载呈现时 **跳过背景装饰格线**、mask 离屏 **`willReadFrequently:false`**。 |
+| 先前 | **3.32.3**：**呈现层剪影格移**：每字 **每帧最多 1 格** 曼哈顿步进（匀速、少叠乱）。**叠字疏散**：`isPresentationSilhouetteHarm` 下 **优先正交邻空位**（随机序）再 Chebyshev 扩环，**6 遍**分离。**双轮廓**：开「体内动」时 **mask 静态垫底 α 乘子压低**（辨开时仍留弱影）。**淡入淡出**：离轮廓/非法格 **更快淡出**、区内 **更慢淡入**、重生 **更低起 α**（减闪现混乱）。**轨** 谐波/蛇行/轮廓 振幅对比略拉开。 |
 | 先前 | **3.32.2**：**呈现层不再被 idle 自动换形拖成待机形**：`pickBiasedForm` → `getFormOrderForUiArcMode`；`app.js` 定时换形在 `presentation` 下跳过。**先静后动**：`_arcPrefs.presentation.presentationGlyphDynamics`（侧栏 **动**，默认关）+ `presGlyphSleep` 门控体内波/流体；垫底略加浓、字粒 α 压低；蛇行相位在呈现开「动」时加强以与谐波/轮廓游走区分。 |
 | 先前 | **3.32.1**：**`_enforceMaskBackedGlyphWalkable`**：叠分 / 华容 / 滑步后若 `(mgx,mgy)` 仍落在 mask 外，则 **snap 到 `_nearestWalkableMarchCell`** 并清零亚格绘制偏移，与 `_worldCellWalkable` 同源兜底；眼窝斥力 **420→340** 减轻与辨形弹簧对冲。 |
 | 先前 | **3.32.0**：**巨字/颜 mask 剪影禁用 `gridCellMotionEase`**，避免格间对角插值把字粒画到笔画轮廓外；**主线合并** `motion-shape-framework`：**辨** `outlineContourFirst`（`_arcPrefs`、弱静态垫底、`motionTimeBlend`、紊 分套）与 **plan-followup**（非 mask 格 ease、`?gridEase=0`、clock 秒、`?outlineFirst=0`、贝塞尔觅食、睡眠压低、游走惯性、拖拽）。 |

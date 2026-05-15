@@ -643,7 +643,7 @@
     const c = document.createElement("canvas");
     c.width = sampleS;
     c.height = sampleS;
-    const ctx = c.getContext("2d", { willReadFrequently: true });
+    const ctx = c.getContext("2d", { willReadFrequently: false });
     ctx.clearRect(0, 0, sampleS, sampleS);
     ctx.save();
     ctx.scale(scale, scale);
@@ -651,10 +651,13 @@
     ctx.restore();
     const img = ctx.getImageData(0, 0, sampleS, sampleS).data;
     const grid = new Uint8Array(sampleS * sampleS);
+    let fillCount = 0;
     for (let i = 0; i < sampleS * sampleS; i++) {
-      grid[i] = img[i * 4 + 3] > 128 ? 1 : 0;
+      const v = img[i * 4 + 3] > 128 ? 1 : 0;
+      grid[i] = v;
+      fillCount += v;
     }
-    return { grid, w: sampleS, h: sampleS, scale };
+    return { grid, w: sampleS, h: sampleS, scale, fillCount };
   }
 
   function maskLocalWalkable(maskPack, lx, ly, flip) {
@@ -3088,6 +3091,29 @@
         this._silhouetteMatteLayer = null;
       }
 
+      /** 巨字/颜：粒子数不得超过 mask 内大致可分的格位，避免蛇轨 / 叠分天然不可能唯一位 → 重叠卡顿 */
+      if (
+        this._maskPack &&
+        this._maskPack.fillCount != null &&
+        this.viewMode === "pet" &&
+        (name === "mega" || String(name).startsWith("kao_"))
+      ) {
+        const cellW = this.gridCell || 12;
+        const mp = this._maskPack;
+        const stepPx = Math.max(
+          1,
+          (cellW * Math.max(mp.w, 1)) / Math.max(S, 1)
+        );
+        const approxCells = Math.floor(
+          mp.fillCount / Math.max(1, stepPx * stepPx)
+        );
+        const capG = clamp(Math.floor(approxCells * 0.86), 26, 220);
+        if (this.glyphs.length > capG) {
+          this.glyphs.length = capG;
+          this.particleCount = capG;
+        }
+      }
+
       if (this.faceLayerMode && name !== "script") this._assignFaceGlyphs();
       this._applyEmojiPaletteIfNeeded();
       if (!(this.formData && this.formData.charPalette)) {
@@ -3682,7 +3708,17 @@
       const kaoMask = useMask && String(this.form || "").startsWith("kao_");
       const rMax = mega ? 90 : kaoMask ? 52 : useMask ? 40 : 22;
       const presDense = isPresentationSilhouetteHarm(this);
-      const passes = presDense ? 6 : mega ? 4 : useMask ? 3 : 1;
+      const silMask = isMaskBackedMegaKao(this);
+      const passes =
+        presDense
+          ? 9
+          : usesMaskSnakeStream(this) && silMask
+            ? 7
+            : mega
+              ? 4
+              : useMask
+                ? 3
+                : 1;
       const key = (gx, gy) => `${gx},${gy}`;
 
       for (let pass = 0; pass < passes; pass++) {
@@ -6034,9 +6070,6 @@
           );
           this._separateOverlappingGridGlyphs();
         }
-        if (snakeStream) {
-          this._separateOverlappingGridGlyphs();
-        }
 
         if (silMaskPet) {
           this._enforceMaskBackedGlyphWalkable(bx, by, cos, sin, flip);
@@ -6209,7 +6242,7 @@
       const c = document.createElement("canvas");
       c.width = sampleS;
       c.height = sampleS;
-      const g = c.getContext("2d", { willReadFrequently: true });
+      const g = c.getContext("2d", { willReadFrequently: false });
       if (!g) {
         this._silhouetteMatteLayer = null;
         return;
@@ -6232,6 +6265,13 @@
      */
     _drawSilhouetteMatteUnderlay(ctx, light, bx, by, rot) {
       if (!isMaskBackedMegaKao(this)) return;
+      /** 呈现层开「体内动」时不叠整张巨字/颜的填充 mask，避免与字粒形成「双轮廓」与额外合成开销 */
+      if (
+        isPresentationSilhouetteHarm(this) &&
+        this.presentationGlyphDynamics
+      ) {
+        return;
+      }
       const show =
         !!this.silhouetteMatteUnderlay || !!this.outlineContourFirst;
       if (!show) return;
@@ -6254,13 +6294,6 @@
       ) {
         a += light ? 0.055 : 0.075;
       }
-      /** 开「体内动」时压低静态 mask 垫底，避免与字粒叠成「双轮廓」 */
-      if (
-        isPresentationSilhouetteHarm(this) &&
-        this.presentationGlyphDynamics
-      ) {
-        a *= this.outlineContourFirst ? 0.26 : 0.12;
-      }
       ctx.globalAlpha = a;
       ctx.drawImage(lay, 0, 0, lay.width, lay.height, 0, 0, S, S);
       ctx.globalAlpha = 1;
@@ -6282,7 +6315,11 @@
         sky.addColorStop(1, "#ebebf0");
         ctx.fillStyle = sky;
         ctx.fillRect(0, 0, W, H);
-        if (!isMotionLayoutLockedForm(this.form)) {
+        const skipDecorGrid =
+          this.viewMode === "pet" &&
+          isPresentationSilhouetteHarm(this) &&
+          this.glyphs.length > 108;
+        if (!isMotionLayoutLockedForm(this.form) && !skipDecorGrid) {
           ctx.save();
           ctx.strokeStyle = "rgba(0, 0, 0, 0.04)";
           ctx.lineWidth = 1;
