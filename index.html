@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.34.3" />
+  <meta name="ziling-build" content="3.34.4" />
   <title>字灵 · 开发者页控制台</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.34.3" />
+  <link rel="stylesheet" href="./styles.css?v=3.34.4" />
 </head>
 <body>
   <div class="app" data-ui-arc="standby">
@@ -67,7 +67,7 @@
               <button type="button" class="rail-tool" data-action="outlineContourFirst" title="【淡影·待机】关内动且未开整块灰底时可选极弱整 mask（仅待机调试；呈现层不启用）。">淡影</button>
               </div>
               <button type="button" class="rail-tool" data-action="presentationDynamics" title="【字内动】开=体内谐波/流体/蛇行等；关=全静（仅格点，推荐巨字默认可读）。关→开时字粒略闪确认。">内动</button>
-              <button type="button" class="rail-tool rail-tool-span2" data-action="silhouetteCalm" title="【规整】呈现层一键：横竖格·谐步 + 关内动 + 关亚格颤 + 纹理回「流」+ 略抑流体，并立刻疏散叠格。不切「层」。">规整</button>
+              <button type="button" class="rail-tool rail-tool-span2" data-action="silhouetteCalm" title="【规整】呈现层一键：横竖格·谐步 + 关内动 + 关亚格颤 + 纹理回「流」+ 略抑流体，并立刻疏散叠格；约 0.9s 后再启邻格互换，关内动下换位带淡隐。不切「层」。">规整</button>
             </nav>
           </div>
           <div class="rail-section ui-arc-present-only">
@@ -114,7 +114,7 @@
         <div class="stage-main" id="stageMain" aria-hidden="false">
           <canvas id="petCanvas" aria-label="字灵画布"></canvas>
           <div class="form-label" id="formLabel">软团</div>
-          <div class="hint" id="hint">点页眉 <strong>?</strong> 入门 · 呈现巨字 <strong>拼满/逐字</strong> 排版 · <strong>颤幅</strong>调亚格位移 · 拖曳时格向扰动减「整块平移」感 · <strong>3.34.3</strong></div>
+          <div class="hint" id="hint">点页眉 <strong>?</strong> 入门 · <strong>规整</strong>后先静再节律换位（淡隐）· 呈现巨字/颜拖曳<strong>缓跟手</strong> · <strong>排布 / 颤幅</strong> · <strong>3.34.4</strong></div>
         </div>
       </section>
 
@@ -260,7 +260,7 @@
         <section class="help-dialog-section">
           <h3 class="help-dialog-h3">巨字 / 颜文字与「先静后动」</h3>
           <p class="help-dialog-p">
-            <strong>呈现层</strong>巨字/颜的轮廓应由<strong>小字拼出</strong>——画布<strong>不</strong>再叠整张 mask 大字底。巨字乱时先点<strong>「规整」</strong>，再用<strong>「谐步 / 廊道」</strong>二选一（待机层另有<strong>「漫游」</strong>）；<strong>「字号」</strong>统一调躯体字大小。侧栏<strong>「排布」</strong>在<strong>拼满画布</strong>（短串也分行、按画布收紧格距）与<strong>逐字轮换</strong>之间切换；<strong>「颤幅」</strong>调亚格颤的位移幅度（须开「颤」）。拖曳巨字时体内有格向扰动，减轻整块剪影平移感。<strong>「整块灰底」「淡影」</strong>仅在<strong>待机层</strong>侧栏出现，用于调试对比。<strong>「内动」</strong>开时体内跑谐波/流体/蛇行等；关切到开时字粒会<strong>短时略闪</strong>确认。
+            <strong>呈现层</strong>巨字/颜的轮廓应由<strong>小字拼出</strong>——画布<strong>不</strong>再叠整张 mask 大字底。巨字乱时先点<strong>「规整」</strong>（约 <strong>0.9s</strong> 内不邻格换位，之后节律换位且关内动下会<strong>淡隐</strong>再接淡入），再用<strong>「谐步 / 廊道」</strong>二选一（待机层另有<strong>「漫游」</strong>）；<strong>「字号」</strong>统一调躯体字大小。侧栏<strong>「排布」</strong>在<strong>拼满画布</strong>（短串也分行、按画布收紧格距）与<strong>逐字轮换</strong>之间切换；<strong>「颤幅」</strong>调亚格颤的位移幅度（须开「颤」）。拖曳呈现巨字/颜时<strong>缓跟手</strong>并保留格向扰动，减轻整块剪影平移感。<strong>「整块灰底」「淡影」</strong>仅在<strong>待机层</strong>侧栏出现，用于调试对比。<strong>「内动」</strong>开时体内跑谐波/流体/蛇行等；关切到开时字粒会<strong>短时略闪</strong>确认。
           </p>
         </section>
         <section class="help-dialog-section">
@@ -311,11 +311,11 @@
     </div>
   </div>
 
-  <script src="./js/ziling/play-bounds.js?v=3.34.3"></script>
-  <script src="./js/ziling/shape-field.js?v=3.34.3"></script>
-  <script src="./js/ziling/matrix-bridge.js?v=3.34.3"></script>
-  <script src="./js/ziling/shape-consumer.js?v=3.34.3"></script>
-  <script src="./pet.js?v=3.34.3"></script>
-  <script src="./app.js?v=3.34.3"></script>
+  <script src="./js/ziling/play-bounds.js?v=3.34.4"></script>
+  <script src="./js/ziling/shape-field.js?v=3.34.4"></script>
+  <script src="./js/ziling/matrix-bridge.js?v=3.34.4"></script>
+  <script src="./js/ziling/shape-consumer.js?v=3.34.4"></script>
+  <script src="./pet.js?v=3.34.4"></script>
+  <script src="./app.js?v=3.34.4"></script>
 </body>
 </html>
