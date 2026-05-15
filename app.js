@@ -11,6 +11,8 @@
     BODY_MOTION_LABELS,
     BODY_MOTION_STYLES,
     TEXTURE_MOTION_LABELS,
+    MACRO_FIT_LABELS,
+    MACRO_FIT_MODES,
   } = window.ZiLing;
 
   // ---------- 初始化 ----------
@@ -113,7 +115,16 @@
         ? false
         : undefined;
 
-  function syncRailUiArcClass(p) {
+  const urlMacroFit = (params.get("macroFit") || "").trim().toLowerCase();
+  const macroFitFromUrl =
+    urlMacroFit && MACRO_FIT_MODES.includes(urlMacroFit)
+      ? urlMacroFit
+      : undefined;
+  const megaScaleUrlRaw = params.get("megaScale") || params.get("macroScale");
+  const megaLayoutScaleFromUrl =
+    megaScaleUrlRaw != null && megaScaleUrlRaw !== "" && !Number.isNaN(+megaScaleUrlRaw)
+      ? +megaScaleUrlRaw
+      : undefined;
     const appRoot = document.querySelector(".app");
     if (!appRoot || !p) return;
     appRoot.dataset.uiArc =
@@ -135,6 +146,8 @@
     gridCellMotionEase: gridCellMotionEaseFromUrl,
     outlineContourFirst: outlineContourFirstFromUrl,
     presentationGlyphDynamics: presentationGlyphDynamicsFromUrl,
+    macroFitMode: macroFitFromUrl,
+    megaLayoutScale: megaLayoutScaleFromUrl,
     showPlayfieldGuide: devHud,
     onFormChange(key) {
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
@@ -631,7 +644,7 @@
         pet.cycleUiArcMode();
         const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
         toast(
-          `层级 · ${lab}（色/速/轨/颤/紊/廓/辨/动/墨/浮/波/徙/粒 分套保留）`
+          `层级 · ${lab}（色/速/轨/颤/紊/廓/辨/动/墨/浮/波/徙/粒/字比/容纳 分套保留）`
         );
       } else if (action === "morph") {
         pet.abortFeeding();
@@ -688,8 +701,8 @@
         const on = pet.cycleSilhouetteMatteUnderlay();
         toast(
           on
-            ? `剪影垫底：开（${arcLayerZh()}；与 mask 可走格对齐的静态轮廓）`
-            : `剪影垫底：关（${arcLayerZh()}；「辨」开时仍会画弱静态轮廓）`
+            ? `剪影垫底：开（${arcLayerZh()}；整张巨字/颜 mask 半透明垫底，与可走格对齐）`
+            : `剪影垫底：关（${arcLayerZh()}；默认不叠整块轮廓，仅字粒构形）`
         );
       } else if (action === "outlineContourFirst") {
         const on = pet.cycleOutlineContourFirst();
@@ -705,6 +718,15 @@
             ? `体内动：开（呈现层；谐波/流体/蛇行等；不叠整张巨字 mask 垫底）`
             : `体内动：关（呈现层；可按「廓」「辨」叠弱静态垫底）`
         );
+      } else if (action === "megaScale") {
+        const v = pet.cycleMegaLayoutScale();
+        toast(
+          `巨字身幅 ×${v.toFixed(2)}（${arcLayerZh()}；与当前小字格距取较大下限；已巨字则重建）`
+        );
+      } else if (action === "macroFit") {
+        const m = pet.cycleMacroFitMode();
+        const lab = (MACRO_FIT_LABELS && MACRO_FIT_LABELS[m]) || m;
+        toast(`巨字容纳：${lab}（${arcLayerZh()}；已巨字则重建）`);
       } else if (action === "fluid") {
         const v = pet.cycleArcFluidStrength();
         toast(`波纹强度 ×${v.toFixed(2)}（${arcLayerZh()}）`);

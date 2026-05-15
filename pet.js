@@ -822,7 +822,7 @@
     const kao = doa.kao;
     const noStroke = !!doa.noStroke;
     const forceMono = doa.mono;
-    const hasHan = /[\u3400-\u9fff\uf900-\ufadf]/.test(text);
+    const hasHan = /[\u3400-\u9fff\uf900-\ufadf]/.test(text.replace(/\n/g, ""));
     const fontStack = kao
       ? FONT_SILHOUETTE_KAO
       : forceMono || !hasHan
@@ -833,28 +833,144 @@
       ctx.fillStyle = "#000";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      const gLen = Math.max(2, Array.from(text).length);
+      const lines = text
+        .split(/\n/)
+        .map((ln) => ln.trim())
+        .filter(Boolean);
+      const useLines = lines.length ? lines : [text];
+      const joined = useLines.join("");
+      const gLen = Math.max(2, Array.from(joined).length);
       let fs = s * 0.52 * Math.min(1, 8.5 / gLen);
       const maxW = s * 0.9;
-      for (let iter = 0; iter < 22; iter++) {
+      for (let iter = 0; iter < 26; iter++) {
         ctx.font = `${fontWeight} ${fs}px ${fontStack}`;
-        const w = ctx.measureText(text).width;
-        if (w <= maxW && fs <= s * 0.58) break;
+        let ok = true;
+        for (const ln of useLines) {
+          if (ctx.measureText(ln).width > maxW) {
+            ok = false;
+            break;
+          }
+        }
+        if (ok && fs <= s * 0.58) break;
         fs *= 0.9;
       }
       fs = Math.max(fs, s * 0.055);
       ctx.font = `${fontWeight} ${fs}px ${fontStack}`;
       const cx = s * 0.5;
-      const cy = s * 0.52;
-      if (!kao && !noStroke) {
-        ctx.lineJoin = "round";
-        ctx.lineCap = "round";
-        ctx.lineWidth = Math.max(fs * 0.07, 1.15);
-        ctx.strokeStyle = "#000";
-        ctx.strokeText(text, cx, cy);
+      const lh = fs * 1.18;
+      const cy0 = s * 0.52 - (lh * (useLines.length - 1)) / 2;
+      for (let li = 0; li < useLines.length; li++) {
+        const ln = useLines[li];
+        const cy = cy0 + li * lh;
+        if (!kao && !noStroke) {
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          ctx.lineWidth = Math.max(fs * 0.07, 1.15);
+          ctx.strokeStyle = "#000";
+          ctx.strokeText(ln, cx, cy);
+        }
+        ctx.fillText(ln, cx, cy);
       }
-      ctx.fillText(text, cx, cy);
     };
+  }
+
+  const MACRO_FIT_MODES = ["shrink", "truncate", "wrap2"];
+  const MACRO_FIT_LABELS = {
+    shrink: "缩字",
+    truncate: "截断",
+    wrap2: "双行",
+  };
+
+  function normalizeMacroFitMode(s) {
+    return MACRO_FIT_MODES.indexOf(s) >= 0 ? s : "shrink";
+  }
+
+  /** 按画布宽度截断巨字串（与 createMacroTextDraw 字体栈一致）。 */
+  function macroTextTruncateToWidth(raw, S, margin) {
+    const t0 = String(raw || "").trim() || "字";
+    const chars = Array.from(t0);
+    const maxW = S * (margin != null ? margin : 0.88);
+    const c = document.createElement("canvas");
+    const ctx = c.getContext("2d");
+    if (!ctx) return t0;
+    const hasHan = /[\u3400-\u9fff\uf900-\ufadf]/.test(t0);
+    const fontStack = !hasHan ? FONT_SILHOUETTE_MONO : FONT_MACRO_CJK_OPEN;
+    const gLen = Math.max(2, chars.length);
+    let fs = S * 0.52 * Math.min(1, 8.5 / gLen);
+    for (let iter = 0; iter < 22; iter++) {
+      ctx.font = `600 ${fs}px ${fontStack}`;
+      if (ctx.measureText(t0).width <= maxW && fs <= S * 0.58) break;
+      fs *= 0.9;
+    }
+    fs = Math.max(fs, S * 0.055);
+    ctx.font = `600 ${fs}px ${fontStack}`;
+    if (ctx.measureText(t0).width <= maxW) return t0;
+    for (let L = chars.length - 1; L >= 1; L--) {
+      const sub = chars.slice(0, L).join("");
+      if (ctx.measureText(sub).width <= maxW) return sub;
+    }
+    return chars[0] || "字";
+  }
+
+  /** 在首字后切一刀，尽量两行宽度平衡（与双行绘制一致）。 */
+  function macroTextWrapTwoLines(raw, S) {
+    const t0 = String(raw || "").trim() || "字";
+    const chars = Array.from(t0);
+    if (chars.length <= 3) return t0;
+    const c = document.createElement("canvas");
+    const ctx = c.getContext("2d");
+    if (!ctx) return t0;
+    const hasHan = /[\u3400-\u9fff\uf900-\ufadf]/.test(t0);
+    const fontStack = !hasHan ? FONT_SILHOUETTE_MONO : FONT_MACRO_CJK_OPEN;
+    let best = null;
+    const maxW = S * 0.42;
+    for (let k = 1; k < chars.length; k++) {
+      const a = chars.slice(0, k).join("");
+      const b = chars.slice(k).join("");
+      let fs =
+        S * 0.44 * Math.min(1, 8 / Math.max(a.length, b.length, 2));
+      let ok = false;
+      for (let iter = 0; iter < 20; iter++) {
+        ctx.font = `600 ${fs}px ${fontStack}`;
+        const wa = ctx.measureText(a).width;
+        const wb = ctx.measureText(b).width;
+        if (wa <= maxW && wb <= maxW && fs <= S * 0.5) {
+          ok = true;
+          break;
+        }
+        fs *= 0.9;
+        if (fs < S * 0.05) break;
+      }
+      if (!ok) continue;
+      ctx.font = `600 ${fs}px ${fontStack}`;
+      const wa = ctx.measureText(a).width;
+      const wb = ctx.measureText(b).width;
+      const score = Math.abs(wa - wb);
+      if (!best || score < best.score) best = { s: `${a}\n${b}`, score };
+    }
+    return best ? best.s : t0;
+  }
+
+  /** 巨字布局：按小字格距抬升缩放下限，并返回实际布局尺度与已容纳的显示串。 */
+  function resolveMegaLayoutInput(self, S) {
+    const gc =
+      self.gridCell != null
+        ? self.gridCell
+        : clamp(Math.round(S * 0.042), 13, 19);
+    const scaleUser = clamp(
+      self.megaLayoutScale != null ? +self.megaLayoutScale : 1,
+      0.78,
+      1.14
+    );
+    const minByCell = clamp((gc * 10) / (S * 0.5), 0.76, 0.96);
+    const scaleEff = clamp(Math.max(minByCell, scaleUser), 0.76, 1.14);
+    const Slay = S * scaleEff;
+    const mode = normalizeMacroFitMode(self.macroFitMode);
+    const raw = self._pickMacroDisplay();
+    let disp = raw;
+    if (mode === "truncate") disp = macroTextTruncateToWidth(raw, Slay, 0.88);
+    else if (mode === "wrap2") disp = macroTextWrapTwoLines(raw, Slay);
+    return { Slay, disp, gc, mode };
   }
 
   /**
@@ -2306,6 +2422,12 @@
     b.outlineContourFirst = !!self.outlineContourFirst;
     b.textureMotionMode = normalizeTextureMotionMode(self.textureMotionMode);
     b.presentationGlyphDynamics = !!self.presentationGlyphDynamics;
+    b.macroFitMode = normalizeMacroFitMode(self.macroFitMode);
+    b.megaLayoutScale = clamp(
+      self.megaLayoutScale != null ? +self.megaLayoutScale : 1,
+      0.78,
+      1.14
+    );
   }
 
   function applyArcVisualPrefsToPet(self) {
@@ -2330,6 +2452,14 @@
     self.outlineContourFirst = !!b.outlineContourFirst;
     self.textureMotionMode = normalizeTextureMotionMode(b.textureMotionMode);
     self.presentationGlyphDynamics = !!b.presentationGlyphDynamics;
+    self.macroFitMode = normalizeMacroFitMode(
+      b.macroFitMode != null ? b.macroFitMode : "shrink"
+    );
+    self.megaLayoutScale = clamp(
+      b.megaLayoutScale != null ? +b.megaLayoutScale : 1,
+      0.78,
+      1.14
+    );
     self.motionProfile =
       self.uiArcMode === "presentation" ? "display" : "standby";
   }
@@ -2354,7 +2484,8 @@
           ? self.gridCell
           : clamp(Math.round(S * 0.042), 13, 19);
       const pres = self.uiArcMode === "presentation";
-      return buildTextSilhouetteLayout(self._pickMacroDisplay(), n, S, {
+      const { Slay, disp } = resolveMegaLayoutInput(self, S);
+      return buildTextSilhouetteLayout(disp, n, Slay, {
         shellSample: true,
         noStroke: true,
         shellMax: 3,
@@ -2726,6 +2857,8 @@
           outlineContourFirst: true,
           textureMotionMode: _tex0,
           presentationGlyphDynamics: true,
+          macroFitMode: "shrink",
+          megaLayoutScale: 1,
         },
         presentation: {
           glyphMotionSpeed: _sp0,
@@ -2737,11 +2870,13 @@
           megaParticleMul: 1,
           bodyMotionStyle: "harmonic",
           glyphsJitter: false,
-          silhouetteMatteUnderlay: true,
+          silhouetteMatteUnderlay: false,
           outlineContourFirst: true,
           textureMotionMode: _tex0,
           /** 巨字/颜呈现层：体内字粒是否跑谐波/流体/游走（关=先静后动，仅轮廓垫底+格点） */
           presentationGlyphDynamics: false,
+          macroFitMode: "shrink",
+          megaLayoutScale: 1,
         },
       };
       if (opts.outlineContourFirst === false) {
@@ -2774,6 +2909,19 @@
         this._arcPrefs.presentation.presentationGlyphDynamics = true;
       } else if (opts.presentationGlyphDynamics === false) {
         this._arcPrefs.presentation.presentationGlyphDynamics = false;
+      }
+      if (opts.macroFitMode != null) {
+        const mf = normalizeMacroFitMode(String(opts.macroFitMode).trim());
+        this._arcPrefs.standby.macroFitMode = mf;
+        this._arcPrefs.presentation.macroFitMode = mf;
+      }
+      if (
+        opts.megaLayoutScale != null &&
+        !Number.isNaN(Number(opts.megaLayoutScale))
+      ) {
+        const ms = clamp(+opts.megaLayoutScale, 0.78, 1.14);
+        this._arcPrefs.standby.megaLayoutScale = ms;
+        this._arcPrefs.presentation.megaLayoutScale = ms;
       }
       applyArcVisualPrefsToPet(this);
       this.onUiArcModeChange =
@@ -2991,7 +3139,7 @@
             ? clamp(+this._arcPrefs[this.uiArcMode].megaParticleMul, 0.72, 1.28)
             : 1;
         let want = suggestMegaGlyphParticleCount(
-          this._pickMacroDisplay(),
+          resolveMegaLayoutInput(this, S).disp,
           S,
           this.gridCell
         );
@@ -6272,9 +6420,7 @@
       ) {
         return;
       }
-      const show =
-        !!this.silhouetteMatteUnderlay || !!this.outlineContourFirst;
-      if (!show) return;
+      if (!this.silhouetteMatteUnderlay) return;
       const lay = this._silhouetteMatteLayer;
       if (!lay || !lay.width) return;
       const S = this.size;
@@ -6282,17 +6428,13 @@
       ctx.translate(bx, by);
       ctx.rotate(rot);
       ctx.translate(-S / 2, -S / 2);
-      let a = light ? 0.17 : 0.27;
-      if (this.outlineContourFirst && this.silhouetteMatteUnderlay) {
-        a += light ? 0.035 : 0.045;
-      } else if (this.outlineContourFirst && !this.silhouetteMatteUnderlay) {
-        a = light ? 0.15 : 0.24;
-      }
+      let a = light ? 0.19 : 0.29;
+      if (this.outlineContourFirst) a += light ? 0.04 : 0.05;
       if (
         isPresentationSilhouetteHarm(this) &&
         !this.presentationGlyphDynamics
       ) {
-        a += light ? 0.055 : 0.075;
+        a += light ? 0.045 : 0.065;
       }
       ctx.globalAlpha = a;
       ctx.drawImage(lay, 0, 0, lay.width, lay.height, 0, 0, S, S);
@@ -6885,6 +7027,34 @@
       return !!b.presentationGlyphDynamics;
     }
 
+    /** 巨字相对身幅缩放挡；与 `gridCell` 决定的下限取 max；换形巨字时生效 */
+    cycleMegaLayoutScale() {
+      const tiers = [0.86, 0.92, 1, 1.06, 1.12];
+      const b = this._arcPrefs[this.uiArcMode];
+      const cur = clamp(
+        b.megaLayoutScale != null ? +b.megaLayoutScale : 1,
+        0.78,
+        1.14
+      );
+      let i = tiers.findIndex((t) => Math.abs(t - cur) < 0.02);
+      if (i < 0) i = 2;
+      b.megaLayoutScale = tiers[(i + 1) % tiers.length];
+      applyArcVisualPrefsToPet(this);
+      if (this.form === "mega") this.setForm("mega", true, true);
+      return this.megaLayoutScale;
+    }
+
+    /** 巨字容纳：缩字填满 / 截断可放下的前缀 / 双行 */
+    cycleMacroFitMode() {
+      const b = this._arcPrefs[this.uiArcMode];
+      const cur = normalizeMacroFitMode(b.macroFitMode);
+      const ix = MACRO_FIT_MODES.indexOf(cur);
+      b.macroFitMode = MACRO_FIT_MODES[(ix + 1) % MACRO_FIT_MODES.length];
+      applyArcVisualPrefsToPet(this);
+      if (this.form === "mega") this.setForm("mega", true, true);
+      return this.macroFitMode;
+    }
+
     /** 侧栏「紊」：弹簧纹理流 ↔ 芯层邻接换位（关格移时生效；分套记忆） */
     cycleTextureMotionMode() {
       const b = this._arcPrefs[this.uiArcMode];
@@ -7091,6 +7261,9 @@
     silhouetteStrictHarmonicGrid,
     TEXTURE_MOTION_MODES,
     TEXTURE_MOTION_LABELS,
+    MACRO_FIT_MODES,
+    MACRO_FIT_LABELS,
+    normalizeMacroFitMode,
     getMotionProfileKernels,
     getMotionProfileKernelsForPet,
     motionTimeBlend,

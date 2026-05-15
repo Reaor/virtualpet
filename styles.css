@@ -44,7 +44,7 @@ body {
 }
 
 .app {
-  max-width: 520px;
+  max-width: 780px;
   margin: 0 auto;
   min-height: 100vh;
   padding: max(env(safe-area-inset-top), 12px) 16px
@@ -152,14 +152,49 @@ body {
   z-index: 15;
 }
 .rail-left {
-  flex: 0 0 108px;
-  min-width: 108px;
+  flex: 0 0 176px;
+  min-width: 176px;
+  align-items: stretch;
   margin-right: 0;
   border-top-right-radius: 4px;
   border-bottom-right-radius: 4px;
   border-right: none;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.rail-left-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.rail-section {
+  width: 100%;
+}
+
+.rail-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--label);
+  letter-spacing: 0.04em;
+  margin: 0 0 4px 2px;
+  line-height: 1.2;
+}
+
+.rail-tools-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  width: 100%;
+}
+
+.rail-tools-grid .rail-tool {
+  min-height: 38px;
+  font-size: 15px;
+  font-weight: 700;
 }
 .rail-right {
   margin-left: 0;
