@@ -214,7 +214,9 @@
       b.type = "button";
       b.className = "rail-form compact";
       b.dataset.form = key;
-      b.title = `${f.label} · ${key}`;
+      b.title = `待机层形态「${f.label}」 · 内部键 ${key} · 快捷 ${circledIndex(
+        idx
+      )} · 点选换形（仅待机层数学/曲线形态，非巨字/计时）`;
       b.textContent = circledIndex(idx);
       host.appendChild(b);
     });

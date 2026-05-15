@@ -15,7 +15,7 @@
 
 | 路径 | 角色 |
 |------|------|
-| `index.html` | 页面结构、侧栏按钮 `data-action`、`meta[name=ziling-build]`（构建号） |
+| `index.html` | 页面结构、侧栏 `data-action`、**各控件 `title`（悬停说明）**、分区 `rail-section` / `control-block`、`meta ziling-build` |
 | `styles.css` | 布局：`playfield`、左右 `rail`、`stage`、`#petCanvas` |
 | `app.js` | 绑定 UI、URL 参数、Toast、`new Pet(canvas, opts)`；**必须语法有效**，否则整页无 Pet、无版本号、按钮全失效（曾发生误删 `syncRailUiArcClass` 函数头） |
 | `pet.js` | **主体**：形态布局、栅格、物理/渲染、呈现层逻辑、`_arcPrefs` |
@@ -164,4 +164,38 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ---
 
-*文档版本随构建迭代；最后更新意图：与 `ziling-build` 3.33.2 对齐。*
+## 12. 控件映射与维护约定（3.33.3）
+
+### 12.1 左栏四块（`index.html` → `data-action` → `app.js` → `pet.js`）
+
+| 区块标题 | 按钮字 | `data-action` | 行为摘要 |
+|----------|--------|---------------|----------|
+| ① 层级 · 日常互动 · 墨色光色 | 层 | `arcMode` | `cycleUiArcMode`（待机 ⟷ 呈现，切换 `_arcPrefs` 套） |
+| | 变 | `morph` | 当前层内换形 |
+| | 觅 | `feed` | 觅食 |
+| | 墨 / 颜 / 浮 | `ink` / `tint` / `glow` | 墨色循环 / 色盘 / 浮光循环 |
+| | 速 / 眠 / 抖 | `speed` / `sleep` / `shake` | 速度挡 / sleep 模式 / 抖擞 |
+| ② 格点 · 躯体轨 · 纹理与粒数 | 轨 / 颤 / 紊 | `motionStyle` / `glyphsJitter` / `textureMotion` | 躯体范式 / 亚格颤 / 纹理体动 |
+| | 波 / 徙 / 粒 | `fluid` / `gridMarch` / `megaPack` | 流体强度 / 格移倍率 / 巨字粒数 |
+| ③ 巨字/颜：垫底 · 辨形 · 体内动 | 廓 / 辨 / 动 | `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationDynamics` | mask 垫底 / 辨形压低 / 呈现体内动 |
+| ④ 呈现层 · 巨字排版 | 字比 / 容纳 | `megaScale` / `macroFit` | `megaLayoutScale` / `macroFitMode` |
+
+**维护规则**：新增侧栏键时，必须同时写 **长 `title`**（一句以上，说明层级与副作用）并在本表增行；Toast 文案可在 `app.js` 与 `title` 对齐。
+
+### 12.2 底部与右栏
+
+- **文稿与日程输入**：`textarea#openingPreset`、双击化灵等。  
+- **呈现层 · 化身大字**：`#glyphShapeInput` + `#glyphShapeBtn`（`applyGlyphShapeFromInput`）。  
+- **躯体字 · 日程 digest**：`#bodyImport` + `#bodyImportBtn`。  
+- **诗笺 · 觅食字块**：`feed-panel` 内可点字喂食。  
+- **右栏「文稿与画布」**：`btnPresentScript` / `btnAwakenPet` / `btnBackIntro` / `btnRevertScript`。
+
+### 12.3 近期代码向计划（写入 `PLAN.md` 对照）
+
+- [ ] 可选：**自定义悬停层**（比原生 `title` 延迟更短）——需防遮挡画布。  
+- [ ] 呈现层：「动」从关→开时 **一帧弱闪光** 提示状态切换（产品待批）。  
+- [ ] 性能：评估 **双次** `_separateOverlappingGridGlyphs` 可否在待机 mask 路径合并。
+
+---
+
+*文档版本随构建迭代；最后更新意图：与 `ziling-build` **3.33.3** 对齐。*

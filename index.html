@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.33.2" />
+  <meta name="ziling-build" content="3.33.3" />
   <title>字灵 · 开发者页控制台</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.33.2" />
+  <link rel="stylesheet" href="./styles.css?v=3.33.3" />
 </head>
 <body>
   <div class="app" data-ui-arc="standby">
@@ -22,74 +22,79 @@
         <span class="subtitle">Zì Líng · 开发者页控制台</span>
         <span class="build-stamp" id="buildStamp"></span>
       </div>
-      <button class="icon-btn" id="infoBtn" aria-label="说明">?</button>
+      <button class="icon-btn" id="infoBtn" aria-label="说明" title="关于本页：侧栏按钮悬停可看详细说明；构建号见页眉小字；强刷请清缓存或无痕窗口">?</button>
     </header>
 
     <div class="playfield" id="playfield">
-      <aside class="rail rail-left" aria-label="互动与换形">
+      <aside class="rail rail-left" aria-label="侧栏控制台">
         <div class="rail-left-body">
           <div class="rail-section">
-            <div class="rail-section-title">互动与外观</div>
-            <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="互动">
-              <button type="button" class="rail-tool" data-action="arcMode" title="待机/呈现层级">层</button>
-              <button type="button" class="rail-tool" data-action="morph" title="换形（仅当前层级内）">变</button>
-              <button type="button" class="rail-tool" data-action="feed" title="觅食">觅</button>
-              <button type="button" class="rail-tool" data-action="ink" title="躯体墨色渐变">墨</button>
-              <button type="button" class="rail-tool" data-action="tint" title="字体颜色">颜</button>
-              <button type="button" class="rail-tool" data-action="glow" title="浮光律动">浮</button>
-              <button type="button" class="rail-tool" data-action="speed" title="体内运动速度：调制谐波节拍、格移追赶、流体相位（与层级 calm 曲线组合，呈现下仍可感知）">速</button>
-              <button type="button" class="rail-tool" data-action="sleep" title="小憩：整体略缩，体内波/巡逻/格移明显压低（易辨形、少躁动）">眠</button>
-              <button type="button" class="rail-tool" data-action="shake" title="抖擞">抖</button>
+            <div class="rail-section-title">① 层级 · 日常互动 · 墨色光色</div>
+            <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="层级与外观">
+              <button type="button" class="rail-tool" data-action="arcMode" title="【层】待机 ⟷ 呈现：两套参数分记（色/速/轨/颤/紊/廓/辨/动/墨/浮/波/徙/粒/字比/容纳）。呈现层含巨字、计时、颜文字等；待机层为曲线与软团。">层</button>
+              <button type="button" class="rail-tool" data-action="morph" title="【变】仅在当前层内随机换形（不跨层）。呈现层不会跳到待机曲线。">变</button>
+              <button type="button" class="rail-tool" data-action="feed" title="【觅】觅食：字灵沿路径巡游，吸收下方诗笺/标签中的字入字池。">觅</button>
+              <button type="button" class="rail-tool" data-action="ink" title="【墨】躯体墨色场：在几种水墨渐变模式间循环（当前层记忆）。">墨</button>
+              <button type="button" class="rail-tool" data-action="tint" title="【颜】打开色盘，设置小字颜色（写入当前层偏好）。">颜</button>
+              <button type="button" class="rail-tool" data-action="glow" title="【浮】浮光律动：边缘闪光等发光模式循环（当前层记忆）。">浮</button>
+              <button type="button" class="rail-tool" data-action="speed" title="【速】体内运动总闸门：调制谐波节拍、格移追赶感、流体相位；与「徙」倍率不同，且受层级 calm 曲线影响。">速</button>
+              <button type="button" class="rail-tool" data-action="sleep" title="【眠】小憩：整体略缩，巡逻/流体/格移明显压低，便于辨形与减少躁动。">眠</button>
+              <button type="button" class="rail-tool" data-action="shake" title="【抖】抖擞：短时激发散开与表情，用于打破沉闷。">抖</button>
             </nav>
           </div>
           <div class="rail-section">
-            <div class="rail-section-title">运动与辨形</div>
-            <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="当前层运动参数">
-              <button type="button" class="rail-tool" data-action="motionStyle" title="躯体运动轨（仅 mask 巨字/颜）：谐波=格点节拍位移；蛇行=序格走廊；轮廓游走=mask 内曼哈顿游走（与谐波可并存，略增叠字风险）">轨</button>
-              <button type="button" class="rail-tool" data-action="glyphsJitter" title="当前层·剪影亚格颤抖（谐波轨下默认严格格点；开=亚格位移+微振）">颤</button>
-              <button type="button" class="rail-tool" data-action="textureMotion" title="纹理体动（分套）：流=弹簧；序=芯层邻格换位（巨字/颜 mask 或开格移时序不生效）">紊</button>
-              <button type="button" class="rail-tool" data-action="silhouetteMatteUnderlay" title="剪影静态垫底：仅「廓」开时叠整张巨字/颜 mask；默认关，避免整块灰轮廓">廓</button>
-              <button type="button" class="rail-tool" data-action="outlineContourFirst" title="辨形优先（默认开）：巨字/颜先静态轮廓、体内动压低；关=全动态调试">辨</button>
-              <button type="button" class="rail-tool" data-action="presentationDynamics" title="呈现层·体内字粒动态（分套）：关=先静辨形（垫底+格位）；开=谐波/流体/蛇行等按轨与速">动</button>
-              <button type="button" class="rail-tool" data-action="fluid" title="当前层·液体波纹强度">波</button>
-              <button type="button" class="rail-tool" data-action="gridMarch" title="当前层·格点移动速度">徙</button>
-              <button type="button" class="rail-tool" data-action="megaPack" title="当前层·巨字粒数倍率（巨字形下刷新）">粒</button>
+            <div class="rail-section-title">② 格点 · 躯体轨 · 纹理与粒数</div>
+            <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="格点与纹理">
+              <button type="button" class="rail-tool" data-action="motionStyle" title="【轨】躯体运动范式（巨字/颜 mask 内）：谐波=格点节拍位移；蛇行=沿走廊序格滑动；轮廓游走=mask 内曼哈顿游走（与谐波并存时略增叠字风险）。">轨</button>
+              <button type="button" class="rail-tool" data-action="glyphsJitter" title="【颤】亚格颤抖：开时字粒可有亚像素微振（谐波轨下仍建议先关以获得严格格点）。">颤</button>
+              <button type="button" class="rail-tool" data-action="textureMotion" title="【紊】纹理体动：流=弹簧式纹理相位；序=芯层邻格换位（巨字/颜 mask 或格移关闭时序不生效）。">紊</button>
+              <button type="button" class="rail-tool" data-action="fluid" title="【波】液体波纹强度：影响非 mask 或 mask 内允许的相位摆动（当前层记忆）。">波</button>
+              <button type="button" class="rail-tool" data-action="gridMarch" title="【徙】格点迁移速度倍率：字粒沿格追赶布局锚点的快慢（当前层记忆）。">徙</button>
+              <button type="button" class="rail-tool" data-action="megaPack" title="【粒】巨字/颜粒子数倍率：在巨字或颜形态下点按后重建粒子规模（当前层记忆）。">粒</button>
+            </nav>
+          </div>
+          <div class="rail-section">
+            <div class="rail-section-title">③ 巨字/颜：垫底 · 辨形 · 体内动</div>
+            <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="剪影辨形">
+              <button type="button" class="rail-tool" data-action="silhouetteMatteUnderlay" title="【廓】剪影静态垫底：开时在字粒下方绘制整张 mask 半透明图（与可走格同几何）。默认关以避免整块灰字；需强辨形时再开。">廓</button>
+              <button type="button" class="rail-tool" data-action="outlineContourFirst" title="【辨】辨形优先：压低体内谐波/流体等，使轮廓先稳后动（与「动」配合；当前层记忆）。">辨</button>
+              <button type="button" class="rail-tool" data-action="presentationDynamics" title="【动】呈现层专用：体内字粒是否跑谐波/流体/蛇行等。关=先静后动（推荐默认）；开=动态构形。开「动」时不叠整张 mask 垫底以免双轮廓。">动</button>
             </nav>
           </div>
           <div class="rail-section ui-arc-present-only">
-            <div class="rail-section-title">巨字排版</div>
+            <div class="rail-section-title">④ 呈现层 · 巨字排版</div>
             <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="巨字排版">
-              <button type="button" class="rail-tool" data-action="megaScale" title="巨字相对身幅缩放（与当前小字格距取较大下限）；巨字形下点按即重建">字比</button>
-              <button type="button" class="rail-tool" data-action="macroFit" title="容纳：缩字填满画布 / 截断前缀 / 双行；巨字形下点按即重建">容纳</button>
+              <button type="button" class="rail-tool" data-action="megaScale" title="【字比】巨字相对身幅缩放挡位（与当前小字格距取下限）；仅在巨字形下点按会重建布局。">字比</button>
+              <button type="button" class="rail-tool" data-action="macroFit" title="【容纳】长文进巨字：缩字填满 / 截断可放前缀 / 双行拆排；巨字形下点按重建。">容纳</button>
             </nav>
           </div>
         </div>
         <div class="rail-divider" role="presentation"></div>
         <div class="rail-groups" id="railGroups" aria-label="形态分类">
           <details class="rail-group ui-arc-standby-only" open>
-            <summary>待机状态</summary>
+            <summary title="展开后点数字按钮切换待机曲线（仅待机层）">① 待机曲线形态</summary>
             <p class="rail-group-hint">① 起为软团；数字序悬停看全名 · 李萨如/蔷薇/旋轮/经典闭曲线等</p>
             <div class="rail-group-btns rail-standby-scroll" id="railStandbyBtns"></div>
           </details>
           <details class="rail-group ui-arc-present-only">
-            <summary>计时</summary>
+            <summary title="时分显示，点「钟」切换">② 计时（时分）</summary>
             <div class="rail-group-btns">
-              <button type="button" class="rail-form compact" data-form="clock" title="时分">钟</button>
-              <button type="button" class="rail-form compact" data-form="chrono" title="时分秒">秒</button>
+              <button type="button" class="rail-form compact" data-form="clock" title="【钟】计时形态：画布显示当前时分（约每分钟刷新）。">钟</button>
+              <button type="button" class="rail-form compact" data-form="chrono" title="【秒】计时形态：画布显示时分秒（秒级刷新，略多算力）。">秒</button>
             </div>
           </details>
           <details class="rail-group ui-arc-present-only">
-            <summary>颜文字</summary>
+            <summary title="颜文字 mask 剪影">③ 颜文字</summary>
             <div class="rail-group-btns">
-              <button type="button" class="rail-form compact" data-form="kao_joy" title="颜·喜">喜</button>
-              <button type="button" class="rail-form compact" data-form="kao_sweat" title="颜·汗">汗</button>
-              <button type="button" class="rail-form compact" data-form="kao_cool" title="颜·呆">呆</button>
-              <button type="button" class="rail-form compact" data-form="kao_party" title="颜·舞">舞</button>
-              <button type="button" class="rail-form compact" data-form="kao_angry" title="颜·气">气</button>
-              <button type="button" class="rail-form compact" data-form="kao_love" title="颜·爱">爱</button>
-              <button type="button" class="rail-form compact" data-form="kao_sleep" title="颜·眠">眠</button>
-              <button type="button" class="rail-form compact" data-form="kao_spark" title="颜·闪">闪</button>
-              <button type="button" class="rail-form compact" data-form="kao_shrug" title="颜·摊">摊</button>
+              <button type="button" class="rail-form compact" data-form="kao_joy" title="【喜】颜文字：喜形 mask 剪影。">喜</button>
+              <button type="button" class="rail-form compact" data-form="kao_sweat" title="【汗】颜文字：汗颜 mask 剪影。">汗</button>
+              <button type="button" class="rail-form compact" data-form="kao_cool" title="【呆】颜文字：呆 mask 剪影。">呆</button>
+              <button type="button" class="rail-form compact" data-form="kao_party" title="【舞】颜文字：庆祝舞 mask 剪影。">舞</button>
+              <button type="button" class="rail-form compact" data-form="kao_angry" title="【气】颜文字：生气 mask 剪影。">气</button>
+              <button type="button" class="rail-form compact" data-form="kao_love" title="【爱】颜文字：爱心 mask 剪影。">爱</button>
+              <button type="button" class="rail-form compact" data-form="kao_sleep" title="【眠】颜文字：睡 mask 剪影。">眠</button>
+              <button type="button" class="rail-form compact" data-form="kao_spark" title="【闪】颜文字：闪星星 mask 剪影。">闪</button>
+              <button type="button" class="rail-form compact" data-form="kao_shrug" title="【摊】颜文字：摊手 mask 剪影。">摊</button>
             </div>
           </details>
         </div>
@@ -99,22 +104,27 @@
         <div class="stage-main" id="stageMain" aria-hidden="false">
           <canvas id="petCanvas" aria-label="字灵画布"></canvas>
           <div class="form-label" id="formLabel">软团</div>
-          <div class="hint" id="hint">按住字灵约0.6秒出现「松手还原文稿」后松手即还原；超过约8px移动为拖动 · 「层」切换待机/呈现（色/速/轨/颤/紊/廓/辨/动/墨/浮/波/徙/粒/字比/容纳 分套保留）· **整块巨字灰轮廓**：默认 **不画**；需辨形垫底请开 **「廓」** · 「辨」：体内动压低；「动」开时仍不叠整张 mask 垫底 · 呈现层剪影格移 **每帧每字最多一格**；叠字优先 **正交邻格** · 「容纳」：缩字 / 截断 / 双行 · URL <code>?macroFit=truncate|shrink|wrap2</code> <code>?megaScale=0.92</code> · <code>?textureMotion=swap</code> · <code>?clockGranularity=sec</code> · <code>?gridEase=0</code> · <code>?outlineFirst=0</code> · <code>?presDyn=1</code> · 见 DESIGN / PLAN · <code>?dev=1</code></div>
+          <div class="hint" id="hint">侧栏与底部按钮<strong>悬停</strong>可看详细说明 · 按住字灵约0.6秒出现「松手还原文稿」后松手即还原；超过约8px移动为拖动 · 「层」切换待机/呈现（参数分套）· 整块巨字灰轮廓：默认不画，需辨形请开「廓」· 「动」关=先静后动（淡入淡出略加强）· 呈现剪影格移每帧每字最多一格 · URL <code>?macroFit=</code> <code>?megaScale=</code> 等见 PLAN / HANDOFF</div>
         </div>
       </section>
 
-      <aside class="rail rail-right" aria-label="文稿操作">
-        <button type="button" class="rail-script" id="btnPresentScript" title="呈现文稿">呈</button>
-        <button type="button" class="rail-script accent" id="btnAwakenPet" title="化为字灵">灵</button>
-        <button type="button" class="rail-script" id="btnBackIntro" title="空白">空</button>
-        <button type="button" class="rail-script" id="btnRevertScript" title="拖回文稿">回</button>
+      <aside class="rail rail-right" aria-label="文稿与画布模式">
+        <div class="rail-right-head">
+          <div class="rail-section-title">文稿与画布</div>
+        </div>
+        <button type="button" class="rail-script" id="btnPresentScript" title="【呈】把下方文稿行渲染到画布为「文稿」形态（字序与输入一致，不叠同一格）。需先进入字灵或从开场进入。">呈</button>
+        <button type="button" class="rail-script accent" id="btnAwakenPet" title="【灵】化为字灵：从开场/文稿进入宠物模式；可携带当前巨字/形态 URL 参数。">灵</button>
+        <button type="button" class="rail-script" id="btnBackIntro" title="【空】回到开场空白：清部分互动状态，画布回到 intro。">空</button>
+        <button type="button" class="rail-script" id="btnRevertScript" title="【回】拖回/恢复：长按字灵内区提示后松手，或用于还原文稿与字序（与日程 digest 规则配合）。">回</button>
       </aside>
     </div>
 
+    <div class="control-block">
+      <div class="control-block-title">文稿与日程输入</div>
     <section class="script-sheet" aria-label="日程输入">
       <div class="opening-panel" id="openingPanel">
         <label class="opening-label" for="openingPreset">输入文稿（先「呈」到上方画面，再「灵」化为字灵；「回」恢复本段字）</label>
-        <textarea id="openingPreset" class="opening-textarea" rows="3" maxlength="400" spellcheck="false">山色有无中
+        <textarea id="openingPreset" class="opening-textarea" rows="3" maxlength="400" spellcheck="false" title="多行文稿：含【已完成】的行可被字灵 digest 吞入躯体；含【未完成】行不贴躯体。双击可快速化为字灵。">山色有无中
 江流天地外
 云霞出海曙</textarea>
         <p class="opening-hint" id="openingHint">
@@ -122,7 +132,10 @@
         </p>
       </div>
     </section>
+    </div>
 
+    <div class="control-block ui-arc-present-only">
+      <div class="control-block-title">呈现层 · 化身大字 / 数字</div>
     <section class="import-row glyph-shape-row ui-arc-present-only" aria-label="化身大字与数字">
       <input
         type="text"
@@ -131,10 +144,14 @@
         maxlength="48"
         placeholder="大字/数字/词（如 春、2026）— 点「形」切换巨字；亦可用 URL ?macroText="
         autocomplete="off"
+        title="巨字内容：写入后点「形」或 Enter；与侧栏「容纳」「字比」共同决定 mask 内排版。"
       />
-      <button type="button" class="import-btn" id="glyphShapeBtn">形</button>
+      <button type="button" class="import-btn" id="glyphShapeBtn" title="【形】应用上方输入为 macroText，并切换到呈现层巨字形态（若在文稿模式会先唤醒）。">形</button>
     </section>
+    </div>
 
+    <div class="control-block">
+      <div class="control-block-title">躯体字 · 日程 digest</div>
     <section class="import-row" aria-label="躯体字导入">
       <input
         type="text"
@@ -143,10 +160,14 @@
         maxlength="200"
         placeholder="日程：【已完成】写字 · 或【未完成】写字（写入选吞噬已完成）"
         autocomplete="off"
+        title="单行或多行日程：点「写入」按行解析【已完成】/【未完成】规则，向字灵躯体写入或仅标记待办。"
       />
-      <button type="button" class="import-btn" id="bodyImportBtn">写入</button>
+      <button type="button" class="import-btn" id="bodyImportBtn" title="【写入】把本行日程解析后写入字灵躯体队列（已完成吞入；未完成不贴躯体）。">写入</button>
     </section>
+    </div>
 
+    <div class="control-block">
+      <div class="control-block-title">诗笺 · 觅食字块</div>
     <section class="feed-panel" aria-label="可被吞食的诗笺">
       <div class="panel-title">
         <span class="dot"></span>
@@ -192,8 +213,9 @@
         点击卡片中的字可喂食 · URL：<code>?form=cv_butterfly</code> 蝶形线 · <code>?form=kao_party</code> 颜文字 · <code>?form=chrono</code> 计时 · <code>?macroText=2026</code> 巨字/数字 · <code>?form=liss_75</code> 待机曲线
       </div>
     </section>
+    </div>
 
-    <div class="pouch" id="pouch" aria-label="字池">
+    <div class="pouch" id="pouch" aria-label="字池" title="字池：觅食与日程写入累积的字符计数；点击诗笺中单字可飞入字灵。">
       <span class="pouch-label">字池</span>
       <span class="pouch-count" id="pouchCount">0</span>
     </div>
@@ -205,34 +227,34 @@
     <div class="tint-popover-card">
       <div class="tint-popover-head">
         <span>字体颜色</span>
-        <button type="button" class="tint-popover-close" id="tintPopoverClose" aria-label="关闭">×</button>
+        <button type="button" class="tint-popover-close" id="tintPopoverClose" aria-label="关闭" title="关闭色盘（不改变已选颜色）">×</button>
       </div>
       <div class="tint-swatches" id="tintSwatches">
-        <button type="button" class="swatch swatch-reset" data-tint="" title="跟随主题默认">默认</button>
-        <button type="button" class="swatch" data-tint="#1c1c1e" style="background:#1c1c1e" title="墨黑"></button>
-        <button type="button" class="swatch" data-tint="#3d2c1f" style="background:#3d2c1f" title="褐墨"></button>
-        <button type="button" class="swatch" data-tint="#0a4d3c" style="background:#0a4d3c" title="松绿"></button>
-        <button type="button" class="swatch" data-tint="#1e3a5f" style="background:#1e3a5f" title="靛青"></button>
-        <button type="button" class="swatch" data-tint="#5c1a33" style="background:#5c1a33" title="胭脂"></button>
-        <button type="button" class="swatch" data-tint="#6b3fa0" style="background:#6b3fa0" title="藤紫"></button>
-        <button type="button" class="swatch" data-tint="#b45309" style="background:#b45309" title="琥珀"></button>
-        <button type="button" class="swatch" data-tint="#0d9488" style="background:#0d9488" title="青玉"></button>
-        <button type="button" class="swatch" data-tint="#be123c" style="background:#be123c" title="朱红"></button>
-        <button type="button" class="swatch" data-tint="#4d7c0f" style="background:#4d7c0f" title="苔绿"></button>
-        <button type="button" class="swatch" data-tint="#4338ca" style="background:#4338ca" title="宝蓝"></button>
+        <button type="button" class="swatch swatch-reset" data-tint="" title="【默认】清除自定义 tint，小字颜色回到主题默认">默认</button>
+        <button type="button" class="swatch" data-tint="#1c1c1e" style="background:#1c1c1e" title="【墨黑】#1c1c1e — 涂于字灵躯体小字">墨黑</button>
+        <button type="button" class="swatch" data-tint="#3d2c1f" style="background:#3d2c1f" title="【褐墨】#3d2c1f — 涂于字灵躯体小字">褐墨</button>
+        <button type="button" class="swatch" data-tint="#0a4d3c" style="background:#0a4d3c" title="【松绿】#0a4d3c — 涂于字灵躯体小字">松绿</button>
+        <button type="button" class="swatch" data-tint="#1e3a5f" style="background:#1e3a5f" title="【靛青】#1e3a5f — 涂于字灵躯体小字">靛青</button>
+        <button type="button" class="swatch" data-tint="#5c1a33" style="background:#5c1a33" title="【胭脂】#5c1a33 — 涂于字灵躯体小字">胭脂</button>
+        <button type="button" class="swatch" data-tint="#6b3fa0" style="background:#6b3fa0" title="【藤紫】#6b3fa0 — 涂于字灵躯体小字">藤紫</button>
+        <button type="button" class="swatch" data-tint="#b45309" style="background:#b45309" title="【琥珀】#b45309 — 涂于字灵躯体小字">琥珀</button>
+        <button type="button" class="swatch" data-tint="#0d9488" style="background:#0d9488" title="【青玉】#0d9488 — 涂于字灵躯体小字">青玉</button>
+        <button type="button" class="swatch" data-tint="#be123c" style="background:#be123c" title="【朱红】#be123c — 涂于字灵躯体小字">朱红</button>
+        <button type="button" class="swatch" data-tint="#4d7c0f" style="background:#4d7c0f" title="【苔绿】#4d7c0f — 涂于字灵躯体小字">苔绿</button>
+        <button type="button" class="swatch" data-tint="#4338ca" style="background:#4338ca" title="【宝蓝】#4338ca — 涂于字灵躯体小字">宝蓝</button>
       </div>
       <label class="tint-custom">
         <span>自选</span>
-        <input type="color" id="tintColorPicker" value="#1c1c1e" />
+        <input type="color" id="tintColorPicker" value="#1c1c1e" title="自选十六进制颜色，应用为躯体小字 tint" />
       </label>
     </div>
   </div>
 
-  <script src="./js/ziling/play-bounds.js?v=3.33.2"></script>
-  <script src="./js/ziling/shape-field.js?v=3.33.2"></script>
-  <script src="./js/ziling/matrix-bridge.js?v=3.33.2"></script>
-  <script src="./js/ziling/shape-consumer.js?v=3.33.2"></script>
-  <script src="./pet.js?v=3.33.2"></script>
-  <script src="./app.js?v=3.33.2"></script>
+  <script src="./js/ziling/play-bounds.js?v=3.33.3"></script>
+  <script src="./js/ziling/shape-field.js?v=3.33.3"></script>
+  <script src="./js/ziling/matrix-bridge.js?v=3.33.3"></script>
+  <script src="./js/ziling/shape-consumer.js?v=3.33.3"></script>
+  <script src="./pet.js?v=3.33.3"></script>
+  <script src="./app.js?v=3.33.3"></script>
 </body>
 </html>

@@ -2,7 +2,7 @@
 =============================================
 
 页面
-  index.html       入口；先加载 js/ziling/*.js 再 pet.js、app.js
+  index.html       入口；侧栏分区 + 各控件 title（悬停说明）；先加载 js/ziling/*.js 再 pet.js、app.js
   styles.css       样式
   app.js           「层」+ 轨/颤/紊/廓/辨/动/波/徙/粒/字比/容纳；toast 标明 arcLayer；色盘写入当前层
 
@@ -21,4 +21,4 @@
 设计/计划
   DESIGN.md        产品意图与变更摘要
   PLAN.md          需求对照与版本号
-  HANDOFF.md       接手/解任说明：架构、层与剪影守卫、避免误伤待机层
+  HANDOFF.md       接手说明 + §12 控件映射（改侧栏必同步 title 与表）

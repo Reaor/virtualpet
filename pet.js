@@ -4281,8 +4281,10 @@
         2.5
       );
       /** 轮廓难辨 / 越界时：略快淡出；合法区内：慢淡入减轻闪现与叠乱感 */
-      const fadeOut = 0.4 / (0.62 + 0.38 * spd);
-      const fadeIn = 0.26 + 0.22 * spd;
+      const presSleep = !this.presentationGlyphDynamics;
+      const fadeOut =
+        (0.4 / (0.62 + 0.38 * spd)) * (presSleep ? 1.18 : 1);
+      const fadeIn = (0.26 + 0.22 * spd) * (presSleep ? 1.42 : 1);
       const tWall = performance.now() / 1000;
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
@@ -4325,10 +4327,11 @@
             g.char = this._randomChar();
           }
           const presL = isPresentationSilhouetteHarm(this);
+          const sleepFade = presL && !this.presentationGlyphDynamics;
           g.alpha = clamp(
-            g._megaBaseAlpha * (presL ? 0.32 : 0.48),
-            presL ? 0.08 : 0.14,
-            presL ? 0.36 : 0.5
+            g._megaBaseAlpha * (sleepFade ? 0.4 : presL ? 0.32 : 0.48),
+            sleepFade ? 0.12 : presL ? 0.08 : 0.14,
+            sleepFade ? 0.48 : presL ? 0.36 : 0.5
           );
           g._megaOutsideAcc = 0;
           g.wgx = 0;
@@ -6435,7 +6438,8 @@
         isPresentationSilhouetteHarm(this) &&
         !this.presentationGlyphDynamics
       ) {
-        a += light ? 0.045 : 0.065;
+        /** 先静辨形：略抬垫底 α，轮廓更易读（仍低于旧版「辨隐式整块」灰度） */
+        a += light ? 0.055 : 0.078;
       }
       ctx.globalAlpha = a;
       ctx.drawImage(lay, 0, 0, lay.width, lay.height, 0, 0, S, S);

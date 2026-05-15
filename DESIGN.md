@@ -104,7 +104,8 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.33.2**：**待机 / 呈现隔离**：`contourStatic` 不再把「辨」误用到待机 mask（仅 `presGlyphSleep`）；流体阻尼 **`presSilHarm` 限定**（避免待机巨字/颜流体被 ×0.1）；**`fillCount` 截断粒子** 仅 **呈现层**；**`_updatePresentationSilhouetteGlyphLifecycle`** 仅 **呈现剪影**（防待机层被淡出/重生打乱）。**文档**：新增 **`HANDOFF.md`** 解任/接手说明。 |
+| 最新 | **3.33.3**：**UI**：左栏 **四区块**（层级与墨色 / 格轨纹理 / 廓辨动 / 巨字排版）；各按钮 **`title` 长文案**；右栏「文稿与画布」头；底部 **文稿 / 化身大字 / 日程 / 诗笺** 分区标题；`?` 说明。**呈现**：关「动」时 **mask 垫底 α 略增**、**剪影生命周期淡入淡出加强**（仍仅 `isPresentationSilhouetteHarm`）。**文档**：`HANDOFF.md` §12 控件映射与维护约定。 |
+| 先前 | **3.33.2**：**待机 / 呈现隔离**：`contourStatic` 不再把「辨」误用到待机 mask；流体阻尼 **`presSilHarm` 限定**；**`fillCount` 截断** 仅呈现层；**生命周期** 仅呈现剪影。`HANDOFF.md` 接手说明。 |
 | 先前 | **3.33.1**：**热修**：`app.js` 误删的 **`syncRailUiArcClass`** 导致整页脚本失败。 |
 | 先前 | **3.33.0**：**整块巨字灰轮廓**：**仅「廓」**（`silhouetteMatteUnderlay`）开时 `_drawSilhouetteMatteUnderlay`；**辨** 不再单独触发整块 mask；呈现层 **「廓」默认关**。**巨字排版**：`megaLayoutScale`（侧栏 **字比**，与 `gridCell` 推得的下限取 max）、`macroFitMode`（**容纳**：`shrink` / `truncate` / `wrap2`，多行 `createMacroTextDraw`）；URL **`?megaScale=`**、**`?macroFit=`**。**UI**：左栏 **分区标题 + 双列按钮**、主容器加宽。 |
 | 先前 | **3.32.4**：**根因收敛**：（1）**粒子数 > 可走格/蛇轨槽位** → 必然共格重叠；现 **`rasterizeMask.fillCount`** 按格距估算 **上限并截断 `glyphs`**。（2）**整张巨字/颜 mask 垫底 + 字粒** → 双轮廓；**呈现层开「体内动」** 时 **跳过 `_drawSilhouetteMatteUnderlay`**。（3）**卡顿**：合并多余 `separate` 调用、**提高单函数内遍数**、重载呈现时 **跳过背景装饰格线**、mask 离屏 **`willReadFrequently:false`**。 |
