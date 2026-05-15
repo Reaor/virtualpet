@@ -51,7 +51,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ### 3.3 分层视觉偏好 `_arcPrefs`
 
-- 键：`standby` / `presentation`，各自存 **速、色、墨、浮、波、徙、粒、轨、颤、紊、廓、辨、动、macroFitMode、megaLayoutScale** 等。
+- 键：`standby` / `presentation`，各自存 **速、色、墨、浮、波、徙、粒、走格、颤、紊、整块灰底、淡影、字内动、macroFitMode、megaLayoutScale** 等（侧栏易读名；代码字段仍为 `bodyMotionStyle` / `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationGlyphDynamics`）。
 - 切换「层」时 `applyArcVisualPrefsToPet` / `snapshotArcVisualPrefs` 读写当前套。
 
 ### 3.4 「动」`presentationGlyphDynamics`
@@ -59,7 +59,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 - 仅存 **`_arcPrefs.presentation`**（待机层无此概念）。
 - **`presGlyphSleep`**：`isPresentationSilhouetteHarm && !presentationGlyphDynamics`  
   → 关「动」时体内谐波/流体等大幅压低，**先静后动**。
-- **与「廓」**：开「动」且为呈现剪影时，**不画整张 mask 垫底**（避免双轮廓 + 性能）；关「动」可按「廓」叠 **显式强度** 垫底；关「动」且开「辨」、未开「廓」时 **`_drawSilhouetteMatteUnderlay` 极弱整 mask**（先静辨形，**3.33.4**）。
+- **与「整块灰底」**：开「字内动」且为呈现剪影时，**不画整张 mask 垫底**（避免双轮廓 + 性能）；关「字内动」可按「整块灰底」叠 **显式强度** 垫底；关「字内动」且开「淡影」、未开「整块灰底」时 **`_drawSilhouetteMatteUnderlay` 极弱整 mask**（**3.33.4** 起链；**3.34.1** 起呈现层「淡影」默认关、α 再压低）。
 
 ---
 
@@ -108,9 +108,9 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 3. **少重叠**：叠分多遍、正交邻优先；结构性上限 `fillCount`（呈现截断约 **0.82×** 可走格估计，**3.33.4**）。
 4. **少双轮廓**：字粒 + 整块灰 mask 不要叠（动/廓 分工）。
 5. **呈现层稳定**：不要被 idle 自动换形拉回待机；`pickBiasedForm` 必须尊重 `uiArcMode`。
-6. **层级分套记忆**：色速轨颤紊廓辨动波徙粒字比容纳等分待机/呈现。
+6. **层级分套记忆**：色速走格颤紊灰底淡影字内动波徙粒字比容纳等分待机/呈现。
 7. **性能**：离屏 canvas、`willReadFrequently`、重载时跳过装饰格线、减少无效 `separate` 调用等。
-8. **巨字排版**：缩放下限与 `gridCell` 关联；容纳 `shrink/truncate/wrap2`；整块灰轮廓 **默认不画**；**「廓」强垫底** 与 **「辨」+ 关「动」极弱垫底**（**3.33.4**）二选一强度链。
+8. **巨字排版**：缩放下限与 `gridCell` 关联；容纳 `shrink/truncate/wrap2`；整块灰轮廓 **默认不画**；**「整块灰底」强垫底** 与 **「淡影」+ 关「字内动」极弱垫底**（**3.33.4**；**3.34.1** 淡影默认关）二选一强度链。
 
 ---
 
@@ -128,6 +128,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 - **3.33.3**：侧栏 **title** 长文案、control-block；关「动」时 mask 垫底 α 略增；`HANDOFF` §12。  
 - **3.33.4**：**先静辨形**（关「动」+「辨」+ 未「廓」→ 极弱整 mask）；**叠分 12**、`fillCount×0.82`、巨字壳 **enforce** 略增；**生命周期 α 限幅**；**待机/巨字 gridCell** 与 **immutable em 混合** 统一字号观感；mask **flash** 再压低。  
 - **3.33.5**：**`DESIGN` §2.2/§2.3** 与回稿实现一致；**「动」关→开** `_glyphFlash` 画布确认。  
+- **3.34.1**：**巨字可读**：淡影默认关、弱 mask α 再收；粒子 cap 更紧、叠分更勤；呈现巨字/颜字身 **统一 em**；**规整** 一键横竖谐步+全静；侧栏易读名与底部 **待机/呈现** 色条分区。  
 - **3.34.0**：**入门 `<dialog>`**（页眉 **?**，与 `DESIGN.md` 对齐）；**桌面主容器加宽**（`max-width` 940px）；**`:focus-visible` 键盘焦点环**、**`prefers-reduced-motion`** 下弱化按钮缩放与过渡；诗笺脚注 **URL 示例** 修正（`mega` 与 `macroText` 组合等）；与 **3.33.5** 闪动/文档条目合并发布。
 
 ---
@@ -168,7 +169,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ---
 
-## 12. 控件映射与维护约定（3.34.0）
+## 12. 控件映射与维护约定（3.34.1）
 
 ### 12.1 左栏四块（`index.html` → `data-action` → `app.js` → `pet.js`）
 
@@ -179,9 +180,10 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 | | 觅 | `feed` | 觅食 |
 | | 墨 / 颜 / 浮 | `ink` / `tint` / `glow` | 墨色循环 / 色盘 / 浮光循环 |
 | | 速 / 眠 / 抖 | `speed` / `sleep` / `shake` | 速度挡 / sleep 模式 / 抖擞 |
-| ② 格点 · 躯体轨 · 纹理与粒数 | 轨 / 颤 / 紊 | `motionStyle` / `glyphsJitter` / `textureMotion` | 躯体范式 / 亚格颤 / 纹理体动 |
+| ② 格点 · 走格 · 纹理与粒数 | 走格 / 颤 / 紊 | `motionStyle` / `glyphsJitter` / `textureMotion` | 躯体范式（谐波=横竖格谐步）/ 亚格颤 / 纹理体动 |
 | | 波 / 徙 / 粒 | `fluid` / `gridMarch` / `megaPack` | 流体强度 / 格移倍率 / 巨字粒数 |
-| ③ 巨字/颜：垫底 · 辨形 · 体内动 | 廓 / 辨 / 动 | `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationDynamics` | **廓**：显式整 mask 垫底。**辨**：压低体内动；呈现关「动」且未开「廓」时 **极弱整 mask**。**动**：呈现体内动；开时 **不画整 mask**；**关→开** 短时弱 **`_glyphFlash`** 作确认（mask 剪影仍压低闪光；Toast 同步提示） |
+| ③ 巨字/颜 · 垫底与动静 | 整块灰底 / 淡影 / 内动 | `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationDynamics` | **整块灰底**：显式整 mask 垫底。**淡影**：可选极弱整 mask（呈现层默认关）。**内动**：呈现体内动；开时 **不画整 mask**；**关→开** 短时弱 **`_glyphFlash`**（mask 剪影仍压低闪光） |
+| | 规整 | `silhouetteCalm` | `applyPresentationSilhouetteHarmonicCalm`：写呈现套为横竖谐步 + 关内动 + 纹理流 + 略抑流体；在呈现层时立即疏散叠格 |
 | ④ 呈现层 · 巨字排版 | 字比 / 容纳 | `megaScale` / `macroFit` | `megaLayoutScale` / `macroFitMode` |
 
 **维护规则**：新增侧栏键时，必须同时写 **长 `title`**（一句以上，说明层级与副作用）并在本表增行；Toast 文案可在 `app.js` 与 `title` 对齐。
@@ -203,4 +205,4 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ---
 
-*文档版本随构建迭代；最后更新意图：与 `ziling-build` **3.34.0** 对齐。*
+*文档版本随构建迭代；最后更新意图：与 `ziling-build` **3.34.1** 对齐。*
