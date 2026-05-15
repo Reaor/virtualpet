@@ -59,7 +59,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 - 仅存 **`_arcPrefs.presentation`**（待机层无此概念）。
 - **`presGlyphSleep`**：`isPresentationSilhouetteHarm && !presentationGlyphDynamics`  
   → 关「动」时体内谐波/流体等大幅压低，**先静后动**。
-- **与「廓」**：开「动」且为呈现剪影时，**不画整张 mask 垫底**（避免双轮廓 + 性能）；关「动」可按「廓」叠弱垫底。
+- **与「廓」**：开「动」且为呈现剪影时，**不画整张 mask 垫底**（避免双轮廓 + 性能）；关「动」可按「廓」叠 **显式强度** 垫底；关「动」且开「辨」、未开「廓」时 **`_drawSilhouetteMatteUnderlay` 极弱整 mask**（先静辨形，**3.33.4**）。
 
 ---
 
@@ -78,7 +78,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 ### 4.1 呈现层剪影格移
 
 - `stepBudget`：在 `presSilHarm` 下固定为 **1**（每帧每字最多一格曼哈顿），减轻叠乱。
-- `_separateOverlappingGridGlyphs`：呈现剪影下优先 **正交邻格** 疏散，遍数较高。
+- `_separateOverlappingGridGlyphs`：呈现剪影下优先 **正交邻格** 疏散，遍数 **12**（`presDense`）。
 
 ### 4.2 待机层 mask（巨字 / 颜）
 
@@ -105,12 +105,12 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 1. **辨形优先**：巨字/颜轮廓可读；复杂形 **先静后动**；可选垫底与亚格颤。
 2. **规整格移**：相邻格、匀速、曼哈顿；避免随机对角漂移画出 mask 外（`gridCellMotionEase` 对 mask 禁用）。
-3. **少重叠**：叠分多遍、正交邻优先；结构性上限 `fillCount`。
+3. **少重叠**：叠分多遍、正交邻优先；结构性上限 `fillCount`（呈现截断约 **0.82×** 可走格估计，**3.33.4**）。
 4. **少双轮廓**：字粒 + 整块灰 mask 不要叠（动/廓 分工）。
 5. **呈现层稳定**：不要被 idle 自动换形拉回待机；`pickBiasedForm` 必须尊重 `uiArcMode`。
 6. **层级分套记忆**：色速轨颤紊廓辨动波徙粒字比容纳等分待机/呈现。
 7. **性能**：离屏 canvas、`willReadFrequently`、重载时跳过装饰格线、减少无效 `separate` 调用等。
-8. **巨字排版**：缩放下限与 `gridCell` 关联；容纳 `shrink/truncate/wrap2`；整块灰轮廓 **默认不画**，仅「廓」显式开启。
+8. **巨字排版**：缩放下限与 `gridCell` 关联；容纳 `shrink/truncate/wrap2`；整块灰轮廓 **默认不画**；**「廓」强垫底** 与 **「辨」+ 关「动」极弱垫底**（**3.33.4**）二选一强度链。
 
 ---
 
@@ -124,7 +124,9 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 - **fillCount  cap**：缓解 N>L 重叠。  
 - **3.33.0**：巨字 matte 仅「廓」；巨字缩放/容纳；侧栏分区。  
 - **3.33.1**：`app.js` 语法热修。  
-- **3.33.2**：待机/呈现逻辑隔离（`contourStatic`、生命周期、`fillCount` 呈现限定、流体阻尼限定）。
+- **3.33.2**：待机/呈现逻辑隔离（`contourStatic`、生命周期、`fillCount` 呈现限定、流体阻尼限定）。  
+- **3.33.3**：侧栏 **title** 长文案、control-block；关「动」时 mask 垫底 α 略增；`HANDOFF` §12。  
+- **3.33.4**：**先静辨形**（关「动」+「辨」+ 未「廓」→ 极弱整 mask）；**叠分 12**、`fillCount×0.82`、巨字壳 **enforce** 略增；**生命周期 α 限幅**；**待机/巨字 gridCell** 与 **immutable em 混合** 统一字号观感；mask **flash** 再压低。
 
 ---
 
@@ -164,7 +166,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ---
 
-## 12. 控件映射与维护约定（3.33.3）
+## 12. 控件映射与维护约定（3.33.4）
 
 ### 12.1 左栏四块（`index.html` → `data-action` → `app.js` → `pet.js`）
 
@@ -177,7 +179,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 | | 速 / 眠 / 抖 | `speed` / `sleep` / `shake` | 速度挡 / sleep 模式 / 抖擞 |
 | ② 格点 · 躯体轨 · 纹理与粒数 | 轨 / 颤 / 紊 | `motionStyle` / `glyphsJitter` / `textureMotion` | 躯体范式 / 亚格颤 / 纹理体动 |
 | | 波 / 徙 / 粒 | `fluid` / `gridMarch` / `megaPack` | 流体强度 / 格移倍率 / 巨字粒数 |
-| ③ 巨字/颜：垫底 · 辨形 · 体内动 | 廓 / 辨 / 动 | `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationDynamics` | mask 垫底 / 辨形压低 / 呈现体内动 |
+| ③ 巨字/颜：垫底 · 辨形 · 体内动 | 廓 / 辨 / 动 | `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationDynamics` | **廓**：显式整 mask 垫底。**辨**：压低体内动；呈现关「动」且未开「廓」时 **极弱整 mask**。**动**：呈现体内动；开时 **不画整 mask** |
 | ④ 呈现层 · 巨字排版 | 字比 / 容纳 | `megaScale` / `macroFit` | `megaLayoutScale` / `macroFitMode` |
 
 **维护规则**：新增侧栏键时，必须同时写 **长 `title`**（一句以上，说明层级与副作用）并在本表增行；Toast 文案可在 `app.js` 与 `title` 对齐。
@@ -198,4 +200,4 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ---
 
-*文档版本随构建迭代；最后更新意图：与 `ziling-build` **3.33.3** 对齐。*
+*文档版本随构建迭代；最后更新意图：与 `ziling-build` **3.33.4** 对齐。*

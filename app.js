@@ -712,15 +712,15 @@
         const on = pet.cycleOutlineContourFirst();
         toast(
           on
-            ? `辨形优先：开（${arcLayerZh()}；巨字/颜先静态轮廓、体内动压低）`
-            : `辨形优先：关（${arcLayerZh()}；全动态，「廓」单独控垫底强度）`
+            ? `辨形优先：开（${arcLayerZh()}；体内动压低；呈现关「动」且未开「廓」时叠极弱整 mask 垫底）`
+            : `辨形优先：关（${arcLayerZh()}；无弱垫底；强轮廓请开「廓」）`
         );
       } else if (action === "presentationDynamics") {
         const on = pet.cyclePresentationGlyphDynamics();
         toast(
           on
             ? `体内动：开（呈现层；谐波/流体/蛇行等；不叠整张巨字 mask 垫底）`
-            : `体内动：关（呈现层；可按「廓」「辨」叠弱静态垫底）`
+            : `体内动：关（呈现层；开「辨」有极弱垫底；强轮廓开「廓」）`
         );
       } else if (action === "megaScale") {
         const v = pet.cycleMegaLayoutScale();

@@ -2490,14 +2490,14 @@
         noStroke: true,
         shellMax: 3,
         cap: 420,
-        spreadMin: Math.max(S * (pres ? 0.055 : 0.051), gc * (pres ? 1.1 : 1.02)),
-        spreadPasses: pres ? 18 : 12,
+        spreadMin: Math.max(S * (pres ? 0.057 : 0.051), gc * (pres ? 1.14 : 1.02)),
+        spreadPasses: pres ? 20 : 12,
         jitterScale: pres ? 0.0015 : 0.0022,
         enforceSpacing: Math.max(
-          S * (pres ? 0.064 : 0.054),
-          gc * (pres ? 1.34 : 1.12)
+          S * (pres ? 0.068 : 0.054),
+          gc * (pres ? 1.4 : 1.12)
         ),
-        enforceSpacingPasses: pres ? 26 : 16,
+        enforceSpacingPasses: pres ? 30 : 16,
         snapToShell: true,
       });
     }
@@ -3041,7 +3041,7 @@
       if (this.form === "script") {
         this.gridCell = clamp(Math.round(this.size * 0.052), 13, 26);
       } else {
-        this.gridCell = clamp(Math.round(this.size * 0.03), 9, 14);
+        this.gridCell = clamp(Math.round(this.size * 0.0345), 10, 15);
       }
       this.anchor = { x: this.center.x, y: this.center.y };
       if (this.viewMode === "script" || this.viewMode === "pet") {
@@ -3122,7 +3122,7 @@
         this.gridCell = clamp(Math.round(S * 0.052), 13, 26);
         this._resizeGlyphsForScript(this.scriptLines, { mode: "script" });
       } else if (name === "mega") {
-        this.gridCell = clamp(Math.round(S * 0.044), 14, 21);
+        this.gridCell = clamp(Math.round(S * 0.0425), 13, 20);
       } else if (name === "clock") {
         this.gridCell =
           this.clockGranularity === "sec"
@@ -3131,7 +3131,8 @@
       } else if (name === "chrono") {
         this.gridCell = clamp(Math.round(S * 0.042), 13, 22);
       } else {
-        this.gridCell = clamp(Math.round(S * 0.03), 9, 14);
+        /** 待机曲线：略抬格距，使小字与呈现巨字在观感上更接近同一尺度带 */
+        this.gridCell = clamp(Math.round(S * 0.0345), 10, 15);
       }
       if (name === "mega") {
         const mul =
@@ -3256,7 +3257,7 @@
         const approxCells = Math.floor(
           mp.fillCount / Math.max(1, stepPx * stepPx)
         );
-        const capG = clamp(Math.floor(approxCells * 0.86), 26, 220);
+        const capG = clamp(Math.floor(approxCells * 0.82), 26, 220);
         if (this.glyphs.length > capG) {
           this.glyphs.length = capG;
           this.particleCount = capG;
@@ -3860,7 +3861,7 @@
       const silMask = isMaskBackedMegaKao(this);
       const passes =
         presDense
-          ? 9
+          ? 12
           : usesMaskSnakeStream(this) && silMask
             ? 7
             : mega
@@ -4283,8 +4284,8 @@
       /** 轮廓难辨 / 越界时：略快淡出；合法区内：慢淡入减轻闪现与叠乱感 */
       const presSleep = !this.presentationGlyphDynamics;
       const fadeOut =
-        (0.4 / (0.62 + 0.38 * spd)) * (presSleep ? 1.18 : 1);
-      const fadeIn = (0.26 + 0.22 * spd) * (presSleep ? 1.42 : 1);
+        (0.4 / (0.62 + 0.38 * spd)) * (presSleep ? 1.08 : 1);
+      const fadeIn = (0.26 + 0.22 * spd) * (presSleep ? 1.22 : 1);
       const tWall = performance.now() / 1000;
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
@@ -4300,7 +4301,8 @@
           sin,
           flip
         );
-        let a = g.alpha != null ? g.alpha : 1;
+        const prevA = g.alpha != null ? g.alpha : 1;
+        let a = prevA;
         if (!ok) {
           g._megaOutsideAcc = (g._megaOutsideAcc || 0) + dt;
           a -= dt * fadeOut * (1 + (g._megaOutsideAcc || 0) * 0.32);
@@ -4310,8 +4312,12 @@
           a += dt * fadeIn;
           if (a > tgt) a = tgt;
         }
-        g.alpha = clamp(a, 0, 1);
-        if (g.alpha < 0.035) {
+        let aNext = clamp(a, 0, 1);
+        const maxStep = (presSleep ? 0.72 : 1.15) * dt;
+        if (aNext - prevA > maxStep) aNext = prevA + maxStep;
+        if (prevA - aNext > maxStep) aNext = prevA - maxStep;
+        g.alpha = aNext;
+        if (g.alpha < 0.038) {
           if (g._anchorGx != null && g._anchorGy != null) {
             this._silhouetteVacancyPulls.push({
               ax: g._anchorGx,
@@ -4329,9 +4335,9 @@
           const presL = isPresentationSilhouetteHarm(this);
           const sleepFade = presL && !this.presentationGlyphDynamics;
           g.alpha = clamp(
-            g._megaBaseAlpha * (sleepFade ? 0.4 : presL ? 0.32 : 0.48),
-            sleepFade ? 0.12 : presL ? 0.08 : 0.14,
-            sleepFade ? 0.48 : presL ? 0.36 : 0.5
+            g._megaBaseAlpha * (sleepFade ? 0.36 : presL ? 0.32 : 0.48),
+            sleepFade ? 0.14 : presL ? 0.08 : 0.14,
+            sleepFade ? 0.42 : presL ? 0.36 : 0.5
           );
           g._megaOutsideAcc = 0;
           g.wgx = 0;
@@ -4785,7 +4791,19 @@
         return;
       }
       if (isGridLayoutImmutableForm(this.form)) {
-        const em = clamp(this.gridCell * 0.83, 11.5, 20);
+        const cell = this.gridCell || 14;
+        let em;
+        if (isMaskBackedMegaKao(this) && this.viewMode === "pet") {
+          const ref = clamp(Math.round(this.size * 0.04), 12, 18);
+          const pres = isPresentationSilhouetteHarm(this);
+          const blend = 0.5;
+          const eff = clamp(cell * (1 - blend) + ref * blend, 11.5, 19);
+          /** 呈现巨字略压 em，待机 mask 略抬，减少「呈现巨大、待机过小」分裂 */
+          const k = pres ? 0.72 : 0.8;
+          em = clamp(eff * k, 10.5, 17);
+        } else {
+          em = clamp(cell * 0.83, 11.5, 20);
+        }
         for (const g of this.glyphs) {
           if (g.faceRole === "brow") {
             g.targetRot = this._quantizeTargetRot(rand(-0.04, 0.04));
@@ -4795,14 +4813,18 @@
             g.size = em * 1.04;
           } else {
             g.targetRot = 0;
-            g.size = em * lerp(1.02, 0.94, g.edge);
+            const edgeMul =
+              isMaskBackedMegaKao(this) && this.viewMode === "pet"
+                ? lerp(0.99, 0.93, g.edge)
+                : lerp(1.02, 0.94, g.edge);
+            g.size = em * edgeMul;
           }
         }
         return;
       }
-      const emMin = Math.max(8, this.gridCell * 0.66);
-      const emMax = Math.max(emMin + 0.5, this.gridCell * 0.86);
-      const em = Math.max(9, clamp(this.gridCell * 0.78, emMin, emMax));
+      const emMin = Math.max(8, this.gridCell * 0.68);
+      const emMax = Math.max(emMin + 0.5, this.gridCell * 0.88);
+      const em = Math.max(9, clamp(this.gridCell * 0.81, emMin, emMax));
       for (const g of this.glyphs) {
         if (g.faceRole === "brow") {
           g.targetRot = this._quantizeTargetRot(rand(-0.06, 0.06));
@@ -6424,22 +6446,33 @@
       ) {
         return;
       }
-      if (!this.silhouetteMatteUnderlay) return;
       const lay = this._silhouetteMatteLayer;
       if (!lay || !lay.width) return;
+      const fullMatte = !!this.silhouetteMatteUnderlay;
+      /** 关「廓」时：极弱整 mask 垫底，满足「先见静态轮廓」又不与字粒形成第二重浓墨（可再开「廓」加强） */
+      const weakGhost =
+        !fullMatte &&
+        isPresentationSilhouetteHarm(this) &&
+        !this.presentationGlyphDynamics &&
+        !!this.outlineContourFirst;
+      if (!fullMatte && !weakGhost) return;
       const S = this.size;
       ctx.save();
       ctx.translate(bx, by);
       ctx.rotate(rot);
       ctx.translate(-S / 2, -S / 2);
-      let a = light ? 0.19 : 0.29;
-      if (this.outlineContourFirst) a += light ? 0.04 : 0.05;
-      if (
-        isPresentationSilhouetteHarm(this) &&
-        !this.presentationGlyphDynamics
-      ) {
-        /** 先静辨形：略抬垫底 α，轮廓更易读（仍低于旧版「辨隐式整块」灰度） */
-        a += light ? 0.055 : 0.078;
+      let a;
+      if (weakGhost) {
+        a = light ? 0.044 : 0.062;
+      } else {
+        a = light ? 0.19 : 0.29;
+        if (this.outlineContourFirst) a += light ? 0.04 : 0.05;
+        if (
+          isPresentationSilhouetteHarm(this) &&
+          !this.presentationGlyphDynamics
+        ) {
+          a += light ? 0.05 : 0.072;
+        }
       }
       ctx.globalAlpha = a;
       ctx.drawImage(lay, 0, 0, lay.width, lay.height, 0, 0, S, S);
@@ -6551,7 +6584,7 @@
         }
       } catch (_) {}
       const flash = isMaskBackedMegaKao(this)
-        ? (this._glyphFlash || 0) * 0.22
+        ? (this._glyphFlash || 0) * 0.1
         : this._glyphFlash || 0;
 
       this._drawSilhouetteMatteUnderlay(
@@ -6588,7 +6621,10 @@
         const baseSize = g.size * this.scale * (opts.sizeMul || 1);
         let size = baseSize * roleMul;
         if (this.gridUnity && this.gridCell) {
-          const cap = this.gridCell * (crispForm ? 0.92 : 0.88) * this.scale;
+          let cap = this.gridCell * (crispForm ? 0.92 : 0.88) * this.scale;
+          if (isPresentationSilhouetteHarm(this) && crispForm) {
+            cap *= 0.93;
+          }
           if (size > cap) size = cap;
         }
         const ch0 = g.char && g.char.length ? g.char.codePointAt(0) : 0;
@@ -6609,7 +6645,7 @@
           isPresentationSilhouetteHarm(this) &&
           !this.presentationGlyphDynamics &&
           !g.faceRole
-            ? 0.64
+            ? 0.74
             : 1;
         const alpha =
           (opts.alphaMul != null ? opts.alphaMul : 1) *
