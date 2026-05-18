@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.33.5" />
+  <meta name="ziling-build" content="3.33.6" />
   <title>字灵 · 开发者页控制台</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.33.5" />
+  <link rel="stylesheet" href="./styles.css?v=3.33.6" />
 </head>
 <body>
   <div class="app" data-ui-arc="standby">
@@ -58,7 +58,7 @@
             <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="剪影辨形">
               <button type="button" class="rail-tool" data-action="silhouetteMatteUnderlay" title="【廓】剪影静态垫底：开时在字粒下方绘制整张 mask 半透明图（与可走格同几何）。默认关以避免整块灰字；需强辨形时再开。">廓</button>
               <button type="button" class="rail-tool" data-action="outlineContourFirst" title="【辨】辨形优先：压低体内谐波/流体等。呈现层关「动」时，若未开「廓」，会叠一层极弱整 mask 垫底（先见轮廓）；开「廓」则改用显式垫底强度。">辨</button>
-              <button type="button" class="rail-tool" data-action="presentationDynamics" title="【动】呈现层专用：体内字粒是否跑谐波/流体/蛇行等。关=先静后动（推荐默认）；开=动态构形。开「动」时不叠整张 mask 垫底以免双轮廓。关→开时字粒短时略闪，便于确认已启用。">动</button>
+              <button type="button" class="rail-tool" data-action="presentationDynamics" title="【动】呈现层专用：体内字粒是否跑谐波/流体/蛇行等。关=锁格静形（谐步扰动、蛇行格、亚格颤绘移、空位拉回均停；叠分仍解共格）；开=动态构形。开「动」时不叠整张 mask 垫底以免双轮廓。关→开时字粒短时略闪，便于确认已启用。">动</button>
             </nav>
           </div>
           <div class="rail-section ui-arc-present-only">
@@ -104,7 +104,7 @@
         <div class="stage-main" id="stageMain" aria-hidden="false">
           <canvas id="petCanvas" aria-label="字灵画布"></canvas>
           <div class="form-label" id="formLabel">软团</div>
-          <div class="hint" id="hint">侧栏与底部按钮<strong>悬停</strong>可看详细说明 · 「层」切换待机/呈现（参数分套）· 呈现关「动」且开「辨」：极弱整 mask 先静辨形；要强轮廓再开「廓」· 呈现层「动」关→开：字粒短时略闪作确认（3.33.5）· URL <code>?macroFit=</code> <code>?megaScale=</code> 等见 PLAN / HANDOFF</div>
+          <div class="hint" id="hint">侧栏与底部按钮<strong>悬停</strong>可看详细说明 · 「层」切换待机/呈现（参数分套）· 呈现关「动」且开「辨」：极弱整 mask 先静辨形；要强轮廓再开「廓」· 关「动」时剪影内<strong>锁格静形</strong>（停蛇行/谐步扰动/空位拉回；叠分仍解共格）·「动」关→开：字粒短时略闪作确认（3.33.6）· URL <code>?macroFit=</code> <code>?megaScale=</code> 等见 PLAN / HANDOFF</div>
         </div>
       </section>
 
@@ -250,11 +250,11 @@
     </div>
   </div>
 
-  <script src="./js/ziling/play-bounds.js?v=3.33.5"></script>
-  <script src="./js/ziling/shape-field.js?v=3.33.5"></script>
-  <script src="./js/ziling/matrix-bridge.js?v=3.33.5"></script>
-  <script src="./js/ziling/shape-consumer.js?v=3.33.5"></script>
-  <script src="./pet.js?v=3.33.5"></script>
-  <script src="./app.js?v=3.33.5"></script>
+  <script src="./js/ziling/play-bounds.js?v=3.33.6"></script>
+  <script src="./js/ziling/shape-field.js?v=3.33.6"></script>
+  <script src="./js/ziling/matrix-bridge.js?v=3.33.6"></script>
+  <script src="./js/ziling/shape-consumer.js?v=3.33.6"></script>
+  <script src="./pet.js?v=3.33.6"></script>
+  <script src="./app.js?v=3.33.6"></script>
 </body>
 </html>

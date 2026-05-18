@@ -126,7 +126,8 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 - **3.33.1**：`app.js` 语法热修。  
 - **3.33.2**：待机/呈现逻辑隔离（`contourStatic`、生命周期、`fillCount` 呈现限定、流体阻尼限定）。  
 - **3.33.3**：侧栏 **title** 长文案、control-block；关「动」时 mask 垫底 α 略增；`HANDOFF` §12。  
-- **3.33.4**：**先静辨形**（关「动」+「辨」+ 未「廓」→ 极弱整 mask）；**叠分 12**、`fillCount×0.82`、巨字壳 **enforce** 略增；**生命周期 α 限幅**；**待机/巨字 gridCell** 与 **immutable em 混合** 统一字号观感；mask **flash** 再压低。
+- **3.33.4**：**先静辨形**（关「动」+「辨」+ 未「廓」→ 极弱整 mask）；**叠分 12**、`fillCount×0.82`、巨字壳 **enforce** 略增；**生命周期 α 限幅**；**待机/巨字 gridCell** 与 **immutable em 混合** 统一字号观感；mask **flash** 再压低。  
+- **3.33.6**：关「动」**锁格静形**（`presSleepLock`）；停蛇行格/谐扰/空位拉回/亚格颤；叠分 **18 遍** + 呈现拖曳仍叠分；**「动」** 偏好 **待机不误读**；`docs/typography-forward.md`。
 
 ---
 
@@ -166,7 +167,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ---
 
-## 12. 控件映射与维护约定（3.33.5）
+## 12. 控件映射与维护约定（3.33.6）
 
 ### 12.1 左栏四块（`index.html` → `data-action` → `app.js` → `pet.js`）
 
@@ -200,4 +201,4 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ---
 
-*文档版本随构建迭代；最后更新意图：与 `ziling-build` **3.33.5** 对齐。*
+*文档版本随构建迭代；最后更新意图：与 `ziling-build` **3.33.6** 对齐。*
