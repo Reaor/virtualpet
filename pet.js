@@ -636,8 +636,8 @@
   }
 
   /** 与剪影相同的缩放栅格，用于轮廓内可走判定（alpha > 128） */
-  function rasterizeMask(drawFn, S) {
-    const cap = 280;
+  function rasterizeMask(drawFn, S, capPx) {
+    const cap = clamp(capPx != null ? +capPx : 300, 200, 384);
     const sampleS = Math.min(Math.round(S), cap);
     const scale = sampleS / S;
     const c = document.createElement("canvas");
@@ -1108,6 +1108,20 @@
     n = Math.max(n, nBand);
     n = Math.max(n, 20 + 12 * gcount);
     return clamp(n, 28, 250);
+  }
+
+  /**
+   * 呈现层巨字：按 mask 栅格与格距估算「一格一字」上限，略留空位给华容道；
+   * 须在 `rasterizeMask` 之后调用（依赖 `mp.scale`）。
+   */
+  function presentationMegaParticleCapFromMask(mp, cellW) {
+    if (!mp || mp.fillCount == null) return 250;
+    const cW = Math.max(8, cellW || 12);
+    const scaleM =
+      mp.scale != null && mp.scale > 0 ? +mp.scale : mp.w / 320;
+    const cellPx = Math.max(0.55, cW * scaleM);
+    const approx = Math.floor(mp.fillCount / Math.max(1, cellPx * cellPx));
+    return clamp(Math.floor(approx * 0.94), 28, 245);
   }
 
   /**
@@ -3336,12 +3350,27 @@
           this._arcPrefs[this.uiArcMode].megaParticleMul != null
             ? clamp(+this._arcPrefs[this.uiArcMode].megaParticleMul, 0.72, 1.28)
             : 1;
+        const resolvedMega = resolveMegaLayoutInput(this, S);
         let want = suggestMegaGlyphParticleCount(
-          resolveMegaLayoutInput(this, S).disp,
-          S,
+          resolvedMega.disp,
+          resolvedMega.Slay,
           this.gridCell
         );
         want = clamp(Math.round(want * mul), 26, 255);
+        if (
+          this.viewMode === "pet" &&
+          this.uiArcMode === "presentation"
+        ) {
+          const probeDraw = createMacroTextDraw(resolvedMega.disp, {
+            noStroke: true,
+          });
+          const mpProbe = rasterizeMask(probeDraw, resolvedMega.Slay, 320);
+          const capP = presentationMegaParticleCapFromMask(
+            mpProbe,
+            this.gridCell || 12
+          );
+          want = clamp(Math.min(want, capP), 26, 255);
+        }
         if (want !== this.glyphs.length) {
           this.particleCount = want;
           this._initGlyphs();
@@ -3372,6 +3401,8 @@
       }
       const data = buildFormLayoutData(this, name, this.particleCount, S);
       if (!data || !data.targets || !data.targets.length) return;
+      const megaMaskS =
+        name === "mega" ? resolveMegaLayoutInput(this, S).Slay : S;
       this.form = name;
       if (name !== "script") {
         if (isDisplayPresentationForm(name)) {
@@ -3427,38 +3458,14 @@
       this._cinnabarIdx = null; // 换形 → 重新挑朱砂字
 
       if (data.maskDraw) {
-        this._maskPack = rasterizeMask(data.maskDraw, S);
+        this._maskPack = rasterizeMask(data.maskDraw, megaMaskS, 320);
         this._maskFormKey = name;
         this._maskSizeIdx = Math.round(S * 10);
-        this._rebuildMatteLayerCanvas(data.maskDraw, S);
+        this._rebuildMatteLayerCanvas(data.maskDraw, megaMaskS);
       } else {
         this._maskPack = null;
         this._maskFormKey = "";
         this._silhouetteMatteLayer = null;
-      }
-
-      /** 呈现层巨字/颜：粒子数不得超过 mask 内大致可分的格位（待机层不截，避免「字变少」与待机观感劣化） */
-      if (
-        this._maskPack &&
-        this._maskPack.fillCount != null &&
-        this.viewMode === "pet" &&
-        this.uiArcMode === "presentation" &&
-        (name === "mega" || String(name).startsWith("kao_"))
-      ) {
-        const cellW = this.gridCell || 12;
-        const mp = this._maskPack;
-        const stepPx = Math.max(
-          1,
-          (cellW * Math.max(mp.w, 1)) / Math.max(S, 1)
-        );
-        const approxCells = Math.floor(
-          mp.fillCount / Math.max(1, stepPx * stepPx)
-        );
-        const capG = clamp(Math.floor(approxCells * 0.68), 24, 190);
-        if (this.glyphs.length > capG) {
-          this.glyphs.length = capG;
-          this.particleCount = capG;
-        }
       }
 
       if (this.faceLayerMode && name !== "script") this._assignFaceGlyphs();
@@ -4577,7 +4584,7 @@
           if (a > tgt) a = tgt;
         }
         let aNext = clamp(a, 0, 1);
-        const maxStep = (presSleep ? 0.48 : 1.12) * dt;
+        const maxStep = (presSleep ? 0.28 : 1.12) * dt;
         if (aNext - prevA > maxStep) aNext = prevA + maxStep;
         if (prevA - aNext > maxStep) aNext = prevA - maxStep;
         g.alpha = aNext;
@@ -4600,7 +4607,7 @@
           const sleepFade = presL && !this.presentationGlyphDynamics;
           g.alpha = clamp(
             g._megaBaseAlpha * (sleepFade ? 0.36 : presL ? 0.32 : 0.48),
-            sleepFade ? 0.14 : presL ? 0.08 : 0.14,
+            sleepFade ? 0.22 : presL ? 0.08 : 0.14,
             sleepFade ? 0.42 : presL ? 0.36 : 0.5
           );
           g._megaOutsideAcc = 0;
@@ -6876,7 +6883,7 @@
         this._silhouetteMatteLayer = null;
         return;
       }
-      const cap = 280;
+      const cap = 320;
       const sampleS = Math.min(Math.max(8, Math.round(S)), cap);
       const scale = sampleS / S;
       const c = document.createElement("canvas");
