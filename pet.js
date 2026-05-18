@@ -1055,7 +1055,12 @@
                 ? macroTextBalancedWrapShort(rawTrim, Stry)
                 : rawTrim;
         const need = 28 + gCount * 34 + (gCount >= 3 ? 24 : 0);
-        if (suggestMegaGlyphParticleCount(dTry, S, gc) >= need || se <= 0.78) {
+        if (
+          suggestMegaGlyphParticleCount(dTry, Stry, gc, {
+            densePresentation: true,
+          }) >= need ||
+          se <= 0.78
+        ) {
           break;
         }
         se = Math.max(0.78, se * 0.935);
@@ -1083,10 +1088,12 @@
   }
 
   /**
-   * 巨字粒子数：按剪影填充面积 / 格面积严密估算，并预留空位供格内华容道滑动。
-   * voidFrac：留白比例（略随字数增，避免多字时塞满）。
+   * 巨字粒子数：按剪影填充面积 / 格面积估算；`opts.densePresentation` 为真时
+   * 提高目标密度（略减留白乘子），便于呈现层「辨形」而非待机层的壳层水墨感。
    */
-  function suggestMegaGlyphParticleCount(displayText, S, cellPx) {
+  function suggestMegaGlyphParticleCount(displayText, S, cellPx, opts) {
+    const o = opts || {};
+    const dense = !!o.densePresentation;
     const text = String(displayText || "字").trim() || "字";
     const graphemes = Array.from(text);
     const gcount = Math.max(1, graphemes.length);
@@ -1099,15 +1106,18 @@
       cellPx != null && cellPx > 0
         ? cellPx
         : clamp(Math.round(S * 0.043), 12, 20);
-    const cellArea = cellEst * cellEst * 0.92;
-    const voidFrac = clamp(0.2 + 0.021 * gcount, 0.19, 0.36);
+    const cellPack = dense ? 0.86 : 0.92;
+    const cellArea = cellEst * cellEst * cellPack;
+    const voidFrac = dense
+      ? clamp(0.055 + 0.009 * gcount, 0.05, 0.16)
+      : clamp(0.2 + 0.021 * gcount, 0.19, 0.36);
     let n = Math.floor((areaLogical * (1 - voidFrac)) / Math.max(cellArea, 1));
     const shellPx = countSilhouetteBandPixels(draw, S, sampleS, 3);
     const bandLogical = shellPx * scaleRel * scaleRel;
-    const nBand = Math.ceil(bandLogical / Math.max(cellArea * 0.58, 1));
+    const nBand = Math.ceil(bandLogical / Math.max(cellArea * (dense ? 0.5 : 0.58), 1));
     n = Math.max(n, nBand);
-    n = Math.max(n, 20 + 12 * gcount);
-    return clamp(n, 28, 250);
+    n = Math.max(n, (dense ? 32 : 20) + (dense ? 16 : 12) * gcount);
+    return clamp(n, dense ? 34 : 28, 250);
   }
 
   /**
@@ -1121,12 +1131,14 @@
       mp.scale != null && mp.scale > 0 ? +mp.scale : mp.w / 320;
     const cellPx = Math.max(0.55, cW * scaleM);
     const approx = Math.floor(mp.fillCount / Math.max(1, cellPx * cellPx));
-    return clamp(Math.floor(approx * 0.94), 28, 245);
+    return clamp(Math.floor(approx * 0.985), 32, 250);
   }
 
   /**
    * 小字粒子铺满任意字符串的笔画轮廓（与 sampleSilhouette 同源栅格采样）。
    * opts.kao：颜文字专用字体栈；否则无 CJK 时用等宽（数字/ASCII），有汉字用-serif。
+   * opts.shellSample：真=仅外圈薄墨壳（待机水墨感）；假=**全不透明笔画**步进抽样（呈现辨形）。
+   * spread / enforce 在两种采样后统一执行；仅 shell 路径在末尾做 snapTargetsToShellPx。
    */
   function buildTextSilhouetteLayout(raw, n, S, opts) {
     const o = opts || {};
@@ -1137,53 +1149,56 @@
     });
     const kao = o.kao;
     let targets;
+    let shellMeta = null;
     if (o.shellSample) {
-      const shellMeta = o.snapToShell !== false ? {} : null;
+      shellMeta = o.snapToShell !== false ? {} : null;
       targets = sampleSilhouetteShell(draw, S, n, {
         cap: o.cap != null ? o.cap : 400,
         shellMax: o.shellMax != null ? o.shellMax : 3,
         jitterScale: o.jitterScale != null ? o.jitterScale : 0.008,
       }, shellMeta);
-      if (o.spreadMin != null && targets.length > 1) {
-        spreadTargets2D(
-          targets,
-          o.spreadMin,
-          o.spreadPasses != null ? o.spreadPasses : 4
-        );
-      }
+    } else {
+      targets = sampleSilhouette(draw, S, n, {
+        cap: o.cap != null ? o.cap : 420,
+        jitterScale:
+          o.jitterScale != null ? o.jitterScale : kao ? 0.05 : 0.018,
+      });
+    }
+    if (o.spreadMin != null && targets.length > 1) {
+      spreadTargets2D(
+        targets,
+        o.spreadMin,
+        o.spreadPasses != null ? o.spreadPasses : 4
+      );
+    }
+    if (o.enforceSpacing != null && targets.length > 1) {
+      enforceTargetsMinSpacing(
+        targets,
+        o.enforceSpacing,
+        o.enforceSpacingPasses != null ? o.enforceSpacingPasses : 8
+      );
+    }
+    if (
+      o.shellSample &&
+      shellMeta &&
+      shellMeta.pxFlat &&
+      shellMeta.pxFlat.length >= 4
+    ) {
+      const farSq = (Math.max(S * 0.017, 9)) ** 2;
+      snapTargetsToShellPx(
+        targets,
+        shellMeta.pxFlat,
+        shellMeta.scale,
+        shellMeta.sampleS,
+        farSq
+      );
       if (o.enforceSpacing != null && targets.length > 1) {
         enforceTargetsMinSpacing(
           targets,
-          o.enforceSpacing,
-          o.enforceSpacingPasses != null ? o.enforceSpacingPasses : 8
+          o.enforceSpacing * 0.92,
+          6
         );
       }
-      if (
-        shellMeta &&
-        shellMeta.pxFlat &&
-        shellMeta.pxFlat.length >= 4
-      ) {
-        const farSq = (Math.max(S * 0.017, 9)) ** 2;
-        snapTargetsToShellPx(
-          targets,
-          shellMeta.pxFlat,
-          shellMeta.scale,
-          shellMeta.sampleS,
-          farSq
-        );
-        if (o.enforceSpacing != null && targets.length > 1) {
-          enforceTargetsMinSpacing(
-            targets,
-            o.enforceSpacing * 0.92,
-            6
-          );
-        }
-      }
-    } else {
-      targets = sampleSilhouette(draw, S, n, {
-        cap: 336,
-        jitterScale: kao ? 0.05 : 0.035,
-      });
     }
     return {
       targets,
@@ -2653,22 +2668,31 @@
       const dispFlat = String(disp || "字").replace(/\n/g, "");
       const gLen = Math.max(1, Array.from(dispFlat).length);
       const presOne = pres && gLen <= 1;
+      if (pres) {
+        /** 呈现层：全笔画撒点 + 较紧 spread/enforce，优先「可辨形」；待机见 shellSample 分支 */
+        return buildTextSilhouetteLayout(disp, n, Slay, {
+          shellSample: false,
+          noStroke: true,
+          cap: 480,
+          spreadMin:
+            Math.max(Slay * 0.028, gc * 0.72) * (presOne ? 0.95 : 1),
+          spreadPasses: presOne ? 22 : 20,
+          jitterScale: 0.001,
+          enforceSpacing:
+            Math.max(Slay * 0.034, gc * 0.84) * (presOne ? 0.93 : 1),
+          enforceSpacingPasses: presOne ? 30 : 26,
+        });
+      }
       return buildTextSilhouetteLayout(disp, n, Slay, {
         shellSample: true,
         noStroke: true,
         shellMax: 3,
         cap: 420,
-        spreadMin: Math.max(
-          S * (pres ? 0.057 : 0.051),
-          gc * (pres ? 1.14 : 1.02)
-        ) * (presOne ? 1.1 : 1),
-        spreadPasses: pres ? (presOne ? 26 : 20) : 12,
-        jitterScale: pres ? 0.0015 : 0.0022,
-        enforceSpacing: Math.max(
-          S * (pres ? 0.068 : 0.054),
-          gc * (pres ? 1.4 : 1.12)
-        ) * (presOne ? 1.14 : 1),
-        enforceSpacingPasses: pres ? (presOne ? 40 : 30) : 16,
+        spreadMin: Math.max(S * 0.051, gc * 1.02),
+        spreadPasses: 12,
+        jitterScale: 0.0022,
+        enforceSpacing: Math.max(S * 0.054, gc * 1.12),
+        enforceSpacingPasses: 16,
         snapToShell: true,
       });
     }
@@ -3351,10 +3375,15 @@
             ? clamp(+this._arcPrefs[this.uiArcMode].megaParticleMul, 0.72, 1.28)
             : 1;
         const resolvedMega = resolveMegaLayoutInput(this, S);
+        const suggestOpts =
+          this.viewMode === "pet" && this.uiArcMode === "presentation"
+            ? { densePresentation: true }
+            : undefined;
         let want = suggestMegaGlyphParticleCount(
           resolvedMega.disp,
           resolvedMega.Slay,
-          this.gridCell
+          this.gridCell,
+          suggestOpts
         );
         want = clamp(Math.round(want * mul), 26, 255);
         if (
