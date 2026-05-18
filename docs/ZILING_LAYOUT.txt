@@ -2,7 +2,7 @@
 =============================================
 
 页面
-  index.html       入口；侧栏分区 + 各控件 title（悬停说明）；先加载 js/ziling/*.js 再 pet.js、app.js
+  index.html       入口；侧栏分区 + 各控件 title；#helpDialog 入门说明（?）；先加载 js/ziling/*.js 再 pet.js、app.js
   styles.css       样式
   app.js           「层」+ 轨/颤/紊/廓/辨/动/波/徙/粒/字比/容纳；toast 标明 arcLayer；色盘写入当前层
 

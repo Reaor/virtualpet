@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.33.6** 起）。  
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.34.6** 起）。
 > **接手说明**：`HANDOFF.md`（架构、常见坑、需求归纳、**侧栏 title 与区块**；**非**完整对话逐字存档）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
@@ -10,6 +10,7 @@
 | 检查项 | 预期 |
 |--------|------|
 | 页头小字 | **build ×.×.×** 与 `meta ziling-build` 一致 |
+| 入门说明 | 点页眉 **?** 应弹出居中说明层（原生 `<dialog>`）；**Esc** 或点遮罩外关闭 |
 | 脚本 / 样式 URL | `./pet.js?v=…` / `./app.js?v=…` / `./styles.css?v=…`（强刷缓存） |
 | 页面 | 浅色 App 风；**无**整段「AI 建议」面板（协议仍可在代码 `ingestAiSuggestionBlock` 使用） |
 
@@ -20,6 +21,70 @@
 ---
 
 ## 1. 需求对照（含你最近一次大反馈）
+
+### 1.0 文档 / 入门 UI / 与设计真源对齐（3.34.0）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| `DESIGN.md` §2.2 / §2.3 与 `app.js` 回稿手势 | **已完成** | 以「长按蓄满 → 松手」「≤8px 位移」为准，去除「长按再拖」旧表述 |
+| 页眉 **?** 打开入门说明 | **已完成** | 原生 `<dialog>`（`#helpDialog`），内容与 `DESIGN.md` §2 对齐，减少「控制台难懂」落差 |
+| `AGENTS.md` / `README.md` 与产品气质矛盾 | **已完成** | 去除「宣纸主视觉」默认、`README` 首段「AI 建议」主导表述；真源指向 `DESIGN.md` |
+| 大屏主容器宽度 | **已完成** | `.app` `max-width` **780→940px**，画布相对更大 |
+| 键盘焦点 / 减少动画 | **已完成** | 侧栏与主要控件 **`:focus-visible`**；**`prefers-reduced-motion`** 下弱化按钮 `transform` 与部分 `transition` |
+| 诗笺脚注 URL 示例 | **已完成** | 巨字示例改为 **`?form=mega&macroText=`** 组合，避免单独 `?macroText=` 易误解 |
+
+### 1.05 巨字 / 颜剪影：叠字、运动、按钮语义（3.34.1）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 第二重巨字剪影抢读 | **已完成** | 呈现层 **`outlineContourFirst`（淡影）默认关**；弱整 mask α **再压低**（`_drawSilhouetteMatteUnderlay`） |
+| 体内字重叠难辨 | **已完成** | `fillCount` 截断 **×0.72**；`_separateOverlappingGridGlyphs` **16** 遍；呈现巨字/颜 **字身统一 `em`** + 绘制 **roleMul 拉平** |
+| 期望横竖格匀速随机 | **部分+引导** | 默认 **谐波** + **关内动**；新增 **「规整」** 一键写呈现套为谐波+全静+纹理流并疏散叠格；「走格」循环仍可选蛇行/轮廓游走（易叠字，少用） |
+| 无「全静」入口 | **已完成** | **「内动」** 关即全静；**「规整」** 强制关内动并收敛轨 |
+| 按钮名难联想 | **已完成** | 侧栏易读名：**走格 / 整块灰底 / 淡影 / 内动 / 规整**；`HANDOFF.md` §12 表同步 |
+| 待机与呈现底部按钮混读 | **已完成** | 折叠 summary 改为 **待机·曲线** / **呈现·计时** / **呈现·颜文字**；**绿/蓝左边条**（`styles.css`） |
+
+### 1.06 走格范式 / 呈现轮廓 / 躯体字号 / 叠分性能（3.34.2）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 走格模式区分度低 | **已完成** | 侧栏 **谐步 / 廊道 /（待机）漫游** 三键直达 + `rail-tool--active`；文案与 `BODY_MOTION_LABELS` 对齐 |
+| 呈现轮廓应小字拼、不要整块黑大字 | **已完成** | `isPresentationSilhouetteHarm` 下 **`_drawSilhouetteMatteUnderlay` 直接 return**；灰底/淡影 **仅待机层**显示 |
+| 躯体字大小统一调节 | **已完成** | `_arcPrefs.*.bodyGlyphEmMul` + 侧栏 **「字号」**；`_applyGridTypography` 末尾 `_applyBodyGlyphEmMulToGlyphs` |
+| 呈现壳漫游与拼形冲突 | **已完成** | `applyArcVisualPrefsToPet` **强制 contour→harmonic**；`cycleBodyMotionStyle` 在呈现仅 **谐步↔廊道** |
+| 颤关掉谐步导致不像格点 | **已完成** | `silhouetteStrictHarmonicGrid` **去掉对 jitter 的否定** |
+| 叠分卡顿 | **已完成** | 呈现剪影 **第二遍 `_separateOverlappingGridGlyphs` 隔帧**；cap **×0.68** |
+
+### 1.07 呈现巨字排布 / 颤幅 / 拖曳格扰 / 华容道在剪影（3.34.3）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 多字巨字挤一行、三字易乱 | **已完成** | **拼满画布**：`macroTextBalancedWrapShort`（2 字分行；3 字在 `wrap2` 不拆时 **2+1**）；`resolveMegaLayoutInput` 在呈现 **fit_canvas** 下迭代 **略缩字比** 以满足估算粒子下限 |
+| 按画布收紧格距 | **已完成** | `computePresentationMegaGridCell`（`PB.inset` + 字数）在呈现 **fit_canvas** 巨字 `setForm` 时写 `gridCell` |
+| 逐字呈现模式 | **已完成** | `_arcPrefs.presentation.presentationMegaLayoutMode` **`sequential_chars`**；侧栏 **「排布」**；`_megaSeqIdx` + `_tickPresentationMegaAux` 定时 `setForm` |
+| 颤动画幅度可调 | **已完成** | `silhouetteJitterAmpMul` + 侧栏 **「颤幅」**；绘移 `cap` 乘子 |
+| 拖曳不要整块平移感 | **部分→进阶** | **3.34.3**：格向残差 + 异相偏移。**3.34.4**：`_dragTargetPos` + **`pos` lerp**。**3.34.5**：**`_dragShellWorld`** 跟手、**`pos` 拖曳中冻结**，**`endDrag`** 对齐；解耦拖曳时 **仍叠分**；`_bodyWorldForShell` |
+| 规整静态下邻格互换律动 | **已完成** | **华容道**在呈现剪影 **亦启用**；静帧（关内动）**冷却 ×2.55**；开内动略加快（×0.88）。**3.34.4**：规整后 **约 0.9s** 才允许下一次互换；关内动下 **互换成功时 α 一次压低**。**3.34.5**：swap **α×0.78**（轻淡）；拖曳解耦时华容道 **冷却 ×1.55** |
+
+### 1.09 拖曳解耦锚点 / 叠分在拖 / 单字壳匀 / 规整谐步（3.34.5）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 拖曳尽量不依赖整体位移 | **部分完成** | **`_dragShellDecoupled`**：`dragTo` 只动 **`_dragShellWorld`**；**`pos`/`vel` 积分冻结**；**`endDrag`** 将 **`pos` 对齐壳心**；**`_bodyWorldForShell`** 供格迈与叠分 |
+| 拖曳中仍叠分 | **已完成** | **`_separateOverlappingGridGlyphs`**：解耦拖曳 **不早退**；**`bx,by`** 取自 **`_bodyWorldForShell`** |
+| 单字巨字内分布 | **已完成** | **`buildFormLayoutData("mega")`**：呈现且 **单 grapheme** 时 **略增** `spreadMin` / `enforceSpacing` / `spreadPasses` / `enforceSpacingPasses` |
+| 规整横竖谐步观感 | **部分完成** | **关内动** 下 **关 `strictSilGrid` 离散谐扰**；**亚格颤** lerp 略柔；生命周期 **α 步幅略收** |
+| 侧栏「速」在关内动仍可感 | **部分完成** | **`mergePresentationSilhouetteMotion`**：`presSleep` 时 **`timeScale` ×0.32**（原 ×0.22） |
+| 关内动锁格真静形（3.34.6） | **已完成** | **`presSleepLock`**；**`presentationGlyphDynamics`** 仅 **snapshot** 入呈现套，待机 **apply** 读呈现套；生命周期 **α maxStep** 关内动 **0.48** |
+| 叠分与拖曳并存（3.34.6） | **已完成** | **`_separateOverlappingGridGlyphs`**：呈现剪影拖曳或 **`decoupDrag`** 时不早退；遍数 **拖曳解耦时 20** 否则 **18** |
+
+### 1.08 规整先静与拖曳缓跟（3.34.4）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 规整后轮廓先稳再动 | **已完成** | `applyPresentationSilhouetteHarmonicCalm` 将 **`_huarongNextAt` 推迟约 900ms**，避免刚疏散完立刻换位 |
+| 静态下换位可辨 | **已完成** | `presSleep` 且华容道 **swapPair** 成功后，两粒 **`alpha` 乘 0.36** 夹上下限，配合既有生命周期淡入 |
+| 呈现剪影拖曳缓跟手 | **已由 3.34.5 替代** | **3.34.4**：`_dragTargetPos` + **`pos` lerp**。**3.34.5**：**壳心跟手、锚点松手对齐**（见 §1.09） |
 
 ### 1.9 表情用「字」拼轮廓 · 大字倒计时 · 全身动物剪影 · 去月 · 龙可见 · 换形不挤左上角 · 运动更紧凑
 

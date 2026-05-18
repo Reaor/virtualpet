@@ -885,6 +885,54 @@
     return MACRO_FIT_MODES.indexOf(s) >= 0 ? s : "shrink";
   }
 
+  const MEGA_PRESENTATION_LAYOUT_MODES = ["fit_canvas", "sequential_chars"];
+  const MEGA_PRESENTATION_LAYOUT_LABELS = {
+    fit_canvas: "拼满画布",
+    sequential_chars: "逐字轮换",
+  };
+
+  function normalizeMegaPresentationLayoutMode(m) {
+    const s = String(m || "").trim();
+    return MEGA_PRESENTATION_LAYOUT_MODES.indexOf(s) >= 0
+      ? s
+      : "fit_canvas";
+  }
+
+  /**
+   * 呈现层短串（2–3 字）也拆行：`macroTextWrapTwoLines` 对 ≤3 字原样返回，
+   * 多字巨字易挤乱；此处做 1+1 / 2+1 等轻量分行。
+   */
+  function macroTextBalancedWrapShort(raw, S) {
+    const t0 = String(raw || "").trim() || "字";
+    const chars = Array.from(t0);
+    const n = chars.length;
+    if (n <= 1) return t0;
+    if (n === 2) return `${chars[0]}\n${chars[1]}`;
+    if (n === 3) {
+      const w2 = macroTextWrapTwoLines(t0, S);
+      if (w2.indexOf("\n") >= 0) return w2;
+      return `${chars[0]}${chars[1]}\n${chars[2]}`;
+    }
+    return macroTextWrapTwoLines(t0, S);
+  }
+
+  /** 呈现巨字「拼满」：按可用画布估算小字格距，多字时略收紧以减叠格。 */
+  function computePresentationMegaGridCell(self, S, graphemeCount) {
+    const g = Math.max(1, graphemeCount | 0);
+    let usable = Math.min(S * 2.05, 520);
+    try {
+      const inset =
+        self.width > 0 ? PB.inset(self.width, self.height) : 0;
+      const W = Math.max(120, self.width || S * 2.2);
+      const H = Math.max(90, self.height || S * 2.2);
+      usable = Math.min(W - inset * 2, H - inset * 2) * 0.58;
+    } catch (e) {
+      /* ignore */
+    }
+    const stem = 13.5 + g * 5.4 + (g >= 3 ? 6 : 0);
+    return clamp(Math.round(usable / stem), 9, 18);
+  }
+
   /** 按画布宽度截断巨字串（与 createMacroTextDraw 字体栈一致）。 */
   function macroTextTruncateToWidth(raw, S, margin) {
     const t0 = String(raw || "").trim() || "字";
@@ -966,11 +1014,72 @@
     const scaleEff = clamp(Math.max(minByCell, scaleUser), 0.76, 1.14);
     const Slay = S * scaleEff;
     const mode = normalizeMacroFitMode(self.macroFitMode);
-    const raw = self._pickMacroDisplay();
-    let disp = raw;
-    if (mode === "truncate") disp = macroTextTruncateToWidth(raw, Slay, 0.88);
-    else if (mode === "wrap2") disp = macroTextWrapTwoLines(raw, Slay);
-    return { Slay, disp, gc, mode };
+    const rawFull =
+      typeof self._pickMacroDisplayForLayout === "function"
+        ? String(self._pickMacroDisplayForLayout() || "字").trim() || "字"
+        : String(self._pickMacroDisplay() || "字").trim() || "字";
+    const isSeq =
+      self.uiArcMode === "presentation" &&
+      normalizeMegaPresentationLayoutMode(self.presentationMegaLayoutMode) ===
+        "sequential_chars";
+
+    let disp = rawFull;
+    if (mode === "truncate") {
+      disp = macroTextTruncateToWidth(rawFull, Slay, 0.88);
+    } else if (mode === "wrap2") {
+      disp = macroTextWrapTwoLines(rawFull, Slay);
+    }
+
+    let scaleEffFinal = scaleEff;
+    let dispFinal = disp;
+    if (
+      !isSeq &&
+      self.uiArcMode === "presentation" &&
+      normalizeMegaPresentationLayoutMode(self.presentationMegaLayoutMode) ===
+        "fit_canvas"
+    ) {
+      const rawTrim = rawFull;
+      const gCount = Math.max(1, Array.from(rawTrim).length);
+      if (gCount >= 2 && mode !== "truncate") {
+        dispFinal = macroTextBalancedWrapShort(rawTrim, S * scaleEffFinal);
+      }
+      let se = scaleEffFinal;
+      for (let it = 0; it < 8; it++) {
+        const Stry = S * se;
+        const dTry =
+          mode === "truncate"
+            ? macroTextTruncateToWidth(rawFull, Stry, 0.88)
+            : mode === "wrap2"
+              ? macroTextWrapTwoLines(rawFull, Stry)
+              : gCount >= 2 && mode !== "truncate"
+                ? macroTextBalancedWrapShort(rawTrim, Stry)
+                : rawTrim;
+        const need = 28 + gCount * 34 + (gCount >= 3 ? 24 : 0);
+        if (suggestMegaGlyphParticleCount(dTry, S, gc) >= need || se <= 0.78) {
+          break;
+        }
+        se = Math.max(0.78, se * 0.935);
+      }
+      scaleEffFinal = se;
+      const Sfin = S * scaleEffFinal;
+      if (mode === "truncate") {
+        dispFinal = macroTextTruncateToWidth(rawFull, Sfin, 0.88);
+      } else if (mode === "wrap2") {
+        dispFinal = macroTextWrapTwoLines(rawFull, Sfin);
+      } else if (gCount >= 2) {
+        dispFinal = macroTextBalancedWrapShort(rawTrim, Sfin);
+      } else {
+        dispFinal = rawTrim;
+      }
+    }
+
+    if (isSeq) {
+      const one =
+        String(self._pickMacroDisplay() || "字").trim().slice(0, 4) || "字";
+      return { Slay: S * scaleEffFinal, disp: one, gc, mode };
+    }
+
+    return { Slay: S * scaleEffFinal, disp: dispFinal, gc, mode };
   }
 
   /**
@@ -2259,9 +2368,9 @@
   const BODY_MOTION_STYLES = ["harmonic", "snake_stream", "contour_drift"];
 
   const BODY_MOTION_LABELS = {
-    harmonic: "谐波亚格",
-    snake_stream: "流线蛇行",
-    contour_drift: "轮廓游走",
+    harmonic: "① 横竖谐步（离散格、一字一格）",
+    snake_stream: "② 序贯廊道（可走格走廊、一队字滑移）",
+    contour_drift: "③ 壳内漫游（随机游走，易叠字）",
   };
 
   function normalizeBodyMotionStyle(s) {
@@ -2293,14 +2402,13 @@
     );
   }
 
-  /** 谐波 + 关亚格颤抖：mask 内以离散格目标驱动曼哈顿步进（无默认亚格位移/微振） */
+  /** 谐波：mask 内以离散格目标驱动曼哈顿步进；「颤」只影响亚像素绘制偏移，不再关掉离散谐步（避免叠乱与「不像格点」） */
   function silhouetteStrictHarmonicGrid(self) {
     return (
       isMaskBackedMegaKao(self) &&
       normalizeBodyMotionStyle(self.bodyMotionStyle) === "harmonic" &&
       !usesMaskSnakeStream(self) &&
-      !usesContourDrift(self) &&
-      !self.silhouetteGlyphJitter
+      !usesContourDrift(self)
     );
   }
 
@@ -2366,7 +2474,7 @@
     if (!self.presentationGlyphDynamics) {
       out = {
         ...out,
-        timeScale: out.timeScale * 0.22,
+        timeScale: out.timeScale * 0.32,
         ampScale: out.ampScale * 0.15,
         crispMicroScale: Math.min(0.08, out.crispMicroScale * 0.4),
         anchorAmpScale: out.anchorAmpScale * 0.35,
@@ -2430,6 +2538,18 @@
       0.78,
       1.14
     );
+    b.bodyGlyphEmMul = clamp(
+      self.bodyGlyphEmMul != null ? +self.bodyGlyphEmMul : 1,
+      0.82,
+      1.18
+    );
+    b.silhouetteJitterAmpMul = clamp(
+      self.silhouetteJitterAmpMul != null ? +self.silhouetteJitterAmpMul : 1,
+      0.45,
+      1.45
+    );
+    self._arcPrefs.presentation.presentationMegaLayoutMode =
+      normalizeMegaPresentationLayoutMode(self.presentationMegaLayoutMode);
   }
 
   function applyArcVisualPrefsToPet(self) {
@@ -2465,8 +2585,30 @@
       0.78,
       1.14
     );
+    self.bodyGlyphEmMul = clamp(
+      b.bodyGlyphEmMul != null ? +b.bodyGlyphEmMul : 1,
+      0.82,
+      1.18
+    );
+    self.silhouetteJitterAmpMul = clamp(
+      b.silhouetteJitterAmpMul != null ? +b.silhouetteJitterAmpMul : 1,
+      0.45,
+      1.45
+    );
+    self.presentationMegaLayoutMode = normalizeMegaPresentationLayoutMode(
+      self._arcPrefs.presentation.presentationMegaLayoutMode
+    );
     self.motionProfile =
       self.uiArcMode === "presentation" ? "display" : "standby";
+    /** 呈现巨字/颜：壳漫游与「小字拼轮廓」目标冲突，强制回到横竖谐步 */
+    if (
+      self.uiArcMode === "presentation" &&
+      isMaskBackedMegaKao(self) &&
+      normalizeBodyMotionStyle(self.bodyMotionStyle) === "contour_drift"
+    ) {
+      self.bodyMotionStyle = "harmonic";
+      self._arcPrefs.presentation.bodyMotionStyle = "harmonic";
+    }
   }
 
   function buildFormLayoutData(self, name, n, S) {
@@ -2490,19 +2632,25 @@
           : clamp(Math.round(S * 0.042), 13, 19);
       const pres = self.uiArcMode === "presentation";
       const { Slay, disp } = resolveMegaLayoutInput(self, S);
+      const dispFlat = String(disp || "字").replace(/\n/g, "");
+      const gLen = Math.max(1, Array.from(dispFlat).length);
+      const presOne = pres && gLen <= 1;
       return buildTextSilhouetteLayout(disp, n, Slay, {
         shellSample: true,
         noStroke: true,
         shellMax: 3,
         cap: 420,
-        spreadMin: Math.max(S * (pres ? 0.057 : 0.051), gc * (pres ? 1.14 : 1.02)),
-        spreadPasses: pres ? 20 : 12,
+        spreadMin: Math.max(
+          S * (pres ? 0.057 : 0.051),
+          gc * (pres ? 1.14 : 1.02)
+        ) * (presOne ? 1.1 : 1),
+        spreadPasses: pres ? (presOne ? 26 : 20) : 12,
         jitterScale: pres ? 0.0015 : 0.0022,
         enforceSpacing: Math.max(
           S * (pres ? 0.068 : 0.054),
           gc * (pres ? 1.4 : 1.12)
-        ),
-        enforceSpacingPasses: pres ? 30 : 16,
+        ) * (presOne ? 1.14 : 1),
+        enforceSpacingPasses: pres ? (presOne ? 40 : 30) : 16,
         snapToShell: true,
       });
     }
@@ -2729,6 +2877,17 @@
       this.showPlayfieldGuide = opts.showPlayfieldGuide === true;
       this.dragging = false;
       this.dragOffset = { x: 0, y: 0 };
+      /** 呈现巨字排版：拼满画布（分行+自动缩） / 逐字轮换 */
+      this.presentationMegaLayoutMode = "fit_canvas";
+      this._megaSeqIdx = 0;
+      this._megaSeqAcc = 0;
+      /** 亚格颤动画位移幅度（与「颤」开关联用） */
+      this.silhouetteJitterAmpMul = 1;
+      /** 拖曳时格向残留，削弱「整块平移」观感 */
+      this._dragResidualLx = 0;
+      this._dragResidualLy = 0;
+      this._dragShellDecoupled = false;
+      this._dragShellWorld = null;
       this.pointerPos = null;
 
       // 飞行字（被喂食时从屏幕上飞进来的字）
@@ -2861,27 +3020,34 @@
           silhouetteMatteUnderlay: false,
           outlineContourFirst: true,
           textureMotionMode: _tex0,
+          bodyGlyphEmMul: 1,
           presentationGlyphDynamics: true,
           macroFitMode: "shrink",
           megaLayoutScale: 1,
+          silhouetteJitterAmpMul: 1,
         },
         presentation: {
           glyphMotionSpeed: _sp0,
           bodyTintHex: this.bodyTintHex,
           glowMode: this.glowMode | 0,
           bodyColorMode: this.bodyColorMode | 0,
-          fluidStrength: _fs0,
+          fluidStrength: clamp(Math.min(_fs0, 0.11), 0, 0.55),
           gridMarchSpeed: _gm0,
           megaParticleMul: 1,
           bodyMotionStyle: "harmonic",
           glyphsJitter: false,
           silhouetteMatteUnderlay: false,
-          outlineContourFirst: true,
+          outlineContourFirst: false,
           textureMotionMode: _tex0,
-          /** 巨字/颜呈现层：体内字粒是否跑谐波/流体/游走（关=先静后动，仅轮廓垫底+格点） */
+          /** 躯体字统一字号乘子（待机/呈现各记一套；与字比/容纳独立） */
+          bodyGlyphEmMul: 1,
+          /** 巨字/颜呈现层：体内字粒是否跑谐波/流体/游走（关=先静后动，仅格位/垫底） */
           presentationGlyphDynamics: false,
           macroFitMode: "shrink",
           megaLayoutScale: 1,
+          /** 巨字串在呈现层如何铺排（与「容纳」字串截断/双行独立） */
+          presentationMegaLayoutMode: "fit_canvas",
+          silhouetteJitterAmpMul: 1,
         },
       };
       if (opts.outlineContourFirst === false) {
@@ -2927,6 +3093,14 @@
         const ms = clamp(+opts.megaLayoutScale, 0.78, 1.14);
         this._arcPrefs.standby.megaLayoutScale = ms;
         this._arcPrefs.presentation.megaLayoutScale = ms;
+      }
+      if (
+        opts.bodyGlyphEmMul != null &&
+        !Number.isNaN(Number(opts.bodyGlyphEmMul))
+      ) {
+        const gem = clamp(+opts.bodyGlyphEmMul, 0.82, 1.18);
+        this._arcPrefs.standby.bodyGlyphEmMul = gem;
+        this._arcPrefs.presentation.bodyGlyphEmMul = gem;
       }
       applyArcVisualPrefsToPet(this);
       this.onUiArcModeChange =
@@ -3127,7 +3301,17 @@
         this.gridCell = clamp(Math.round(S * 0.052), 13, 26);
         this._resizeGlyphsForScript(this.scriptLines, { mode: "script" });
       } else if (name === "mega") {
-        this.gridCell = clamp(Math.round(S * 0.0425), 13, 20);
+        if (
+          this.uiArcMode === "presentation" &&
+          normalizeMegaPresentationLayoutMode(this.presentationMegaLayoutMode) ===
+            "fit_canvas"
+        ) {
+          const rawT = String(this._pickMacroDisplayForLayout() || "字");
+          const G = Math.max(1, Array.from(String(rawT).trim() || "字").length);
+          this.gridCell = computePresentationMegaGridCell(this, S, G);
+        } else {
+          this.gridCell = clamp(Math.round(S * 0.0425), 13, 20);
+        }
       } else if (name === "clock") {
         this.gridCell =
           this.clockGranularity === "sec"
@@ -3262,7 +3446,7 @@
         const approxCells = Math.floor(
           mp.fillCount / Math.max(1, stepPx * stepPx)
         );
-        const capG = clamp(Math.floor(approxCells * 0.82), 26, 220);
+        const capG = clamp(Math.floor(approxCells * 0.68), 24, 190);
         if (this.glyphs.length > capG) {
           this.glyphs.length = capG;
           this.particleCount = capG;
@@ -3794,7 +3978,9 @@
       const anchorGx = Math.round(wxb / cell);
       const anchorGy = Math.round(wyb / cell);
       const mkW = getMotionProfileKernelsForPet(this);
-      const rad = (g.wanderRad || 14) * mkW.wanderRadScale;
+      const presW = isPresentationSilhouetteHarm(this);
+      const rad =
+        (g.wanderRad || 14) * mkW.wanderRadScale * (presW ? 0.48 : 1);
       const maxK =
         this.form === "mega" && g._megaDeepInterior
           ? 62
@@ -3851,11 +4037,16 @@
       if (!this.gridSnapping || !this.gridMarch) return;
       if (this.form === "script") return;
       const presDense = isPresentationSilhouetteHarm(this);
-      if (this.dragging && !presDense) return;
+      const decoupDrag =
+        this.dragging &&
+        this._dragShellDecoupled &&
+        isPresentationSilhouetteHarm(this);
+      if (this.dragging && !presDense && !decoupDrag) return;
       const cell = this.gridCell;
       if (!cell) return;
-      const bx = this.pos.x;
-      const by = this.pos.y;
+      const shell = this._bodyWorldForShell();
+      const bx = shell.x;
+      const by = shell.y;
       const flip = this.facingFlip || 1;
       const cos = Math.cos(this.rotation);
       const sin = Math.sin(this.rotation);
@@ -3866,7 +4057,9 @@
       const silMask = isMaskBackedMegaKao(this);
       const passes =
         presDense
-          ? 18
+          ? decoupDrag
+            ? 20
+            : 18
           : usesMaskSnakeStream(this) && silMask
             ? 7
             : mega
@@ -3960,11 +4153,15 @@
     }
 
     /**
-     * 华容道式邻格互换：在保持整体形态的前提下，让内部字沿格交换位置（不用于 script / 计时 / 拖拽中）。
+     * 华容道式邻格互换：在保持整体形态的前提下，让内部字沿格交换位置（不用于 script / 计时；普通拖曳中跳过，**呈现剪影拖曳解耦时仍可走**，冷却略放慢）。
      */
     _tryHuarongAdjacentSwaps(now) {
       if (!this.gridMarch || !this.gridSnapping) return;
-      if (this.dragging || this.morphGlyphToTarget) return;
+      const decoupDrag =
+        this.dragging &&
+        this._dragShellDecoupled &&
+        isPresentationSilhouetteHarm(this);
+      if ((this.dragging && !decoupDrag) || this.morphGlyphToTarget) return;
       if (this.viewMode !== "pet" || this.form === "script") return;
       if (isMotionLayoutLockedForm(this.form)) return;
       if (now < this._huarongNextAt) return;
@@ -3974,11 +4171,20 @@
         2.5
       );
       const mkH = getMotionProfileKernelsForPet(this);
+      const presL = isPresentationSilhouetteHarm(this);
+      const presSleep = presL && !this.presentationGlyphDynamics;
+      let hSleep = 1;
+      if (presSleep) hSleep = 2.55;
+      else if (presL && this.presentationGlyphDynamics) hSleep = 0.88;
+      if (decoupDrag) hSleep *= 1.55;
       this._huarongNextAt =
-        now + ((260 + Math.random() * 320) * mkH.huarongCooldownMul) / gmsH;
+        now +
+        ((260 + Math.random() * 320) * mkH.huarongCooldownMul * hSleep) /
+          gmsH;
 
-      const bx = this.pos.x;
-      const by = this.pos.y;
+      const sw = this._bodyWorldForShell();
+      const bx = sw.x;
+      const by = sw.y;
       const cos = Math.cos(this.rotation);
       const sin = Math.sin(this.rotation);
       const flip = this.facingFlip || 1;
@@ -4073,6 +4279,19 @@
           }
         }
         swapPair(gA, gB);
+        if (presSleep) {
+          const dip = 0.78;
+          gA.alpha = clamp(
+            (gA.alpha != null ? gA.alpha : 0.9) * dip,
+            0.12,
+            0.94
+          );
+          gB.alpha = clamp(
+            (gB.alpha != null ? gB.alpha : 0.9) * dip,
+            0.12,
+            0.94
+          );
+        }
         return;
       }
     }
@@ -4357,7 +4576,63 @@
       }
     }
 
+    /** 呈现巨字：拖曳格向扰动衰减；逐字模式定时换形。 */
+    _tickPresentationMegaAux(dt) {
+      if (this.viewMode !== "pet") return;
+      if (isPresentationSilhouetteHarm(this) && isMaskBackedMegaKao(this)) {
+        const dcc = dt * 2.35;
+        this._dragResidualLx = (this._dragResidualLx || 0) * Math.exp(-dcc);
+        this._dragResidualLy = (this._dragResidualLy || 0) * Math.exp(-dcc);
+      }
+      if (!isPresentationSilhouetteHarm(this) || this.form !== "mega") return;
+      if (
+        normalizeMegaPresentationLayoutMode(this.presentationMegaLayoutMode) !==
+        "sequential_chars"
+      ) {
+        return;
+      }
+      const base =
+        this.macroText && String(this.macroText).trim()
+          ? String(this.macroText).trim()
+          : String(this._pickMacroChar() || "字");
+      const arr = Array.from(base);
+      if (arr.length <= 1) return;
+      this._megaSeqAcc = (this._megaSeqAcc || 0) + dt;
+      if (this._megaSeqAcc < 2.35) return;
+      this._megaSeqAcc = 0;
+      this._megaSeqIdx = ((this._megaSeqIdx || 0) + 1) % arr.length;
+      this.setForm("mega", true, true);
+      this._glyphFlash = Math.min(0.38, (this._glyphFlash || 0) + 0.18);
+    }
+
     _pickMacroDisplay() {
+      if (
+        this.uiArcMode === "presentation" &&
+        normalizeMegaPresentationLayoutMode(this.presentationMegaLayoutMode) ===
+          "sequential_chars" &&
+        this.viewMode === "pet" &&
+        this.form === "mega"
+      ) {
+        const base =
+          this.macroText && String(this.macroText).trim()
+            ? String(this.macroText).trim()
+            : null;
+        if (base) {
+          const arr = Array.from(base);
+          if (arr.length > 1) {
+            const i = (this._megaSeqIdx || 0) % arr.length;
+            return arr[i];
+          }
+        }
+      }
+      if (this.macroText && String(this.macroText).trim()) {
+        return String(this.macroText).trim().slice(0, 48);
+      }
+      return this._pickMacroChar();
+    }
+
+    /** 巨字排版用：始终取完整宏串（逐字轮换模式仍按全文算格距/分行）。 */
+    _pickMacroDisplayForLayout() {
       if (this.macroText && String(this.macroText).trim()) {
         return String(this.macroText).trim().slice(0, 48);
       }
@@ -4795,6 +5070,7 @@
           g.targetRot = 0;
           g.size = em * (0.96 + (1 - g.edge) * 0.08);
         }
+        this._applyBodyGlyphEmMulToGlyphs();
         return;
       }
       if (isGridLayoutImmutableForm(this.form)) {
@@ -4820,13 +5096,22 @@
             g.size = em * 1.04;
           } else {
             g.targetRot = 0;
-            const edgeMul =
-              isMaskBackedMegaKao(this) && this.viewMode === "pet"
-                ? lerp(0.99, 0.93, g.edge)
-                : lerp(1.02, 0.94, g.edge);
-            g.size = em * edgeMul;
+            if (
+              isPresentationSilhouetteHarm(this) &&
+              isMaskBackedMegaKao(this)
+            ) {
+              /** 呈现层巨字/颜：字身统一字号，避免边缘缩放导致「大小不一、难辨整体」 */
+              g.size = em;
+            } else {
+              const edgeMul =
+                isMaskBackedMegaKao(this) && this.viewMode === "pet"
+                  ? lerp(0.99, 0.93, g.edge)
+                  : lerp(1.02, 0.94, g.edge);
+              g.size = em * edgeMul;
+            }
           }
         }
+        this._applyBodyGlyphEmMulToGlyphs();
         return;
       }
       const emMin = Math.max(8, this.gridCell * 0.68);
@@ -4844,6 +5129,20 @@
           g.targetRot = this._quantizeTargetRot(rand(-spread, spread));
           g.size = em * lerp(1.06, 0.9, g.edge);
         }
+      }
+      this._applyBodyGlyphEmMulToGlyphs();
+    }
+
+    _applyBodyGlyphEmMulToGlyphs() {
+      const b = this._arcPrefs[this.uiArcMode];
+      const mul = clamp(
+        b.bodyGlyphEmMul != null ? +b.bodyGlyphEmMul : 1,
+        0.82,
+        1.18
+      );
+      if (Math.abs(mul - 1) < 0.001) return;
+      for (const g of this.glyphs) {
+        if (g.size != null && !Number.isNaN(g.size)) g.size *= mul;
       }
     }
 
@@ -5436,8 +5735,21 @@
       const b = this._playBounds();
       const r = this._bodyClampRadius();
       if (this.dragging) {
-        this.pos.x = clamp(this.pos.x, b.minX + r, b.maxX - r);
-        this.pos.y = clamp(this.pos.y, b.minY + r, b.maxY - r);
+        if (this._dragShellDecoupled && this._dragShellWorld) {
+          this._dragShellWorld.x = clamp(
+            this._dragShellWorld.x,
+            b.minX + r,
+            b.maxX - r
+          );
+          this._dragShellWorld.y = clamp(
+            this._dragShellWorld.y,
+            b.minY + r,
+            b.maxY - r
+          );
+        } else {
+          this.pos.x = clamp(this.pos.x, b.minX + r, b.maxX - r);
+          this.pos.y = clamp(this.pos.y, b.minY + r, b.maxY - r);
+        }
         return;
       }
       const hit = PB.resolve(this.pos, this.vel, b, r, 0.38, 155);
@@ -5452,11 +5764,24 @@
       }
     }
 
+    /** 剪影 / mask 格迈与绘制的世界中心：呈现层拖曳解耦时为 `_dragShellWorld`，否则为 `pos` */
+    _bodyWorldForShell() {
+      if (
+        this.dragging &&
+        this._dragShellDecoupled &&
+        this._dragShellWorld
+      ) {
+        return this._dragShellWorld;
+      }
+      return this.pos;
+    }
+
     /** 交互命中：按当前字形包围球估计，避免巨字/扁形时「点不中拖不动」 */
     pointerInnerRadius() {
       const cell = this.gridCell || 12;
-      const bx = this.pos.x;
-      const by = this.pos.y;
+      const w = this._bodyWorldForShell();
+      const bx = w.x;
+      const by = w.y;
       const flip = this.facingFlip || 1;
       const cos = Math.cos(this.rotation);
       const sin = Math.sin(this.rotation);
@@ -5479,8 +5804,19 @@
       this.dragging = true;
       this.dragOffset.x = this.pos.x - x;
       this.dragOffset.y = this.pos.y - y;
+      this._dragResidualLx = 0;
+      this._dragResidualLy = 0;
+      this._dragShellDecoupled =
+        isPresentationSilhouetteHarm(this) &&
+        this.gridMarch &&
+        this.gridSnapping;
+      this._dragShellWorld = { x: this.pos.x, y: this.pos.y };
       this._dragPrevPos = { x: this.pos.x, y: this.pos.y };
       this.dragVel = { x: 0, y: 0 };
+      if (this._dragShellDecoupled) {
+        this.vel.x = 0;
+        this.vel.y = 0;
+      }
       this.setExpression("shy");
       for (const g of this.glyphs) {
         g.lagX = this.pos.x;
@@ -5514,14 +5850,40 @@
         this._dragPrevPos.x = nx;
         this._dragPrevPos.y = ny;
       }
-      this.pos.x = nx;
-      this.pos.y = ny;
+      if (this._dragShellDecoupled && this._dragShellWorld) {
+        const ptx = this._dragShellWorld.x;
+        const pty = this._dragShellWorld.y;
+        this._dragShellWorld.x = nx;
+        this._dragShellWorld.y = ny;
+        const cell = this.gridCell || 12;
+        const cos = Math.cos(this.rotation);
+        const sin = Math.sin(this.rotation);
+        const dwx = nx - ptx;
+        const dwy = ny - pty;
+        const dlx = (dwx * cos + dwy * sin) / Math.max(cell, 1);
+        const dly = (-dwx * sin + dwy * cos) / Math.max(cell, 1);
+        this._dragResidualLx = (this._dragResidualLx || 0) - dlx * 0.58;
+        this._dragResidualLy = (this._dragResidualLy || 0) - dly * 0.58;
+        const cap = 13;
+        this._dragResidualLx = clamp(this._dragResidualLx, -cap, cap);
+        this._dragResidualLy = clamp(this._dragResidualLy, -cap, cap);
+      } else {
+        this.pos.x = nx;
+        this.pos.y = ny;
+        this._dragShellWorld = null;
+      }
     }
     endDrag() {
       const pending = this._pendingScriptReturn;
       this._pendingScriptReturn = false;
       this.dragging = false;
       this._dragPrevPos = null;
+      if (this._dragShellDecoupled && this._dragShellWorld) {
+        this.pos.x = this._dragShellWorld.x;
+        this.pos.y = this._dragShellWorld.y;
+      }
+      this._dragShellWorld = null;
+      this._dragShellDecoupled = false;
       if (pending && this.scriptLines && this.scriptLines.length) {
         this.revertToScript(true);
       }
@@ -5571,6 +5933,8 @@
         );
         return;
       }
+
+      this._tickPresentationMegaAux(dt);
 
       if (!silMaskPet) {
         for (const g of this.glyphs) {
@@ -5686,8 +6050,10 @@
         this.vel.x *= 0.85;
         this.vel.y *= 0.85;
       }
-      this.pos.x += this.vel.x * dt;
-      this.pos.y += this.vel.y * dt;
+      if (!(this.dragging && this._dragShellDecoupled)) {
+        this.pos.x += this.vel.x * dt;
+        this.pos.y += this.vel.y * dt;
+      }
       this._applyPlayfieldBounds(dt, now);
 
       if (
@@ -5753,8 +6119,9 @@
 
       if (this.faceLayerMode) this._syncFaceGlyphTargets(t);
 
-      const bx = this.pos.x;
-      const by = this.pos.y;
+      const shell = this._bodyWorldForShell();
+      const bx = shell.x;
+      const by = shell.y;
       const rot = this.rotation;
       const flip = 1;
       const cos = Math.cos(rot);
@@ -5891,7 +6258,7 @@
             this._snakePathT = t;
           }
           const snakeVisMul =
-            presSilHarm && !presGlyphSleep ? 1.55 : presSilHarm ? 0.06 : 1;
+            presSilHarm && !presGlyphSleep ? 1.52 : presSilHarm ? 0.34 : 1;
           this._snakePhase +=
             dt *
             (0.28 + 0.46 * gms0) *
@@ -5950,6 +6317,13 @@
           const tyl = g.ty;
           let wx = bx + (txl * cos - tyl * sin);
           let wy = by + (txl * sin + tyl * cos);
+          if (presSilHarm && this.dragging && silMaskPet) {
+            const ph = (gi + 1) * 2.03 + t * 0.95;
+            const drx = (this._dragResidualLx || 0) * cell;
+            const dry = (this._dragResidualLy || 0) * cell;
+            wx += drx * (0.5 + 0.5 * Math.sin(ph));
+            wy += dry * (0.5 + 0.5 * Math.cos(ph * 0.91));
+          }
 
           const mT = this.morphGlyphToTarget && this.morphGlyphToTarget[gi];
           let useSnakeCell = false;
@@ -6247,10 +6621,17 @@
           ) {
             const txo = wx - g.x;
             const tyo = wy - g.y;
-            const cap = cell * 0.46;
+            const jitAmp = clamp(
+              this.silhouetteJitterAmpMul != null
+                ? +this.silhouetteJitterAmpMul
+                : 1,
+              0.45,
+              1.45
+            );
+            const cap = cell * 0.46 * jitAmp;
             const tox = clamp(txo, -cap, cap);
             const toy = clamp(tyo, -cap, cap);
-            const sm = 1 - Math.exp(-dt * 22);
+            const sm = 1 - Math.exp(-dt * (presGlyphSleep ? 13.5 : 22));
             g._silDrawOx = lerp(g._silDrawOx || 0, tox, sm);
             g._silDrawOy = lerp(g._silDrawOy || 0, toy, sm);
           } else {
@@ -6262,8 +6643,8 @@
         }
 
         this._separateOverlappingGridGlyphs();
+        this._tryHuarongAdjacentSwaps(now);
         if (!presSilHarm) {
-          this._tryHuarongAdjacentSwaps(now);
           this._tryMegaSlideIntoVoid(now);
         }
         if (silMaskPet) {
@@ -6278,7 +6659,11 @@
               flip
             );
           }
-          this._separateOverlappingGridGlyphs();
+          /** 呈现剪影叠分第二遍隔帧执行，减轻每帧双遍带来的卡顿 */
+          this._sepAltFrame = (this._sepAltFrame || 0) + 1;
+          if (!presSilHarm || (this._sepAltFrame & 1) === 1) {
+            this._separateOverlappingGridGlyphs();
+          }
         }
 
         if (silMaskPet) {
@@ -6475,41 +6860,19 @@
      */
     _drawSilhouetteMatteUnderlay(ctx, light, bx, by, rot) {
       if (!isMaskBackedMegaKao(this)) return;
-      /** 呈现层开「体内动」时不叠整张巨字/颜的填充 mask，避免与字粒形成「双轮廓」与额外合成开销 */
-      if (
-        isPresentationSilhouetteHarm(this) &&
-        this.presentationGlyphDynamics
-      ) {
-        return;
-      }
+      /** 呈现层巨字/颜：轮廓由小字粒拼出，不叠整张 mask「大字底」；待机层仍可用整块灰底/淡影辅助 */
+      if (isPresentationSilhouetteHarm(this)) return;
       const lay = this._silhouetteMatteLayer;
       if (!lay || !lay.width) return;
       const fullMatte = !!this.silhouetteMatteUnderlay;
-      /** 关「廓」时：极弱整 mask 垫底，满足「先见静态轮廓」又不与字粒形成第二重浓墨（可再开「廓」加强） */
-      const weakGhost =
-        !fullMatte &&
-        isPresentationSilhouetteHarm(this) &&
-        !this.presentationGlyphDynamics &&
-        !!this.outlineContourFirst;
-      if (!fullMatte && !weakGhost) return;
+      if (!fullMatte) return;
       const S = this.size;
       ctx.save();
       ctx.translate(bx, by);
       ctx.rotate(rot);
       ctx.translate(-S / 2, -S / 2);
-      let a;
-      if (weakGhost) {
-        a = light ? 0.044 : 0.062;
-      } else {
-        a = light ? 0.19 : 0.29;
-        if (this.outlineContourFirst) a += light ? 0.04 : 0.05;
-        if (
-          isPresentationSilhouetteHarm(this) &&
-          !this.presentationGlyphDynamics
-        ) {
-          a += light ? 0.05 : 0.072;
-        }
-      }
+      let a = light ? 0.19 : 0.29;
+      if (this.outlineContourFirst) a += light ? 0.04 : 0.05;
       ctx.globalAlpha = a;
       ctx.drawImage(lay, 0, 0, lay.width, lay.height, 0, 0, S, S);
       ctx.globalAlpha = 1;
@@ -6654,12 +7017,17 @@
               : crispForm
                 ? 1
                 : lerp(1.28, 0.72, edge);
+        const megaSilPres =
+          isPresentationSilhouetteHarm(this) &&
+          crispForm &&
+          isMaskBackedMegaKao(this) &&
+          !g.faceRole;
         const baseSize = g.size * this.scale * (opts.sizeMul || 1);
-        let size = baseSize * roleMul;
+        let size = baseSize * (megaSilPres ? 1 : roleMul);
         if (this.gridUnity && this.gridCell) {
           let cap = this.gridCell * (crispForm ? 0.92 : 0.88) * this.scale;
           if (isPresentationSilhouetteHarm(this) && crispForm) {
-            cap *= 0.93;
+            cap *= megaSilPres ? 0.96 : 0.93;
           }
           if (size > cap) size = cap;
         }
@@ -6675,7 +7043,11 @@
         const flashBoost = silDraw
           ? 1
           : 1 + Math.min(flash, 0.52) * flashW * 0.42;
-        const edgeAlpha = crispForm ? lerp(0.99, 0.92, edge) : lerp(0.94, 0.42, edge);
+        const edgeAlpha = megaSilPres
+          ? lerp(0.98, 0.94, edge)
+          : crispForm
+            ? lerp(0.99, 0.92, edge)
+            : lerp(0.94, 0.42, edge);
         const glowMul = g.faceRole ? 1 : this._glowAlphaMul(g, t);
         const presBodyAlphaMul =
           isPresentationSilhouetteHarm(this) &&
@@ -7056,14 +7428,104 @@
       snapshotArcVisualPrefs(this);
     }
 
-    /** 侧栏「轨」：切换有 mask 的巨字/颜文字躯体运动范式（分套记忆） */
+    /** 侧栏「走格」循环：呈现巨字/颜仅 **谐步 ⟷ 廊道**（壳漫游易与小字拼轮廓冲突，已禁用）。 */
     cycleBodyMotionStyle() {
+      const order =
+        this.uiArcMode === "presentation"
+          ? ["harmonic", "snake_stream"]
+          : BODY_MOTION_STYLES.slice();
       const cur = normalizeBodyMotionStyle(this.bodyMotionStyle);
-      const ix = BODY_MOTION_STYLES.indexOf(cur);
-      const next = BODY_MOTION_STYLES[(ix + 1) % BODY_MOTION_STYLES.length];
+      let ix = order.indexOf(cur);
+      if (ix < 0) ix = 0;
+      const next = order[(ix + 1) % order.length];
       this.bodyMotionStyle = next;
       snapshotArcVisualPrefs(this);
       return this.bodyMotionStyle;
+    }
+
+    /** 显式设置走格范式（侧栏三键直达）；呈现层拒绝 `contour_drift`。 */
+    setBodyMotionStyle(style) {
+      let s = normalizeBodyMotionStyle(style);
+      if (this.uiArcMode === "presentation" && s === "contour_drift") {
+        s = "harmonic";
+      }
+      this.bodyMotionStyle = s;
+      snapshotArcVisualPrefs(this);
+      applyArcVisualPrefsToPet(this);
+      return this.bodyMotionStyle;
+    }
+
+    /** 躯体字统一字号挡（待机/呈现各记一套；与巨字「字比」独立） */
+    cycleBodyGlyphEmMul() {
+      const tiers = [0.86, 0.92, 1, 1.06, 1.12];
+      const b = this._arcPrefs[this.uiArcMode];
+      let cur = b.bodyGlyphEmMul != null ? +b.bodyGlyphEmMul : 1;
+      cur = clamp(cur, 0.82, 1.18);
+      let i = tiers.findIndex((t) => Math.abs(t - cur) < 0.045);
+      if (i < 0) {
+        let best = 0;
+        let bd = Infinity;
+        for (let k = 0; k < tiers.length; k++) {
+          const d = Math.abs(tiers[k] - cur);
+          if (d < bd) {
+            bd = d;
+            best = k;
+          }
+        }
+        i = best;
+      }
+      const next = clamp(tiers[(i + 1) % tiers.length], 0.82, 1.18);
+      b.bodyGlyphEmMul = next;
+      this.bodyGlyphEmMul = next;
+      this._applyGridTypography();
+      snapshotArcVisualPrefs(this);
+      return next;
+    }
+
+    /** 呈现层巨字：拼满画布（自动分行+缩比）↔ 全文逐字轮换剪影 */
+    cyclePresentationMegaLayoutMode() {
+      const b = this._arcPrefs.presentation;
+      const cur = normalizeMegaPresentationLayoutMode(
+        b.presentationMegaLayoutMode
+      );
+      const next =
+        cur === "fit_canvas" ? "sequential_chars" : "fit_canvas";
+      b.presentationMegaLayoutMode = next;
+      this.presentationMegaLayoutMode = next;
+      this._megaSeqIdx = 0;
+      this._megaSeqAcc = 0;
+      if (this.form === "mega" && this.viewMode === "pet") {
+        this.setForm("mega", true, true);
+      }
+      snapshotArcVisualPrefs(this);
+      return next;
+    }
+
+    /** 亚格颤动画位移幅度挡（与「颤」开关联用；当前层记忆） */
+    cycleSilhouetteJitterAmpMul() {
+      const tiers = [0.55, 0.72, 0.88, 1, 1.12, 1.32];
+      const b = this._arcPrefs[this.uiArcMode];
+      let cur =
+        b.silhouetteJitterAmpMul != null ? +b.silhouetteJitterAmpMul : 1;
+      cur = clamp(cur, 0.45, 1.45);
+      let i = tiers.findIndex((t) => Math.abs(t - cur) < 0.06);
+      if (i < 0) {
+        let best = 0;
+        let bd = Infinity;
+        for (let k = 0; k < tiers.length; k++) {
+          const d = Math.abs(tiers[k] - cur);
+          if (d < bd) {
+            bd = d;
+            best = k;
+          }
+        }
+        i = best;
+      }
+      const next = clamp(tiers[(i + 1) % tiers.length], 0.45, 1.45);
+      b.silhouetteJitterAmpMul = next;
+      this.silhouetteJitterAmpMul = next;
+      snapshotArcVisualPrefs(this);
+      return next;
     }
 
     /** 侧栏「颤」：巨字/颜文字 mask 内亚格绘制位移 + 谐波微振（默认关；谐波轨下关=严格格点） */
@@ -7073,7 +7535,7 @@
       return this.silhouetteGlyphJitter;
     }
 
-    /** 侧栏「廓」：mask 静态垫底（分套；「辨」开时仍建议开以增强对比） */
+    /** 侧栏「整块灰底」：mask 静态垫底（分套；与「淡影」二选一强度链） */
     cycleSilhouetteMatteUnderlay() {
       const b = this._arcPrefs[this.uiArcMode];
       b.silhouetteMatteUnderlay = !b.silhouetteMatteUnderlay;
@@ -7082,7 +7544,7 @@
     }
 
     /**
-     * 侧栏「辨」：**轮廓优先**（默认开）— mask 巨字/颜下先保证静态剪影可读，体内动态压低；关后便于调试全动态。
+     * 侧栏「淡影」：**可选**叠极弱整幅 mask 垫底（与「整块灰底」二选一强度链；默认关，防「第二重剪影」抢读）。
      */
     cycleOutlineContourFirst() {
       const b = this._arcPrefs[this.uiArcMode];
@@ -7092,7 +7554,7 @@
     }
 
     /**
-     * 侧栏「动」：**呈现层**巨字/颜体内字粒是否跑谐波/流体/蛇行等（分套；默认关=先静后动）。
+     * 侧栏「内动」：**呈现层**巨字/颜体内字粒是否跑谐波/流体/蛇行等（分套；默认关=先静后动）。
      * 待机层无此概念，仍写入呈现层偏好供下次切入呈现层生效。
      */
     cyclePresentationGlyphDynamics() {
@@ -7110,6 +7572,32 @@
         this.presentationGlyphDynamics = !!b.presentationGlyphDynamics;
       }
       return next;
+    }
+
+    /**
+     * 侧栏「规整」：写入 **呈现层**偏好 — 横竖格谐步、关体内动、关亚格颤、纹理回到流、略抑流体；不切「层」、不换形。
+     * 若当前已在呈现层且为巨字/颜 mask，会立刻重算字号并 **双遍疏散叠格**。
+     */
+    applyPresentationSilhouetteHarmonicCalm() {
+      const b = this._arcPrefs.presentation;
+      b.bodyMotionStyle = "harmonic";
+      b.glyphsJitter = false;
+      b.presentationGlyphDynamics = false;
+      b.textureMotionMode = normalizeTextureMotionMode("spring_flow");
+      b.fluidStrength = clamp(Math.min(+b.fluidStrength || 0, 0.1), 0, 0.55);
+      if (this.uiArcMode === "presentation") {
+        applyArcVisualPrefsToPet(this);
+        this._applyGridTypography();
+        if (this.gridMarch && this.gridSnapping && this.glyphs && this.glyphs.length) {
+          this._separateOverlappingGridGlyphs();
+          this._separateOverlappingGridGlyphs();
+        }
+        const nowMs =
+          typeof performance !== "undefined" ? performance.now() : Date.now();
+        /** 先静约 0.9s，再允许邻格互换；互换时在关内动下带一次淡入淡出感 */
+        this._huarongNextAt = nowMs + 900;
+      }
+      return true;
     }
 
     /** 巨字相对身幅缩放挡；与 `gridCell` 决定的下限取 max；换形巨字时生效 */
@@ -7339,6 +7827,7 @@
     isMaskBackedMegaKao,
     BODY_MOTION_STYLES,
     BODY_MOTION_LABELS,
+    normalizeBodyMotionStyle,
     SNAKE_PATH_VARIANTS,
     normalizeSnakePathVariant,
     usesMaskSnakeStream,
@@ -7349,6 +7838,9 @@
     MACRO_FIT_MODES,
     MACRO_FIT_LABELS,
     normalizeMacroFitMode,
+    MEGA_PRESENTATION_LAYOUT_MODES,
+    MEGA_PRESENTATION_LAYOUT_LABELS,
+    normalizeMegaPresentationLayoutMode,
     getMotionProfileKernels,
     getMotionProfileKernelsForPet,
     motionTimeBlend,

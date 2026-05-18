@@ -15,7 +15,7 @@
 
 | 路径 | 角色 |
 |------|------|
-| `index.html` | 页面结构、侧栏 `data-action`、**各控件 `title`（悬停说明）**、分区 `rail-section` / `control-block`、`meta ziling-build` |
+| `index.html` | 页面结构、侧栏 `data-action`、**各控件 `title`（悬停说明）**、分区 `rail-section` / `control-block`、`meta ziling-build`、**`#helpDialog` 入门说明（与 DESIGN 对齐）** |
 | `styles.css` | 布局：`playfield`、左右 `rail`、`stage`、`#petCanvas` |
 | `app.js` | 绑定 UI、URL 参数、Toast、`new Pet(canvas, opts)`；**必须语法有效**，否则整页无 Pet、无版本号、按钮全失效（曾发生误删 `syncRailUiArcClass` 函数头） |
 | `pet.js` | **主体**：形态布局、栅格、物理/渲染、呈现层逻辑、`_arcPrefs` |
@@ -51,7 +51,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ### 3.3 分层视觉偏好 `_arcPrefs`
 
-- 键：`standby` / `presentation`，各自存 **速、色、墨、浮、波、徙、粒、轨、颤、紊、廓、辨、动、macroFitMode、megaLayoutScale** 等。
+- 键：`standby` / `presentation`，各自存 **速、色、墨、浮、波、徙、粒、走格、颤、紊、整块灰底、淡影、字内动、macroFitMode、megaLayoutScale** 等（侧栏易读名；代码字段仍为 `bodyMotionStyle` / `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationGlyphDynamics`）。
 - 切换「层」时 `applyArcVisualPrefsToPet` / `snapshotArcVisualPrefs` 读写当前套。
 
 ### 3.4 「动」`presentationGlyphDynamics`
@@ -59,7 +59,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 - 仅存 **`_arcPrefs.presentation`**（待机层无此概念）。
 - **`presGlyphSleep`**：`isPresentationSilhouetteHarm && !presentationGlyphDynamics`  
   → 关「动」时体内谐波/流体等大幅压低，**先静后动**。
-- **与「廓」**：开「动」且为呈现剪影时，**不画整张 mask 垫底**（避免双轮廓 + 性能）；关「动」可按「廓」叠 **显式强度** 垫底；关「动」且开「辨」、未开「廓」时 **`_drawSilhouetteMatteUnderlay` 极弱整 mask**（先静辨形，**3.33.4**）。
+- **与「整块灰底」**：**呈现层巨字/颜**不调用 **`_drawSilhouetteMatteUnderlay`**（轮廓由小字拼形）；开「字内动」时亦不叠底。待机层可按「整块灰底」叠显式垫底；关内动且开「淡影」、未开整块灰底时 **待机** 可叠极弱整 mask（**3.33.4** 链；**3.34.2** 起呈现层彻底不叠）。
 
 ---
 
@@ -108,9 +108,9 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 3. **少重叠**：叠分多遍、正交邻优先；结构性上限 `fillCount`（呈现截断约 **0.82×** 可走格估计，**3.33.4**）。
 4. **少双轮廓**：字粒 + 整块灰 mask 不要叠（动/廓 分工）。
 5. **呈现层稳定**：不要被 idle 自动换形拉回待机；`pickBiasedForm` 必须尊重 `uiArcMode`。
-6. **层级分套记忆**：色速轨颤紊廓辨动波徙粒字比容纳等分待机/呈现。
+6. **层级分套记忆**：色速走格颤紊灰底淡影字内动波徙粒字比容纳等分待机/呈现。
 7. **性能**：离屏 canvas、`willReadFrequently`、重载时跳过装饰格线、减少无效 `separate` 调用等。
-8. **巨字排版**：缩放下限与 `gridCell` 关联；容纳 `shrink/truncate/wrap2`；整块灰轮廓 **默认不画**；**「廓」强垫底** 与 **「辨」+ 关「动」极弱垫底**（**3.33.4**）二选一强度链。
+8. **巨字排版**：缩放下限与 `gridCell` 关联；容纳 `shrink/truncate/wrap2`；**呈现层**不叠整块灰轮廓底；**待机**「整块灰底」强垫底与「淡影」弱垫底二选一链（**3.34.2** 起灰底/淡影控件仅待机侧栏）。
 
 ---
 
@@ -127,7 +127,14 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 - **3.33.2**：待机/呈现逻辑隔离（`contourStatic`、生命周期、`fillCount` 呈现限定、流体阻尼限定）。  
 - **3.33.3**：侧栏 **title** 长文案、control-block；关「动」时 mask 垫底 α 略增；`HANDOFF` §12。  
 - **3.33.4**：**先静辨形**（关「动」+「辨」+ 未「廓」→ 极弱整 mask）；**叠分 12**、`fillCount×0.82`、巨字壳 **enforce** 略增；**生命周期 α 限幅**；**待机/巨字 gridCell** 与 **immutable em 混合** 统一字号观感；mask **flash** 再压低。  
-- **3.33.6**：关「动」**锁格静形**（`presSleepLock`）；停蛇行格/谐扰/空位拉回/亚格颤；叠分 **18 遍** + 呈现拖曳仍叠分；**「动」** 偏好 **待机不误读**；`docs/typography-forward.md`。
+- **3.33.5**：**`DESIGN` §2.2/§2.3** 与回稿实现一致；**「动」关→开** `_glyphFlash` 画布确认。  
+- **3.34.0**：**入门 `<dialog>`**（页眉 **?**，与 `DESIGN.md` 对齐）；**桌面主容器加宽**（`max-width` 940px）；**`:focus-visible` 键盘焦点环**、**`prefers-reduced-motion`** 下弱化按钮缩放与过渡；诗笺脚注 **URL 示例** 修正（`mega` 与 `macroText` 组合等）；与 **3.33.5** 闪动/文档条目合并发布。  
+- **3.34.1**：**巨字可读**：淡影默认关、弱 mask α 再收；粒子 cap 更紧、叠分更勤；呈现巨字/颜字身 **统一 em**；**规整** 一键横竖谐步+全静；侧栏易读名与底部 **待机/呈现** 色条分区。  
+- **3.34.2**：**呈现不叠整块 mask 底**（仅小字拼形）；**走格三键**（谐步/廊道/待机漫游）+ **字号** `bodyGlyphEmMul`；**颤** 不关离散谐步；叠分 **第二遍隔帧**；灰底/淡影 **仅待机侧栏**。  
+- **3.34.3**：**呈现巨字「排布」**：拼满画布（短串分行、`gridCell` 按画布收、字比迭代缩）↔ **逐字轮换**；**颤幅** `silhouetteJitterAmpMul`；拖曳 **格向残留**；呈现剪影 **华容道** 启用（静帧冷却放慢）。  
+- **3.34.4**：**规整**推迟华容道约 **0.9s**；关内动下 **swap 后 α 压低**（已由 **3.34.5** 略柔为 ×0.78）；~~呈现剪影拖曳 `pos` lerp 跟 `_dragTargetPos`~~ → **3.34.5** 改为 **壳锚解耦**。  
+- **3.34.5**：**`_dragShellWorld` / `_bodyWorldForShell`**：呈现剪影拖曳 **壳心跟手**、**`pos` 松手对齐**；拖曳中仍 **叠分**；单 grapheme 巨字壳 **spread/enforce** 略增；**关内动**下关 **`strictSilGrid` 离散谐扰**；华容道 swap **α×0.78**；关内动 **`mergePresentation… timeScale` ×0.32**（较 0.22 略抬，「速」更可感）。  
+- **3.34.6**：在 **3.34.5** 之上合并静形支线：**`presSleepLock`**（关「内动」锁格真静形）、**`presentationGlyphDynamics`** 呈现套 **snapshot**、待机 **apply**；**`_separateOverlappingGridGlyphs`** 在呈现剪影拖曳或拖曳解耦时仍执行；生命周期 **α maxStep** 关内动 **0.48**；**`docs/typography-forward.md`**。细节见 `DESIGN.md` 变更记录最新行。
 
 ---
 
@@ -167,7 +174,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ---
 
-## 12. 控件映射与维护约定（3.33.6）
+## 12. 控件映射与维护约定（3.34.6）
 
 ### 12.1 左栏四块（`index.html` → `data-action` → `app.js` → `pet.js`）
 
@@ -178,10 +185,12 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 | | 觅 | `feed` | 觅食 |
 | | 墨 / 颜 / 浮 | `ink` / `tint` / `glow` | 墨色循环 / 色盘 / 浮光循环 |
 | | 速 / 眠 / 抖 | `speed` / `sleep` / `shake` | 速度挡 / sleep 模式 / 抖擞 |
-| ② 格点 · 躯体轨 · 纹理与粒数 | 轨 / 颤 / 紊 | `motionStyle` / `glyphsJitter` / `textureMotion` | 躯体范式 / 亚格颤 / 纹理体动 |
+| ② 格点 · 走格范式 · 躯体字号 | 谐步 / 廊道 / 漫游 | `setMotionStyle` + `data-motion` | `setBodyMotionStyle`；呈现仅 `harmonic`/`snake_stream`，`contour_drift` 回落谐步；**漫游** 按钮 `ui-arc-standby-only` |
+| | 字号 / 颤 / 颤幅 / 紊 | `bodyGlyphEm` / `glyphsJitter` / `silhouetteJitterAmp` / `textureMotion` | `cycleBodyGlyphEmMul` → `_applyGridTypography`；颤；**颤幅** `cycleSilhouetteJitterAmpMul`（绘移 cap）；纹理体动 |
 | | 波 / 徙 / 粒 | `fluid` / `gridMarch` / `megaPack` | 流体强度 / 格移倍率 / 巨字粒数 |
-| ③ 巨字/颜：垫底 · 辨形 · 体内动 | 廓 / 辨 / 动 | `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationDynamics` | **廓**：显式整 mask 垫底。**辨**：压低体内动；呈现关「动」且未开「廓」时 **极弱整 mask**。**动**：呈现体内动；开时 **不画整 mask**；**关→开** 短时弱 **`_glyphFlash`** 作确认（mask 剪影仍压低闪光） |
-| ④ 呈现层 · 巨字排版 | 字比 / 容纳 | `megaScale` / `macroFit` | `megaLayoutScale` / `macroFitMode` |
+| ③ 巨字/颜 · 垫底（待机）· 动静 | 整块灰底 / 淡影（待机） / 内动 | `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationDynamics` | **灰底/淡影**：`ui-arc-standby-only`+`display:contents`，仅待机层。**内动**：呈现体内动；关=锁格真静（叠分仍解共格）；**关→开** `_glyphFlash` |
+| | 规整 | `silhouetteCalm` | `applyPresentationSilhouetteHarmonicCalm` |
+| ④ 呈现层 · 巨字排版 | 字比 / 容纳 / 排布 | `megaScale` / `macroFit` / `megaPresentLayout` | `megaLayoutScale` / `macroFitMode` / **`cyclePresentationMegaLayoutMode`**（拼满画布 ↔ 逐字轮换） |
 
 **维护规则**：新增侧栏键时，必须同时写 **长 `title`**（一句以上，说明层级与副作用）并在本表增行；Toast 文案可在 `app.js` 与 `title` 对齐。
 
@@ -196,9 +205,10 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 ### 12.3 近期代码向计划（写入 `PLAN.md` 对照）
 
 - [ ] 可选：**自定义悬停层**（比原生 `title` 延迟更短）——需防遮挡画布。  
-- [x] 呈现层：「动」从关→开时 **短时弱 `_glyphFlash`** 提示状态切换（**3.33.5**；mask 剪影仍压低闪光）。  
+- [x] 呈现层：「动」从关→开时 **短时弱 `_glyphFlash`**（**3.33.5**；**3.34.0** 与 Toast/入门 dialog 对齐说明；mask 剪影仍压低闪光）。  
+- [x] **入门说明**：页眉 **?** 打开原生 `<dialog>`，与 `DESIGN.md` 对齐（**3.34.0**）。  
 - [ ] 性能：评估 **双次** `_separateOverlappingGridGlyphs` 可否在待机 mask 路径合并。
 
 ---
 
-*文档版本随构建迭代；最后更新意图：与 `ziling-build` **3.33.6** 对齐。*
+*文档版本随构建迭代；最后更新意图：与 `ziling-build` **3.34.6** 对齐。*

@@ -131,6 +131,18 @@
     if (!appRoot || !p) return;
     appRoot.dataset.uiArc =
       p.uiArcMode === "presentation" ? "presentation" : "standby";
+    syncMotionStyleRail(p);
+  }
+
+  function syncMotionStyleRail(p) {
+    if (!p || !window.ZiLing || !ZiLing.normalizeBodyMotionStyle) return;
+    const cur = ZiLing.normalizeBodyMotionStyle(p.bodyMotionStyle);
+    document.querySelectorAll('[data-action="setMotionStyle"]').forEach((btn) => {
+      const m = btn.dataset.motion;
+      const on = m === cur;
+      btn.classList.toggle("rail-tool--active", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
   }
 
   const pet = new Pet(canvas, {
@@ -154,6 +166,7 @@
     onFormChange(key) {
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
       syncUiMode();
+      syncMotionStyleRail(pet);
     },
     onUiArcModeChange() {
       syncRailUiArcClass(pet);
@@ -366,6 +379,7 @@
     pet.setForm(key);
     formLabel.textContent = FORMS[key].label;
     syncUiMode();
+    syncMotionStyleRail(pet);
     if (announce) toast("换形 · " + FORMS[key].label);
   }
 
@@ -375,6 +389,7 @@
     if (pet.gridMarch && pet.gridSnapping && pet.startMorphTo(key)) {
       formLabel.textContent = FORMS[key].label;
       syncUiMode();
+      syncMotionStyleRail(pet);
       if (announce) toast("换形中 · " + FORMS[key].label);
       return;
     }
@@ -648,8 +663,9 @@
         pet.cycleUiArcMode();
         const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
         toast(
-          `层级 · ${lab}（色/速/轨/颤/紊/廓/辨/动/墨/浮/波/徙/粒/字比/容纳 分套保留）`
+          `层级 · ${lab}（色/速/谐步·廊道/字号/颤/紊/灰底·淡影/内动/规整/墨/浮/波/徙/粒/字比/容纳 分套保留）`
         );
+        syncMotionStyleRail(pet);
       } else if (action === "morph") {
         pet.abortFeeding();
         const order = getFormOrderForUiArcMode(pet.uiArcMode);
@@ -685,11 +701,23 @@
         toast(
           `运动 ×${v.toFixed(2)}（${arcLayerZh()}；调制节拍/格移/流体相位，与「徙」格移倍率独立）`
         );
-      } else if (action === "motionStyle") {
-        const k = pet.cycleBodyMotionStyle();
+      } else if (action === "setMotionStyle") {
+        const motion = btn.dataset.motion;
+        if (pet.uiArcMode === "presentation" && motion === "contour_drift") {
+          toast("呈现巨字/颜不使用「壳漫游」，已保持谐步（待机层仍可选漫游）");
+          syncMotionStyleRail(pet);
+          return;
+        }
+        pet.setBodyMotionStyle(motion);
         const lab =
-          (BODY_MOTION_LABELS && BODY_MOTION_LABELS[k]) || k;
-        toast(`运动轨：${lab}（${arcLayerZh()}；巨字/颜文字 mask 内）`);
+          (BODY_MOTION_LABELS && BODY_MOTION_LABELS[motion]) || motion;
+        toast(`走格：${lab}（${arcLayerZh()}）`);
+        syncMotionStyleRail(pet);
+      } else if (action === "bodyGlyphEm") {
+        const v = pet.cycleBodyGlyphEmMul();
+        toast(
+          `躯体字号 ×${v.toFixed(2)}（${arcLayerZh()}；文稿/曲线/巨字躯体字统一乘子）`
+        );
       } else if (action === "glyphsJitter") {
         const on = pet.cycleSilhouetteGlyphJitter();
         toast(
@@ -701,27 +729,40 @@
         const k = pet.cycleTextureMotionMode();
         const lab = (TEXTURE_MOTION_LABELS && TEXTURE_MOTION_LABELS[k]) || k;
         toast(`纹理体动 · ${lab}（${arcLayerZh()}）`);
+      } else if (action === "silhouetteCalm") {
+        pet.applyPresentationSilhouetteHarmonicCalm();
+        if (pet.uiArcMode === "presentation") {
+          toast(
+            "已规整呈现层：横竖格谐步 · 关内动 · 纹理流 · 流体略收（巨字/颜下叠格已疏散）。约 0.9s 后再启邻格互换；关内动下互换带一次淡隐以利辨位。"
+          );
+        } else {
+          toast(
+            "已写入呈现层偏好（横竖格谐步·全静）。请点「层」→ 呈现后在巨字/颜下生效。"
+          );
+        }
+        syncMotionStyleRail(pet);
       } else if (action === "silhouetteMatteUnderlay") {
         const on = pet.cycleSilhouetteMatteUnderlay();
         toast(
           on
-            ? `剪影垫底：开（${arcLayerZh()}；整张巨字/颜 mask 半透明垫底，与可走格对齐）`
-            : `剪影垫底：关（${arcLayerZh()}；默认不叠整块轮廓，仅字粒构形）`
+            ? `整块灰底：开（${arcLayerZh()}；整张巨字/颜 mask 半透明垫底）`
+            : `整块灰底：关（${arcLayerZh()}；默认不叠第二重剪影）`
         );
       } else if (action === "outlineContourFirst") {
         const on = pet.cycleOutlineContourFirst();
         toast(
           on
-            ? `辨形优先：开（${arcLayerZh()}；体内动压低；呈现关「动」且未开「廓」时叠极弱整 mask 垫底）`
-            : `辨形优先：关（${arcLayerZh()}；无弱垫底；强轮廓请开「廓」）`
+            ? `淡影垫底：开（${arcLayerZh()}；关内动且未开整块灰底时可叠极弱整 mask）`
+            : `淡影垫底：关（${arcLayerZh()}；无弱垫底；要强对比开「整块灰底」）`
         );
       } else if (action === "presentationDynamics") {
         const on = pet.cyclePresentationGlyphDynamics();
         toast(
           on
-            ? `体内动：开（呈现层；谐波/流体/蛇行等；不叠整张巨字 mask 垫底；字粒略闪一下作确认）`
-            : `体内动：关（呈现层；巨字/颜剪影内锁格静形：停谐步扰动/蛇行格/空位拉回；叠分仍解共格；开「辨」有极弱垫底）`
+            ? `字内动：开（呈现层；谐波/流体/蛇行等；不叠整张巨字 mask 大字底；略闪确认）`
+            : `字内动：关（呈现层；锁格真静：停谐步扰动/蛇行格/亚格颤/空位拉回；叠分仍解共格）`
         );
+        syncMotionStyleRail(pet);
       } else if (action === "megaScale") {
         const v = pet.cycleMegaLayoutScale();
         toast(
@@ -731,6 +772,20 @@
         const m = pet.cycleMacroFitMode();
         const lab = (MACRO_FIT_LABELS && MACRO_FIT_LABELS[m]) || m;
         toast(`巨字容纳：${lab}（${arcLayerZh()}；已巨字则重建）`);
+      } else if (action === "megaPresentLayout") {
+        const mode = pet.cyclePresentationMegaLayoutMode();
+        const Z = window.ZiLing;
+        const lab =
+          (Z &&
+            Z.MEGA_PRESENTATION_LAYOUT_LABELS &&
+            Z.MEGA_PRESENTATION_LAYOUT_LABELS[mode]) ||
+          mode;
+        toast(`巨字排布：${lab}（呈现层偏好；巨字形下已重建）`);
+      } else if (action === "silhouetteJitterAmp") {
+        const v = pet.cycleSilhouetteJitterAmpMul();
+        toast(
+          `颤幅 ×${v.toFixed(2)}（${arcLayerZh()}；与「颤」开关联用亚格绘移幅度）`
+        );
       } else if (action === "fluid") {
         const v = pet.cycleArcFluidStrength();
         toast(`波纹强度 ×${v.toFixed(2)}（${arcLayerZh()}）`);
@@ -1013,8 +1068,24 @@
     });
   }
 
-  // ---------- 说明 ----------
-  document.getElementById("infoBtn").addEventListener("click", () => {
-    toast("拖移 · 戳身边 · 双击觅食 · 躯体可多次写入 · ?form=soft_ray / kao_party / digit_0 / mega&macroText=2026");
-  });
+  const helpDialog = document.getElementById("helpDialog");
+  const infoBtnEl = document.getElementById("infoBtn");
+  if (infoBtnEl && helpDialog && typeof helpDialog.showModal === "function") {
+    infoBtnEl.addEventListener("click", () => {
+      try {
+        helpDialog.showModal();
+      } catch (_) {
+        toast("说明对话框无法打开 · 请使用支持原生 dialog 的浏览器");
+      }
+    });
+    helpDialog.addEventListener("click", (e) => {
+      if (e.target === helpDialog) helpDialog.close();
+    });
+  } else if (infoBtnEl) {
+    infoBtnEl.addEventListener("click", () => {
+      toast(
+        "呈→灵 三步上手 · 长按字灵核心区约 0.58s 后松手回稿 · URL 例 ?skipIntro=1 & ?form=mega&macroText=春"
+      );
+    });
+  }
 })();
