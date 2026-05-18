@@ -899,12 +899,92 @@
   }
 
   /**
+   * 巨字测量：复用单离屏 2D 上下文，减少反复 `createElement`（借鉴 Pretext 等
+   * 「热路径轻量、测量与绘制同口径」思路；仍不引入外部依赖）。
+   */
+  let _macroMeasureCtx2d = null;
+  function getMacroMeasureContext2d() {
+    if (_macroMeasureCtx2d) return _macroMeasureCtx2d;
+    const c = document.createElement("canvas");
+    c.width = 8;
+    c.height = 8;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    try {
+      if (typeof ctx.textRendering === "string") {
+        ctx.textRendering = "geometricPrecision";
+      }
+    } catch (_) {}
+    _macroMeasureCtx2d = ctx;
+    return _macroMeasureCtx2d;
+  }
+
+  /** 字素级拆分（emoji / 代理对等），无 `Intl.Segmenter` 时退回 `Array.from` */
+  function segmentStringGraphemes(s) {
+    const str = String(s || "");
+    if (typeof Intl !== "undefined" && Intl.Segmenter) {
+      try {
+        const seg = new Intl.Segmenter(undefined, {
+          granularity: "grapheme",
+        });
+        return Array.from(seg.segment(str), (p) => p.segment);
+      } catch (_) {}
+    }
+    return Array.from(str);
+  }
+
+  /**
+   * 与 `createMacroTextDraw` 同逻辑：在给定布局尺度 `Slay` 下收敛字号并返回
+   * 各行最大像素宽，供呈现层格距预估（测量先于强排）。
+   */
+  function measureMacroLayoutMaxWidth(raw, Slay, kao) {
+    const ctx = getMacroMeasureContext2d();
+    if (!ctx || !(Slay > 0)) return { fs: Slay * 0.12, maxLineW: 0 };
+    const text = String(raw || "字").trim() || "字";
+    const hasHan = /[\u3400-\u9fff\uf900-\ufadf]/.test(text.replace(/\n/g, ""));
+    const fontStack = kao
+      ? FONT_SILHOUETTE_KAO
+      : !hasHan
+        ? FONT_SILHOUETTE_MONO
+        : FONT_MACRO_CJK_OPEN;
+    const fontWeight = kao ? "700" : "600";
+    const lines = text
+      .split(/\n/)
+      .map((ln) => ln.trim())
+      .filter(Boolean);
+    const useLines = lines.length ? lines : [text];
+    const joined = useLines.join("");
+    const gLen = Math.max(2, Array.from(joined).length);
+    let fs = Slay * 0.52 * Math.min(1, 8.5 / gLen);
+    const maxW = Slay * 0.9;
+    for (let iter = 0; iter < 26; iter++) {
+      ctx.font = `${fontWeight} ${fs}px ${fontStack}`;
+      let ok = true;
+      for (const ln of useLines) {
+        if (ctx.measureText(ln).width > maxW) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok && fs <= Slay * 0.58) break;
+      fs *= 0.9;
+    }
+    fs = Math.max(fs, Slay * 0.055);
+    ctx.font = `${fontWeight} ${fs}px ${fontStack}`;
+    let maxLineW = 0;
+    for (const ln of useLines) {
+      maxLineW = Math.max(maxLineW, ctx.measureText(ln).width);
+    }
+    return { fs, maxLineW };
+  }
+
+  /**
    * 呈现层短串（2–3 字）也拆行：`macroTextWrapTwoLines` 对 ≤3 字原样返回，
    * 多字巨字易挤乱；此处做 1+1 / 2+1 等轻量分行。
    */
   function macroTextBalancedWrapShort(raw, S) {
     const t0 = String(raw || "").trim() || "字";
-    const chars = Array.from(t0);
+    const chars = segmentStringGraphemes(t0);
     const n = chars.length;
     if (n <= 1) return t0;
     if (n === 2) return `${chars[0]}\n${chars[1]}`;
@@ -930,16 +1010,28 @@
       /* ignore */
     }
     const stem = 13.5 + g * 5.4 + (g >= 3 ? 6 : 0);
-    return clamp(Math.round(usable / stem), 9, 18);
+    let cell = clamp(Math.round(usable / stem), 9, 18);
+    try {
+      if (typeof self._pickMacroDisplayForLayout === "function") {
+        const rawInk =
+          String(self._pickMacroDisplayForLayout() || "字").trim() || "字";
+        const SlayProbe = S * 0.9;
+        const { maxLineW } = measureMacroLayoutMaxWidth(rawInk, SlayProbe, false);
+        if (maxLineW > SlayProbe * 0.82) cell = Math.max(9, cell - 1);
+        if (maxLineW > SlayProbe * 0.92) cell = Math.max(9, cell - 1);
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    return cell;
   }
 
   /** 按画布宽度截断巨字串（与 createMacroTextDraw 字体栈一致）。 */
   function macroTextTruncateToWidth(raw, S, margin) {
     const t0 = String(raw || "").trim() || "字";
-    const chars = Array.from(t0);
+    const chars = segmentStringGraphemes(t0);
     const maxW = S * (margin != null ? margin : 0.88);
-    const c = document.createElement("canvas");
-    const ctx = c.getContext("2d");
+    const ctx = getMacroMeasureContext2d();
     if (!ctx) return t0;
     const hasHan = /[\u3400-\u9fff\uf900-\ufadf]/.test(t0);
     const fontStack = !hasHan ? FONT_SILHOUETTE_MONO : FONT_MACRO_CJK_OPEN;
@@ -965,8 +1057,7 @@
     const t0 = String(raw || "").trim() || "字";
     const chars = Array.from(t0);
     if (chars.length <= 3) return t0;
-    const c = document.createElement("canvas");
-    const ctx = c.getContext("2d");
+    const ctx = getMacroMeasureContext2d();
     if (!ctx) return t0;
     const hasHan = /[\u3400-\u9fff\uf900-\ufadf]/.test(t0);
     const fontStack = !hasHan ? FONT_SILHOUETTE_MONO : FONT_MACRO_CJK_OPEN;
@@ -2465,8 +2556,8 @@
   /** 侧栏「呈现」模式：压低时间尺度与振幅，利于辨形（计时/巨字/颜文字共用）。 */
   const DISPLAY_MOTION_KERNELS = {
     id: "display",
-    timeScale: 0.34,
-    ampScale: 0.26,
+    timeScale: 0.32,
+    ampScale: 0.24,
     wanderRadScale: 0.48,
     wanderPickIntervalMul: 1.72,
     anchorAmpScale: 0.4,
@@ -2492,8 +2583,8 @@
     if (!isPresentationSilhouetteHarm(self)) return mk;
     const dynOn = !!self.presentationGlyphDynamics;
     /** 开内动时再略压时间/振幅，减轻「过快、难辨形」；关内动仍走下方 sleep 支路 */
-    const ts0 = dynOn ? 0.34 : 0.42;
-    const amp0 = dynOn ? 0.2 : 0.26;
+    const ts0 = dynOn ? 0.31 : 0.42;
+    const amp0 = dynOn ? 0.18 : 0.26;
     let out = {
       ...mk,
       timeScale: mk.timeScale * ts0,
@@ -7676,7 +7767,7 @@
         const nowMs =
           typeof performance !== "undefined" ? performance.now() : Date.now();
         /** 先静约 0.9s，再允许邻格互换；互换时在关内动下带一次淡入淡出感 */
-        this._huarongNextAt = nowMs + 900;
+        this._huarongNextAt = nowMs + 1050;
       }
       return true;
     }
