@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.34.5** 起）。
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.34.6** 起）。
 > **接手说明**：`HANDOFF.md`（架构、常见坑、需求归纳、**侧栏 title 与区块**；**非**完整对话逐字存档）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
@@ -75,6 +75,8 @@
 | 单字巨字内分布 | **已完成** | **`buildFormLayoutData("mega")`**：呈现且 **单 grapheme** 时 **略增** `spreadMin` / `enforceSpacing` / `spreadPasses` / `enforceSpacingPasses` |
 | 规整横竖谐步观感 | **部分完成** | **关内动** 下 **关 `strictSilGrid` 离散谐扰**；**亚格颤** lerp 略柔；生命周期 **α 步幅略收** |
 | 侧栏「速」在关内动仍可感 | **部分完成** | **`mergePresentationSilhouetteMotion`**：`presSleep` 时 **`timeScale` ×0.32**（原 ×0.22） |
+| 关内动锁格真静形（3.34.6） | **已完成** | **`presSleepLock`**；**`presentationGlyphDynamics`** 仅 **snapshot** 入呈现套，待机 **apply** 读呈现套；生命周期 **α maxStep** 关内动 **0.48** |
+| 叠分与拖曳并存（3.34.6） | **已完成** | **`_separateOverlappingGridGlyphs`**：呈现剪影拖曳或 **`decoupDrag`** 时不早退；遍数 **拖曳解耦时 20** 否则 **18** |
 
 ### 1.08 规整先静与拖曳缓跟（3.34.4）
 

@@ -759,8 +759,8 @@
         const on = pet.cyclePresentationGlyphDynamics();
         toast(
           on
-            ? `字内动：开（呈现层；谐波/流体/蛇行等；略闪确认）`
-            : `字内动：关（呈现层；全静，仅格点）`
+            ? `字内动：开（呈现层；谐波/流体/蛇行等；不叠整张巨字 mask 大字底；略闪确认）`
+            : `字内动：关（呈现层；锁格真静：停谐步扰动/蛇行格/亚格颤/空位拉回；叠分仍解共格）`
         );
         syncMotionStyleRail(pet);
       } else if (action === "megaScale") {

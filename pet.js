@@ -2529,7 +2529,9 @@
     b.silhouetteMatteUnderlay = !!self.silhouetteMatteUnderlay;
     b.outlineContourFirst = !!self.outlineContourFirst;
     b.textureMotionMode = normalizeTextureMotionMode(self.textureMotionMode);
-    b.presentationGlyphDynamics = !!self.presentationGlyphDynamics;
+    if (self.uiArcMode === "presentation") {
+      b.presentationGlyphDynamics = !!self.presentationGlyphDynamics;
+    }
     b.macroFitMode = normalizeMacroFitMode(self.macroFitMode);
     b.megaLayoutScale = clamp(
       self.megaLayoutScale != null ? +self.megaLayoutScale : 1,
@@ -2571,7 +2573,10 @@
     self.silhouetteMatteUnderlay = !!b.silhouetteMatteUnderlay;
     self.outlineContourFirst = !!b.outlineContourFirst;
     self.textureMotionMode = normalizeTextureMotionMode(b.textureMotionMode);
-    self.presentationGlyphDynamics = !!b.presentationGlyphDynamics;
+    self.presentationGlyphDynamics =
+      self.uiArcMode === "presentation"
+        ? !!b.presentationGlyphDynamics
+        : !!self._arcPrefs.presentation.presentationGlyphDynamics;
     self.macroFitMode = normalizeMacroFitMode(
       b.macroFitMode != null ? b.macroFitMode : "shrink"
     );
@@ -4031,11 +4036,12 @@
     _separateOverlappingGridGlyphs() {
       if (!this.gridSnapping || !this.gridMarch) return;
       if (this.form === "script") return;
+      const presDense = isPresentationSilhouetteHarm(this);
       const decoupDrag =
         this.dragging &&
         this._dragShellDecoupled &&
         isPresentationSilhouetteHarm(this);
-      if (this.dragging && !decoupDrag) return;
+      if (this.dragging && !presDense && !decoupDrag) return;
       const cell = this.gridCell;
       if (!cell) return;
       const shell = this._bodyWorldForShell();
@@ -4048,7 +4054,6 @@
       const mega = this.form === "mega";
       const kaoMask = useMask && String(this.form || "").startsWith("kao_");
       const rMax = mega ? 90 : kaoMask ? 52 : useMask ? 40 : 22;
-      const presDense = isPresentationSilhouetteHarm(this);
       const silMask = isMaskBackedMegaKao(this);
       const passes =
         presDense
@@ -4091,7 +4096,7 @@
               ];
               const rot = (pass + gx + gy) & 3;
               for (let q = 0; q < 4; q++) {
-                const [dx, dy] = orth[(q + rot) & 3];
+                const [dx, dy] = orth[(q + rot) % 4];
                 const nx = gx + dx;
                 const ny = gy + dy;
                 const nk = key(nx, ny);
@@ -4392,6 +4397,12 @@
      * 淡出后的语义空位：从剪影内部拉一粒向锚点格迈一步（曼哈顿），形成「邻字挪入」感。
      */
     _stepSilhouetteVacancyInpull(t, gms, bx, by, cos, sin, flip) {
+      if (
+        isPresentationSilhouetteHarm(this) &&
+        !this.presentationGlyphDynamics
+      ) {
+        return;
+      }
       if (!this._silhouetteVacancyPulls.length) return;
       if (t < (this._silVacPullNextAt || 0)) return;
       this._silVacPullNextAt =
@@ -4528,7 +4539,7 @@
           if (a > tgt) a = tgt;
         }
         let aNext = clamp(a, 0, 1);
-        const maxStep = (presSleep ? 0.5 : 1.12) * dt;
+        const maxStep = (presSleep ? 0.48 : 1.12) * dt;
         if (aNext - prevA > maxStep) aNext = prevA + maxStep;
         if (prevA - aNext > maxStep) aNext = prevA - maxStep;
         g.alpha = aNext;
@@ -6318,6 +6329,7 @@
           let useSnakeCell = false;
           if (
             snakeStream &&
+            !presGlyphSleep &&
             !g.faceRole &&
             !mT &&
             this._snakeWalkPath &&
@@ -6499,7 +6511,7 @@
             tgy = Math.round(wy / cell);
           }
 
-          if (strictSilGrid && !mT && !useSnakeCell && !g.faceRole) {
+          if (strictSilGrid && !mT && !useSnakeCell && !g.faceRole && !presGlyphSleep) {
             const ph =
               this._ensemblePhase * (0.38 + 0.2 * gms0) +
               gi * 0.37 +
@@ -6532,6 +6544,26 @@
             );
             tgx = sn.gx;
             tgy = sn.gy;
+          }
+
+          const presSleepLock =
+            presSilHarm &&
+            presGlyphSleep &&
+            silMaskPet &&
+            !mT &&
+            !useSnakeCell;
+
+          if (presSleepLock) {
+            g.mgx = tgx;
+            g.mgy = tgy;
+            g.x = tgx * cell;
+            g.y = tgy * cell;
+            g.vx = 0;
+            g.vy = 0;
+            g._silDrawOx = 0;
+            g._silDrawOy = 0;
+            g.rot = lerp(g.rot, g.targetRot, this.gridUnity ? 0.18 : 0.08);
+            continue;
           }
 
           let s = stepBudget;
@@ -6580,7 +6612,13 @@
           g.vx = 0;
           g.vy = 0;
 
-          if (silMaskPet && silJit && !g.faceRole && !mT) {
+          if (
+            silMaskPet &&
+            silJit &&
+            !g.faceRole &&
+            !mT &&
+            !(presSilHarm && presGlyphSleep)
+          ) {
             const txo = wx - g.x;
             const tyo = wy - g.y;
             const jitAmp = clamp(
@@ -7530,6 +7568,8 @@
       }
       if (this.uiArcMode === "presentation") {
         applyArcVisualPrefsToPet(this);
+      } else {
+        this.presentationGlyphDynamics = !!b.presentationGlyphDynamics;
       }
       return next;
     }
