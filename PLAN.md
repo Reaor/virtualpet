@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.34.4** 起）。
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.34.5** 起）。
 > **接手说明**：`HANDOFF.md`（架构、常见坑、需求归纳、**侧栏 title 与区块**；**非**完整对话逐字存档）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
@@ -63,8 +63,18 @@
 | 按画布收紧格距 | **已完成** | `computePresentationMegaGridCell`（`PB.inset` + 字数）在呈现 **fit_canvas** 巨字 `setForm` 时写 `gridCell` |
 | 逐字呈现模式 | **已完成** | `_arcPrefs.presentation.presentationMegaLayoutMode` **`sequential_chars`**；侧栏 **「排布」**；`_megaSeqIdx` + `_tickPresentationMegaAux` 定时 `setForm` |
 | 颤动画幅度可调 | **已完成** | `silhouetteJitterAmpMul` + 侧栏 **「颤幅」**；绘移 `cap` 乘子 |
-| 拖曳不要整块平移感 | **部分→进阶** | **3.34.3**：格向残差 + 异相偏移。**3.34.4**：`_dragTargetPos` 与 **`pos` 每帧 lerp 跟手**（呈现 mask 剪影 + `gridMarch`），松手对齐目标 |
-| 规整静态下邻格互换律动 | **已完成** | **华容道**在呈现剪影 **亦启用**；静帧（关内动）**冷却 ×2.55**；开内动略加快（×0.88）。**3.34.4**：规整后 **约 0.9s** 才允许下一次互换；关内动下 **互换成功时 α 一次压低**（淡隐再接生命周期淡入） |
+| 拖曳不要整块平移感 | **部分→进阶** | **3.34.3**：格向残差 + 异相偏移。**3.34.4**：`_dragTargetPos` + **`pos` lerp**。**3.34.5**：**`_dragShellWorld`** 跟手、**`pos` 拖曳中冻结**，**`endDrag`** 对齐；解耦拖曳时 **仍叠分**；`_bodyWorldForShell` |
+| 规整静态下邻格互换律动 | **已完成** | **华容道**在呈现剪影 **亦启用**；静帧（关内动）**冷却 ×2.55**；开内动略加快（×0.88）。**3.34.4**：规整后 **约 0.9s** 才允许下一次互换；关内动下 **互换成功时 α 一次压低**。**3.34.5**：swap **α×0.78**（轻淡）；拖曳解耦时华容道 **冷却 ×1.55** |
+
+### 1.09 拖曳解耦锚点 / 叠分在拖 / 单字壳匀 / 规整谐步（3.34.5）
+
+| 子需求 | 状态 | 说明 |
+|--------|------|------|
+| 拖曳尽量不依赖整体位移 | **部分完成** | **`_dragShellDecoupled`**：`dragTo` 只动 **`_dragShellWorld`**；**`pos`/`vel` 积分冻结**；**`endDrag`** 将 **`pos` 对齐壳心**；**`_bodyWorldForShell`** 供格迈与叠分 |
+| 拖曳中仍叠分 | **已完成** | **`_separateOverlappingGridGlyphs`**：解耦拖曳 **不早退**；**`bx,by`** 取自 **`_bodyWorldForShell`** |
+| 单字巨字内分布 | **已完成** | **`buildFormLayoutData("mega")`**：呈现且 **单 grapheme** 时 **略增** `spreadMin` / `enforceSpacing` / `spreadPasses` / `enforceSpacingPasses` |
+| 规整横竖谐步观感 | **部分完成** | **关内动** 下 **关 `strictSilGrid` 离散谐扰**；**亚格颤** lerp 略柔；生命周期 **α 步幅略收** |
+| 侧栏「速」在关内动仍可感 | **部分完成** | **`mergePresentationSilhouetteMotion`**：`presSleep` 时 **`timeScale` ×0.32**（原 ×0.22） |
 
 ### 1.08 规整先静与拖曳缓跟（3.34.4）
 
@@ -72,7 +82,7 @@
 |--------|------|------|
 | 规整后轮廓先稳再动 | **已完成** | `applyPresentationSilhouetteHarmonicCalm` 将 **`_huarongNextAt` 推迟约 900ms**，避免刚疏散完立刻换位 |
 | 静态下换位可辨 | **已完成** | `presSleep` 且华容道 **swapPair** 成功后，两粒 **`alpha` 乘 0.36** 夹上下限，配合既有生命周期淡入 |
-| 呈现剪影拖曳缓跟手 | **已完成** | **`_dragTargetPos`** 存指针目标；**`dragTo`** 只更新目标；**`_update`** 对 **`pos` 指数 lerp**；**`endDrag`** 将 **`pos` 对齐目标** |
+| 呈现剪影拖曳缓跟手 | **已由 3.34.5 替代** | **3.34.4**：`_dragTargetPos` + **`pos` lerp**。**3.34.5**：**壳心跟手、锚点松手对齐**（见 §1.09） |
 
 ### 1.9 表情用「字」拼轮廓 · 大字倒计时 · 全身动物剪影 · 去月 · 龙可见 · 换形不挤左上角 · 运动更紧凑
 
