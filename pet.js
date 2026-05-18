@@ -224,7 +224,12 @@
     const step = Math.max(1, Math.floor(total / count));
     const points = [];
     const off = sampleS / 2;
-    for (let i = 0; i < total && points.length < count; i += step) {
+    const start =
+      so.startPhase != null
+        ? Math.abs(so.startPhase | 0) % Math.max(1, total)
+        : 0;
+    for (let pos = 0; pos < count; pos++) {
+      const i = (start + pos * step) % total;
       const jitter = () => (Math.random() - 0.5) * jitterScale;
       points.push({
         x: (px[i * 2] - off) / scale + jitter(),
@@ -239,7 +244,112 @@
   }
 
   /**
-   * 从笔画壳层像素中分层抽样，避免按扫描序取点导致笔画间分配不均、巨字「断墨」。
+   * 巨字全笔画：栅格化后收集不透明像素中心（与 `sampleSilhouette` 同尺度）。
+   * 点列可能上万，后续须 `subsampleInkPointsUniform` 再 FPS。
+   */
+  function collectSilhouetteInkPointsWorld(drawFn, S, capPx) {
+    const cap = clamp(capPx != null ? +capPx : 420, 200, 512);
+    const sampleS = Math.min(Math.round(S), cap);
+    const scale = sampleS / S;
+    const c = document.createElement("canvas");
+    c.width = sampleS;
+    c.height = sampleS;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.clearRect(0, 0, sampleS, sampleS);
+    ctx.save();
+    ctx.scale(scale, scale);
+    drawFn(ctx, S);
+    ctx.restore();
+    const img = ctx.getImageData(0, 0, sampleS, sampleS).data;
+    const off = sampleS / 2;
+    const pts = [];
+    const stride = sampleS > 240 ? 2 : 1;
+    for (let y = 0; y < sampleS; y += stride) {
+      const row = y * sampleS;
+      for (let x = 0; x < sampleS; x += stride) {
+        if (img[(row + x) * 4 + 3] > 128) {
+          pts.push({
+            x: (x - off) / scale,
+            y: (y - off) / scale,
+          });
+        }
+      }
+    }
+    return { pts, sampleS, scale };
+  }
+
+  /** 均匀压到至多 maxN 点，控制 FPS 复杂度 */
+  function subsampleInkPointsUniform(pts, maxN) {
+    if (!pts || pts.length <= maxN) return pts || [];
+    const out = [];
+    const step = pts.length / maxN;
+    let acc = 0;
+    for (let i = 0; i < pts.length && out.length < maxN; i++) {
+      acc += 1;
+      if (acc >= step) {
+        out.push(pts[i]);
+        acc -= step;
+      }
+    }
+    let j = 0;
+    while (out.length < maxN && j < pts.length) {
+      out.push(pts[j++]);
+    }
+    return out;
+  }
+
+  /**
+   * 最远点采样（贪心 FPS）：在笔画点云上取 k 个互斥性较好的代表点，
+   * 近似蓝噪声/Poisson-disk，减轻步进扫描条纹与局部空洞（自研、零依赖）。
+   */
+  function farthestPointSamplingInk(pts, kWant, seedU32) {
+    if (!pts || !pts.length || kWant < 1) return [];
+    if (pts.length <= kWant) return pts.slice(0, kWant);
+    const chosen = [];
+    const picked = new Uint8Array(pts.length);
+    const first = (seedU32 ^ (pts.length * 2654435761)) % pts.length;
+    chosen.push(pts[first]);
+    picked[first] = 1;
+    const minD2 = new Float64Array(pts.length);
+    for (let i = 0; i < pts.length; i++) {
+      const dx = pts[i].x - pts[first].x;
+      const dy = pts[i].y - pts[first].y;
+      minD2[i] = dx * dx + dy * dy;
+    }
+    let rnd = seedU32 >>> 0;
+    while (chosen.length < kWant) {
+      let bestI = -1;
+      let bestD = -1;
+      for (let i = 0; i < pts.length; i++) {
+        if (picked[i]) continue;
+        const d = minD2[i];
+        if (d > bestD || (d === bestD && ((rnd = (rnd * 1664525 + 1013904223) >>> 0) & 1))) {
+          bestD = d;
+          bestI = i;
+        }
+      }
+      if (bestI < 0 || bestD < 1e-12) break;
+      const p = pts[bestI];
+      chosen.push(p);
+      picked[bestI] = 1;
+      for (let i = 0; i < pts.length; i++) {
+        if (picked[i]) continue;
+        const dx = pts[i].x - p.x;
+        const dy = pts[i].y - p.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < minD2[i]) minD2[i] = d2;
+      }
+    }
+    let pad = 0;
+    while (chosen.length < kWant && pad < pts.length * 2) {
+      const q = pts[pad++ % pts.length];
+      chosen.push({ x: q.x + rand(-0.35, 0.35), y: q.y + rand(-0.35, 0.35) });
+    }
+    return chosen.slice(0, kWant);
+  }
+
+  /**
+   * 壳带像素分层抽样：网格分桶后在波次间轮转取点，减轻扫描条纹。
    */
   function stratifiedPickFromShellPixels(pxFlat, w, h, want) {
     const pairs = [];
@@ -954,7 +1064,7 @@
       .filter(Boolean);
     const useLines = lines.length ? lines : [text];
     const joined = useLines.join("");
-    const gLen = Math.max(2, Array.from(joined).length);
+    const gLen = Math.max(2, segmentStringGraphemes(joined).length);
     let fs = Slay * 0.52 * Math.min(1, 8.5 / gLen);
     const maxW = Slay * 0.9;
     for (let iter = 0; iter < 26; iter++) {
@@ -1055,7 +1165,7 @@
   /** 在首字后切一刀，尽量两行宽度平衡（与双行绘制一致）。 */
   function macroTextWrapTwoLines(raw, S) {
     const t0 = String(raw || "").trim() || "字";
-    const chars = Array.from(t0);
+    const chars = segmentStringGraphemes(t0);
     if (chars.length <= 3) return t0;
     const ctx = getMacroMeasureContext2d();
     if (!ctx) return t0;
@@ -1130,7 +1240,7 @@
         "fit_canvas"
     ) {
       const rawTrim = rawFull;
-      const gCount = Math.max(1, Array.from(rawTrim).length);
+      const gCount = Math.max(1, segmentStringGraphemes(rawTrim).length);
       if (gCount >= 2 && mode !== "truncate") {
         dispFinal = macroTextBalancedWrapShort(rawTrim, S * scaleEffFinal);
       }
@@ -1186,7 +1296,7 @@
     const o = opts || {};
     const dense = !!o.densePresentation;
     const text = String(displayText || "字").trim() || "字";
-    const graphemes = Array.from(text);
+    const graphemes = segmentStringGraphemes(text.replace(/\n/g, ""));
     const gcount = Math.max(1, graphemes.length);
     const draw = createMacroTextDraw(text, { noStroke: true });
     const sampleS = Math.min(420, Math.round(S));
@@ -1229,6 +1339,7 @@
    * 小字粒子铺满任意字符串的笔画轮廓（与 sampleSilhouette 同源栅格采样）。
    * opts.kao：颜文字专用字体栈；否则无 CJK 时用等宽（数字/ASCII），有汉字用-serif。
    * opts.shellSample：真=仅外圈薄墨壳（待机水墨感）；假=**全不透明笔画**步进抽样（呈现辨形）。
+   * opts.inkFpsSampling：假分支内用栅格点云 + 最远点采样（FPS）近似蓝噪声铺点，减轻扫描条纹。
    * spread / enforce 在两种采样后统一执行；仅 shell 路径在末尾做 snapTargetsToShellPx。
    */
   function buildTextSilhouetteLayout(raw, n, S, opts) {
@@ -1241,6 +1352,17 @@
     const kao = o.kao;
     let targets;
     let shellMeta = null;
+    const capFill = o.cap != null ? o.cap : 420;
+    const jitterFill =
+      o.jitterScale != null ? o.jitterScale : kao ? 0.05 : 0.018;
+    const phaseFromRaw = () => {
+      let h = ((n | 0) * 1103515245) | 0;
+      const rs = String(raw || "");
+      for (let i = 0; i < rs.length; i++) {
+        h = (Math.imul(h, 31) + rs.charCodeAt(i)) | 0;
+      }
+      return h >>> 0;
+    };
     if (o.shellSample) {
       shellMeta = o.snapToShell !== false ? {} : null;
       targets = sampleSilhouetteShell(draw, S, n, {
@@ -1248,11 +1370,43 @@
         shellMax: o.shellMax != null ? o.shellMax : 3,
         jitterScale: o.jitterScale != null ? o.jitterScale : 0.008,
       }, shellMeta);
+    } else if (o.inkFpsSampling) {
+      const ink = collectSilhouetteInkPointsWorld(draw, S, capFill);
+      const pts0 = ink.pts;
+      if (!pts0.length) {
+        targets = sampleSilhouette(draw, S, n, {
+          cap: capFill,
+          jitterScale: jitterFill,
+          startPhase: o.startPhase != null ? o.startPhase : phaseFromRaw(),
+        });
+      } else {
+        const maxPre = clamp(Math.round(n * 52 + 2200), 3000, 10000);
+        const pts = subsampleInkPointsUniform(pts0, maxPre);
+        let seedU = 2166136261 ^ ((n | 0) * 2654435761) >>> 0;
+        const rs = String(raw || "");
+        for (let i = 0; i < rs.length; i++) {
+          seedU = Math.imul(seedU ^ rs.charCodeAt(i), 16777619) >>> 0;
+        }
+        const picked = farthestPointSamplingInk(pts, n, seedU);
+        targets = picked.map((p) => ({
+          x: p.x + (Math.random() - 0.5) * jitterFill,
+          y: p.y + (Math.random() - 0.5) * jitterFill,
+        }));
+        while (targets.length < n) {
+          const p =
+            targets[targets.length % Math.max(1, targets.length)] || {
+              x: 0,
+              y: 0,
+            };
+          targets.push({ x: p.x + rand(-2, 2), y: p.y + rand(-2, 2) });
+        }
+        targets = targets.slice(0, n);
+      }
     } else {
       targets = sampleSilhouette(draw, S, n, {
-        cap: o.cap != null ? o.cap : 420,
-        jitterScale:
-          o.jitterScale != null ? o.jitterScale : kao ? 0.05 : 0.018,
+        cap: capFill,
+        jitterScale: jitterFill,
+        startPhase: o.startPhase != null ? o.startPhase : phaseFromRaw(),
       });
     }
     if (o.spreadMin != null && targets.length > 1) {
@@ -2757,12 +2911,13 @@
       const pres = self.uiArcMode === "presentation";
       const { Slay, disp } = resolveMegaLayoutInput(self, S);
       const dispFlat = String(disp || "字").replace(/\n/g, "");
-      const gLen = Math.max(1, Array.from(dispFlat).length);
+      const gLen = Math.max(1, segmentStringGraphemes(dispFlat).length);
       const presOne = pres && gLen <= 1;
       if (pres) {
         /** 呈现层：全笔画撒点 + 较紧 spread/enforce，优先「可辨形」；待机见 shellSample 分支 */
         return buildTextSilhouetteLayout(disp, n, Slay, {
           shellSample: false,
+          inkFpsSampling: true,
           noStroke: true,
           cap: 480,
           spreadMin:
