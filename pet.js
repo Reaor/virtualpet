@@ -2461,10 +2461,14 @@
   /** 呈现层剪影（巨字 / 颜文字）：在 DISPLAY 内核上再压低，轮廓优先 */
   function mergePresentationSilhouetteMotion(self, mk) {
     if (!isPresentationSilhouetteHarm(self)) return mk;
+    const dynOn = !!self.presentationGlyphDynamics;
+    /** 开内动时再略压时间/振幅，减轻「过快、难辨形」；关内动仍走下方 sleep 支路 */
+    const ts0 = dynOn ? 0.34 : 0.42;
+    const amp0 = dynOn ? 0.2 : 0.26;
     let out = {
       ...mk,
-      timeScale: mk.timeScale * 0.42,
-      ampScale: mk.ampScale * 0.26,
+      timeScale: mk.timeScale * ts0,
+      ampScale: mk.ampScale * amp0,
       crispMicroScale: Math.min(0.22, mk.crispMicroScale * 0.28),
       anchorAmpScale: mk.anchorAmpScale * 0.48,
       springFollowScale: mk.springFollowScale * 0.85,
@@ -2976,6 +2980,9 @@
       this._snakeWalkPath = [];
       this._snakePhase = 0;
       this._snakePathT = 0;
+      /** URL 显式 `presentationDynamics=1` 时，不在「文稿→灵」初切巨字时强行关内动 */
+      this._presentationDynamicsPinnedByUrl =
+        opts.presentationGlyphDynamics === true;
       /** 与 DISPLAY/STANDBY 内核同步，供 UI toast 使用 */
       this.motionProfile = "standby";
       /** 侧栏层级：standby=待机形态；presentation=计时/巨字/颜文字（决定运动内核与独立参数） */
@@ -3296,6 +3303,7 @@
     setForm(name, silent, noEmitOnFormChange) {
       if (!FORMS[name]) return;
       if (this.morphGlyphToTarget) this._cancelMorph(false);
+      const prevForm = this.form;
       const S = this.size;
       if (name === "script") {
         this.gridCell = clamp(Math.round(S * 0.052), 13, 26);
@@ -3578,6 +3586,33 @@
         try {
           this.onFormChange(this.form);
         } catch (_) {}
+      }
+
+      /** 呈现巨字/颜初落位：多遍叠分、推迟邻格互换；从「文稿」成化灵时若无 URL 钉死内动则先关内动，便于先辨形 */
+      const presSilShellSettle =
+        this.viewMode === "pet" &&
+        this.uiArcMode === "presentation" &&
+        (name === "mega" || String(name).startsWith("kao_")) &&
+        this._maskPack &&
+        this._maskPack.grid &&
+        this.gridMarch &&
+        this.gridSnapping &&
+        this.glyphs &&
+        this.glyphs.length > 1;
+      if (presSilShellSettle) {
+        if (prevForm === "script" && !this._presentationDynamicsPinnedByUrl) {
+          this._arcPrefs.presentation.presentationGlyphDynamics = false;
+          applyArcVisualPrefsToPet(this);
+        }
+        for (let si = 0; si < 10; si++) {
+          this._separateOverlappingGridGlyphs();
+        }
+        const nowMs =
+          typeof performance !== "undefined"
+            ? performance.now()
+            : Date.now();
+        this._huarongNextAt = Math.max(this._huarongNextAt || 0, nowMs + 1250);
+        this._glyphFlash = Math.min(this._glyphFlash || 0, 0.05);
       }
 
       this._shapeMutationT = 0.72;
@@ -4058,8 +4093,10 @@
       const passes =
         presDense
           ? decoupDrag
-            ? 20
-            : 18
+            ? 22
+            : this.presentationGlyphDynamics
+              ? 18
+              : 26
           : usesMaskSnakeStream(this) && silMask
             ? 7
             : mega
@@ -4175,7 +4212,7 @@
       const presSleep = presL && !this.presentationGlyphDynamics;
       let hSleep = 1;
       if (presSleep) hSleep = 2.55;
-      else if (presL && this.presentationGlyphDynamics) hSleep = 0.88;
+      else if (presL && this.presentationGlyphDynamics) hSleep = 1.12;
       if (decoupDrag) hSleep *= 1.55;
       this._huarongNextAt =
         now +
@@ -4510,8 +4547,9 @@
       /** 轮廓难辨 / 越界时：略快淡出；合法区内：慢淡入减轻闪现与叠乱感 */
       const presSleep = !this.presentationGlyphDynamics;
       const fadeOut =
-        (0.4 / (0.62 + 0.38 * spd)) * (presSleep ? 1.08 : 1);
-      const fadeIn = (0.26 + 0.22 * spd) * (presSleep ? 1.22 : 1);
+        (0.4 / (0.62 + 0.38 * spd)) * (presSleep ? 0.92 : 1);
+      const fadeIn =
+        (0.2 + 0.16 * spd) * (presSleep ? 0.78 : 1.08);
       const tWall = performance.now() / 1000;
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
@@ -5950,9 +5988,12 @@
       const sleepMul =
         this.mode === "sleep" && this.viewMode === "pet" ? 0.32 : 1;
       this._sleepMotionMul = sleepMul;
-      const ensBoost = silMaskPet
+      const ensBoostCore = silMaskPet
         ? 0.62 + 0.48 * clamp(gms0, 0.35, 2.5)
         : 1;
+      const ensBoost =
+        ensBoostCore *
+        (presSilHarm && this.presentationGlyphDynamics ? 0.55 : 1);
       this._ensemblePhase +=
         dt *
         (0.78 + 0.12 * Math.sin(t * 0.17)) *
@@ -6659,9 +6700,13 @@
               flip
             );
           }
-          /** 呈现剪影叠分第二遍隔帧执行，减轻每帧双遍带来的卡顿 */
+          /** 关内动时每帧双遍叠分（规整辨形）；开内动时隔帧第二遍省算力 */
           this._sepAltFrame = (this._sepAltFrame || 0) + 1;
-          if (!presSilHarm || (this._sepAltFrame & 1) === 1) {
+          const sepSecondPass =
+            !presSilHarm ||
+            !this.presentationGlyphDynamics ||
+            (this._sepAltFrame & 1) === 1;
+          if (sepSecondPass) {
             this._separateOverlappingGridGlyphs();
           }
         }
@@ -7563,8 +7608,8 @@
       b.presentationGlyphDynamics = !b.presentationGlyphDynamics;
       const next = !!b.presentationGlyphDynamics;
       if (next && !prev) {
-        // 画布可感知：关→开体内动时略提亮一瞬（mask 剪影在 _render 内对 flash 再压低）
-        this._glyphFlash = Math.min(0.34, Math.max(this._glyphFlash || 0, 0.22));
+        // 关→开：极弱提亮，避免巨字辨形时「整屏闪一下」
+        this._glyphFlash = Math.min(0.16, Math.max(this._glyphFlash || 0, 0.09));
       }
       if (this.uiArcMode === "presentation") {
         applyArcVisualPrefsToPet(this);
