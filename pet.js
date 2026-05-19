@@ -3184,6 +3184,8 @@
       this.ripples = []; // {x,y,r,alpha}
       /** URL ?dev=1 或 opts：显示活动区虚线框（默认关，避免「漂浮轮廓」观感） */
       this.showPlayfieldGuide = opts.showPlayfieldGuide === true;
+      /** 与 `showPlayfieldGuide` 同闸：`setForm` 后写入，供画布诊断 overlay */
+      this._devPerfHud = null;
       this.dragging = false;
       this.dragOffset = { x: 0, y: 0 };
       /** 呈现巨字排版：拼满画布（分行+自动缩） / 逐字轮换 */
@@ -3607,6 +3609,13 @@
 
     setForm(name, silent, noEmitOnFormChange) {
       if (!FORMS[name]) return;
+      const devHud = this.showPlayfieldGuide === true;
+      const perfAll0 =
+        devHud && typeof performance !== "undefined" ? performance.now() : 0;
+      let perfMega0 = 0;
+      let perfMega1 = 0;
+      let perfLayout0 = 0;
+      let perfLayout1 = 0;
       if (this.morphGlyphToTarget) this._cancelMorph(false);
       const prevForm = this.form;
       const S = this.size;
@@ -3641,6 +3650,7 @@
         this.gridCell = clamp(Math.round(S * 0.0345), 10, 15);
       }
       if (name === "mega") {
+        if (devHud) perfMega0 = performance.now();
         _megaSuggestMemo.clear();
         const mul =
           this._arcPrefs[this.uiArcMode].megaParticleMul != null
@@ -3677,6 +3687,7 @@
           this.particleCount = want;
           this._initGlyphs();
         }
+        if (devHud) perfMega1 = performance.now();
       } else if (name === "clock") {
         const sec = this.clockGranularity === "sec";
         const on = countTimerOnes(sec ? getLiveChronoRows() : getLiveClockRows());
@@ -3701,6 +3712,7 @@
           this._initGlyphs();
         }
       }
+      if (devHud) perfLayout0 = performance.now();
       const data = buildFormLayoutData(
         this,
         name,
@@ -3708,7 +3720,27 @@
         S,
         megaResolvedCache
       );
-      if (!data || !data.targets || !data.targets.length) return;
+      if (devHud) perfLayout1 = performance.now();
+      if (!data || !data.targets || !data.targets.length) {
+        if (devHud && perfAll0) {
+          this._devPerfHud = {
+            ok: false,
+            key: name,
+            allMs: performance.now() - perfAll0,
+            megaSizingMs:
+              name === "mega" && perfMega0 && perfMega1
+                ? perfMega1 - perfMega0
+                : null,
+            buildLayoutMs:
+              perfLayout0 && perfLayout1 ? perfLayout1 - perfLayout0 : null,
+            particles: this.glyphs ? this.glyphs.length : 0,
+            gridCell: this.gridCell,
+            uiArc: this.uiArcMode,
+            memoSize: _megaSuggestMemo.size,
+          };
+        }
+        return;
+      }
       const megaMaskS =
         name === "mega" && megaResolvedCache
           ? megaResolvedCache.Slay
@@ -3942,6 +3974,25 @@
           this._externalWalkSnapshot.height !== this.shapeField.packedHeight)
       ) {
         this.resetExternalWalkConsumer();
+      }
+      if (devHud && perfAll0) {
+        const wall =
+          typeof performance !== "undefined" ? performance.now() : perfAll0;
+        this._devPerfHud = {
+          ok: true,
+          key: name,
+          allMs: wall - perfAll0,
+          megaSizingMs:
+            name === "mega" && perfMega0 && perfMega1
+              ? perfMega1 - perfMega0
+              : null,
+          buildLayoutMs:
+            perfLayout0 && perfLayout1 ? perfLayout1 - perfLayout0 : null,
+          particles: this.glyphs.length,
+          gridCell: this.gridCell,
+          uiArc: this.uiArcMode,
+          memoSize: _megaSuggestMemo.size,
+        };
       }
     }
 
@@ -7313,6 +7364,40 @@
         ctx.setLineDash([5, 5]);
         ctx.strokeRect(box.minX + 0.5, box.minY + 0.5, rw - 1, rh - 1);
         ctx.setLineDash([]);
+        ctx.restore();
+      }
+
+      if (this.showPlayfieldGuide && this._devPerfHud) {
+        const p = this._devPerfHud;
+        const lines = [
+          `${p.ok ? "setForm" : "setForm·fail"} · ${p.key} · ${
+            p.allMs != null ? p.allMs.toFixed(1) + "ms" : "—"
+          }`,
+          p.megaSizingMs != null
+            ? `mega定粒/resolve ${p.megaSizingMs.toFixed(1)}ms`
+            : null,
+          p.buildLayoutMs != null
+            ? `buildLayout ${p.buildLayoutMs.toFixed(1)}ms`
+            : null,
+          `N=${p.particles} cell=${p.gridCell} ${p.uiArc}`,
+          p.memoSize != null ? `suggestMemo×${p.memoSize}` : null,
+        ].filter(Boolean);
+        ctx.save();
+        ctx.font =
+          '11px ui-monospace,SFMono-Regular,"Cascadia Code",Consolas,monospace';
+        ctx.textAlign = "right";
+        ctx.textBaseline = "top";
+        const pad = 8;
+        let y = pad + 4;
+        for (let li = 0; li < lines.length; li++) {
+          const line = lines[li];
+          const tw = ctx.measureText(line).width;
+          ctx.fillStyle = light ? "rgba(255,255,255,0.92)" : "rgba(28,28,30,0.92)";
+          ctx.fillRect(W - pad - tw - 6, y - 2, tw + 10, 15);
+          ctx.fillStyle = light ? "rgba(0,0,0,0.72)" : "rgba(255,255,255,0.82)";
+          ctx.fillText(line, W - pad, y);
+          y += 15;
+        }
         ctx.restore();
       }
 
