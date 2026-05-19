@@ -224,7 +224,12 @@
     const step = Math.max(1, Math.floor(total / count));
     const points = [];
     const off = sampleS / 2;
-    for (let i = 0; i < total && points.length < count; i += step) {
+    const start =
+      so.startPhase != null
+        ? Math.abs(so.startPhase | 0) % Math.max(1, total)
+        : 0;
+    for (let pos = 0; pos < count; pos++) {
+      const i = (start + pos * step) % total;
       const jitter = () => (Math.random() - 0.5) * jitterScale;
       points.push({
         x: (px[i * 2] - off) / scale + jitter(),
@@ -239,7 +244,112 @@
   }
 
   /**
-   * 从笔画壳层像素中分层抽样，避免按扫描序取点导致笔画间分配不均、巨字「断墨」。
+   * 巨字全笔画：栅格化后收集不透明像素中心（与 `sampleSilhouette` 同尺度）。
+   * 点列可能上万，后续须 `subsampleInkPointsUniform` 再 FPS。
+   */
+  function collectSilhouetteInkPointsWorld(drawFn, S, capPx) {
+    const cap = clamp(capPx != null ? +capPx : 420, 200, 512);
+    const sampleS = Math.min(Math.round(S), cap);
+    const scale = sampleS / S;
+    const c = document.createElement("canvas");
+    c.width = sampleS;
+    c.height = sampleS;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.clearRect(0, 0, sampleS, sampleS);
+    ctx.save();
+    ctx.scale(scale, scale);
+    drawFn(ctx, S);
+    ctx.restore();
+    const img = ctx.getImageData(0, 0, sampleS, sampleS).data;
+    const off = sampleS / 2;
+    const pts = [];
+    const stride = sampleS > 240 ? 2 : 1;
+    for (let y = 0; y < sampleS; y += stride) {
+      const row = y * sampleS;
+      for (let x = 0; x < sampleS; x += stride) {
+        if (img[(row + x) * 4 + 3] > 128) {
+          pts.push({
+            x: (x - off) / scale,
+            y: (y - off) / scale,
+          });
+        }
+      }
+    }
+    return { pts, sampleS, scale };
+  }
+
+  /** 均匀压到至多 maxN 点，控制 FPS 复杂度 */
+  function subsampleInkPointsUniform(pts, maxN) {
+    if (!pts || pts.length <= maxN) return pts || [];
+    const out = [];
+    const step = pts.length / maxN;
+    let acc = 0;
+    for (let i = 0; i < pts.length && out.length < maxN; i++) {
+      acc += 1;
+      if (acc >= step) {
+        out.push(pts[i]);
+        acc -= step;
+      }
+    }
+    let j = 0;
+    while (out.length < maxN && j < pts.length) {
+      out.push(pts[j++]);
+    }
+    return out;
+  }
+
+  /**
+   * 最远点采样（贪心 FPS）：在笔画点云上取 k 个互斥性较好的代表点，
+   * 近似蓝噪声/Poisson-disk，减轻步进扫描条纹与局部空洞（自研、零依赖）。
+   */
+  function farthestPointSamplingInk(pts, kWant, seedU32) {
+    if (!pts || !pts.length || kWant < 1) return [];
+    if (pts.length <= kWant) return pts.slice(0, kWant);
+    const chosen = [];
+    const picked = new Uint8Array(pts.length);
+    const first = (seedU32 ^ (pts.length * 2654435761)) % pts.length;
+    chosen.push(pts[first]);
+    picked[first] = 1;
+    const minD2 = new Float64Array(pts.length);
+    for (let i = 0; i < pts.length; i++) {
+      const dx = pts[i].x - pts[first].x;
+      const dy = pts[i].y - pts[first].y;
+      minD2[i] = dx * dx + dy * dy;
+    }
+    let rnd = seedU32 >>> 0;
+    while (chosen.length < kWant) {
+      let bestI = -1;
+      let bestD = -1;
+      for (let i = 0; i < pts.length; i++) {
+        if (picked[i]) continue;
+        const d = minD2[i];
+        if (d > bestD || (d === bestD && ((rnd = (rnd * 1664525 + 1013904223) >>> 0) & 1))) {
+          bestD = d;
+          bestI = i;
+        }
+      }
+      if (bestI < 0 || bestD < 1e-12) break;
+      const p = pts[bestI];
+      chosen.push(p);
+      picked[bestI] = 1;
+      for (let i = 0; i < pts.length; i++) {
+        if (picked[i]) continue;
+        const dx = pts[i].x - p.x;
+        const dy = pts[i].y - p.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < minD2[i]) minD2[i] = d2;
+      }
+    }
+    let pad = 0;
+    while (chosen.length < kWant && pad < pts.length * 2) {
+      const q = pts[pad++ % pts.length];
+      chosen.push({ x: q.x + rand(-0.35, 0.35), y: q.y + rand(-0.35, 0.35) });
+    }
+    return chosen.slice(0, kWant);
+  }
+
+  /**
+   * 壳带像素分层抽样：网格分桶后在波次间轮转取点，减轻扫描条纹。
    */
   function stratifiedPickFromShellPixels(pxFlat, w, h, want) {
     const pairs = [];
@@ -636,8 +746,8 @@
   }
 
   /** 与剪影相同的缩放栅格，用于轮廓内可走判定（alpha > 128） */
-  function rasterizeMask(drawFn, S) {
-    const cap = 280;
+  function rasterizeMask(drawFn, S, capPx) {
+    const cap = clamp(capPx != null ? +capPx : 300, 200, 384);
     const sampleS = Math.min(Math.round(S), cap);
     const scale = sampleS / S;
     const c = document.createElement("canvas");
@@ -804,9 +914,9 @@
     return { x, y };
   }
 
-  /** 巨字/汉字剪影：无衬线优先，字腔略大、笔画分界更清晰（系统回退链） */
+  /** 巨字 mask / 测量：与 DOM `--font-app`、画布 `drawGlyph` 同置 LXGW 于前，减少「屏上字 vs 离屏量」口径漂移（仍保留无衬线回退以保字腔几何）。 */
   const FONT_MACRO_CJK_OPEN =
-    '"Noto Sans SC","Source Han Sans SC","Noto Sans CJK SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei UI","Liberation Sans",sans-serif';
+    '"LXGW WenKai","LXGW WenKai Screen","Noto Sans SC","Source Han Sans SC","Noto Sans CJK SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei UI","Liberation Sans",sans-serif';
   const FONT_SILHOUETTE_MONO =
     'ui-monospace,"Cascadia Code","SFMono-Regular","Consolas","Liberation Mono",monospace';
   /** 颜文字：混排符号，不用纯等宽，避免缺字形 */
@@ -839,7 +949,7 @@
         .filter(Boolean);
       const useLines = lines.length ? lines : [text];
       const joined = useLines.join("");
-      const gLen = Math.max(2, Array.from(joined).length);
+      const gLen = Math.max(2, segmentStringGraphemes(joined).length);
       let fs = s * 0.52 * Math.min(1, 8.5 / gLen);
       const maxW = s * 0.9;
       for (let iter = 0; iter < 26; iter++) {
@@ -899,12 +1009,96 @@
   }
 
   /**
+   * 巨字测量：复用单离屏 2D 上下文，减少反复 `createElement`（借鉴 Pretext 等
+   * 「热路径轻量、测量与绘制同口径」思路；仍不引入外部依赖）。
+   */
+  let _macroMeasureCtx2d = null;
+  function getMacroMeasureContext2d() {
+    if (_macroMeasureCtx2d) return _macroMeasureCtx2d;
+    const c = document.createElement("canvas");
+    c.width = 8;
+    c.height = 8;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    try {
+      if (typeof ctx.textRendering === "string") {
+        ctx.textRendering = "geometricPrecision";
+      }
+    } catch (_) {}
+    _macroMeasureCtx2d = ctx;
+    return _macroMeasureCtx2d;
+  }
+
+  /** 字素级拆分（emoji / 代理对等），无 `Intl.Segmenter` 时退回 `Array.from` */
+  function segmentStringGraphemes(s) {
+    const str = String(s || "");
+    try {
+      if (typeof Intl !== "undefined" && Intl.Segmenter) {
+        try {
+          const seg = new Intl.Segmenter(undefined, {
+            granularity: "grapheme",
+          });
+          return Array.from(seg.segment(str), (p) => p.segment);
+        } catch (_) {}
+      }
+      return Array.from(str);
+    } catch (_) {
+      return Array.from(str);
+    }
+  }
+
+  /**
+   * 与 `createMacroTextDraw` 同逻辑：在给定布局尺度 `Slay` 下收敛字号并返回
+   * 各行最大像素宽，供呈现层格距预估（测量先于强排）。
+   */
+  function measureMacroLayoutMaxWidth(raw, Slay, kao) {
+    const ctx = getMacroMeasureContext2d();
+    if (!ctx || !(Slay > 0)) return { fs: Slay * 0.12, maxLineW: 0 };
+    const text = String(raw || "字").trim() || "字";
+    const hasHan = /[\u3400-\u9fff\uf900-\ufadf]/.test(text.replace(/\n/g, ""));
+    const fontStack = kao
+      ? FONT_SILHOUETTE_KAO
+      : !hasHan
+        ? FONT_SILHOUETTE_MONO
+        : FONT_MACRO_CJK_OPEN;
+    const fontWeight = kao ? "700" : "600";
+    const lines = text
+      .split(/\n/)
+      .map((ln) => ln.trim())
+      .filter(Boolean);
+    const useLines = lines.length ? lines : [text];
+    const joined = useLines.join("");
+    const gLen = Math.max(2, segmentStringGraphemes(joined).length);
+    let fs = Slay * 0.52 * Math.min(1, 8.5 / gLen);
+    const maxW = Slay * 0.9;
+    for (let iter = 0; iter < 26; iter++) {
+      ctx.font = `${fontWeight} ${fs}px ${fontStack}`;
+      let ok = true;
+      for (const ln of useLines) {
+        if (ctx.measureText(ln).width > maxW) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok && fs <= Slay * 0.58) break;
+      fs *= 0.9;
+    }
+    fs = Math.max(fs, Slay * 0.055);
+    ctx.font = `${fontWeight} ${fs}px ${fontStack}`;
+    let maxLineW = 0;
+    for (const ln of useLines) {
+      maxLineW = Math.max(maxLineW, ctx.measureText(ln).width);
+    }
+    return { fs, maxLineW };
+  }
+
+  /**
    * 呈现层短串（2–3 字）也拆行：`macroTextWrapTwoLines` 对 ≤3 字原样返回，
    * 多字巨字易挤乱；此处做 1+1 / 2+1 等轻量分行。
    */
   function macroTextBalancedWrapShort(raw, S) {
     const t0 = String(raw || "").trim() || "字";
-    const chars = Array.from(t0);
+    const chars = segmentStringGraphemes(t0);
     const n = chars.length;
     if (n <= 1) return t0;
     if (n === 2) return `${chars[0]}\n${chars[1]}`;
@@ -930,16 +1124,28 @@
       /* ignore */
     }
     const stem = 13.5 + g * 5.4 + (g >= 3 ? 6 : 0);
-    return clamp(Math.round(usable / stem), 9, 18);
+    let cell = clamp(Math.round(usable / stem), 9, 18);
+    try {
+      if (typeof self._pickMacroDisplayForLayout === "function") {
+        const rawInk =
+          String(self._pickMacroDisplayForLayout() || "字").trim() || "字";
+        const SlayProbe = S * 0.9;
+        const { maxLineW } = measureMacroLayoutMaxWidth(rawInk, SlayProbe, false);
+        if (maxLineW > SlayProbe * 0.82) cell = Math.max(9, cell - 1);
+        if (maxLineW > SlayProbe * 0.92) cell = Math.max(9, cell - 1);
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    return cell;
   }
 
   /** 按画布宽度截断巨字串（与 createMacroTextDraw 字体栈一致）。 */
   function macroTextTruncateToWidth(raw, S, margin) {
     const t0 = String(raw || "").trim() || "字";
-    const chars = Array.from(t0);
+    const chars = segmentStringGraphemes(t0);
     const maxW = S * (margin != null ? margin : 0.88);
-    const c = document.createElement("canvas");
-    const ctx = c.getContext("2d");
+    const ctx = getMacroMeasureContext2d();
     if (!ctx) return t0;
     const hasHan = /[\u3400-\u9fff\uf900-\ufadf]/.test(t0);
     const fontStack = !hasHan ? FONT_SILHOUETTE_MONO : FONT_MACRO_CJK_OPEN;
@@ -963,10 +1169,9 @@
   /** 在首字后切一刀，尽量两行宽度平衡（与双行绘制一致）。 */
   function macroTextWrapTwoLines(raw, S) {
     const t0 = String(raw || "").trim() || "字";
-    const chars = Array.from(t0);
+    const chars = segmentStringGraphemes(t0);
     if (chars.length <= 3) return t0;
-    const c = document.createElement("canvas");
-    const ctx = c.getContext("2d");
+    const ctx = getMacroMeasureContext2d();
     if (!ctx) return t0;
     const hasHan = /[\u3400-\u9fff\uf900-\ufadf]/.test(t0);
     const fontStack = !hasHan ? FONT_SILHOUETTE_MONO : FONT_MACRO_CJK_OPEN;
@@ -1039,7 +1244,7 @@
         "fit_canvas"
     ) {
       const rawTrim = rawFull;
-      const gCount = Math.max(1, Array.from(rawTrim).length);
+      const gCount = Math.max(1, segmentStringGraphemes(rawTrim).length);
       if (gCount >= 2 && mode !== "truncate") {
         dispFinal = macroTextBalancedWrapShort(rawTrim, S * scaleEffFinal);
       }
@@ -1055,7 +1260,12 @@
                 ? macroTextBalancedWrapShort(rawTrim, Stry)
                 : rawTrim;
         const need = 28 + gCount * 34 + (gCount >= 3 ? 24 : 0);
-        if (suggestMegaGlyphParticleCount(dTry, S, gc) >= need || se <= 0.78) {
+        if (
+          suggestMegaGlyphParticleCount(dTry, Stry, gc, {
+            densePresentation: true,
+          }) >= need ||
+          se <= 0.78
+        ) {
           break;
         }
         se = Math.max(0.78, se * 0.935);
@@ -1082,37 +1292,71 @@
     return { Slay: S * scaleEffFinal, disp: dispFinal, gc, mode };
   }
 
+  /** 巨字粒子估算缓存：fit_canvas 迭代与 setForm 前后会重复问同一 (字串,S,格)；借鉴 Pretext「测量少次、口径一致」。 */
+  const _megaSuggestMemo = new Map();
+  function megaSuggestMemoKey(text, S, cellEst, dense) {
+    return `${dense ? 1 : 0}|${cellEst}|${Math.round(S * 4) / 4}|${text}`;
+  }
+
   /**
-   * 巨字粒子数：按剪影填充面积 / 格面积严密估算，并预留空位供格内华容道滑动。
-   * voidFrac：留白比例（略随字数增，避免多字时塞满）。
+   * 巨字粒子数：按剪影填充面积 / 格面积估算；`opts.densePresentation` 为真时
+   * 提高目标密度（略减留白乘子），便于呈现层「辨形」而非待机层的壳层水墨感。
    */
-  function suggestMegaGlyphParticleCount(displayText, S, cellPx) {
+  function suggestMegaGlyphParticleCount(displayText, S, cellPx, opts) {
+    const o = opts || {};
+    const dense = !!o.densePresentation;
     const text = String(displayText || "字").trim() || "字";
-    const graphemes = Array.from(text);
+    const graphemes = segmentStringGraphemes(text.replace(/\n/g, ""));
     const gcount = Math.max(1, graphemes.length);
+    const cellEst =
+      cellPx != null && cellPx > 0
+        ? cellPx
+        : clamp(Math.round(S * 0.043), 12, 20);
+    const mkey = megaSuggestMemoKey(text, S, cellEst, dense);
+    if (_megaSuggestMemo.has(mkey)) return _megaSuggestMemo.get(mkey);
+
     const draw = createMacroTextDraw(text, { noStroke: true });
     const sampleS = Math.min(420, Math.round(S));
     const scaleRel = S / sampleS;
     const fillPx = countSilhouetteFillPixels(draw, S, sampleS);
     const areaLogical = fillPx * scaleRel * scaleRel;
-    const cellEst =
-      cellPx != null && cellPx > 0
-        ? cellPx
-        : clamp(Math.round(S * 0.043), 12, 20);
-    const cellArea = cellEst * cellEst * 0.92;
-    const voidFrac = clamp(0.2 + 0.021 * gcount, 0.19, 0.36);
+    const cellPack = dense ? 0.86 : 0.92;
+    const cellArea = cellEst * cellEst * cellPack;
+    const voidFrac = dense
+      ? clamp(0.055 + 0.009 * gcount, 0.05, 0.16)
+      : clamp(0.2 + 0.021 * gcount, 0.19, 0.36);
     let n = Math.floor((areaLogical * (1 - voidFrac)) / Math.max(cellArea, 1));
     const shellPx = countSilhouetteBandPixels(draw, S, sampleS, 3);
     const bandLogical = shellPx * scaleRel * scaleRel;
-    const nBand = Math.ceil(bandLogical / Math.max(cellArea * 0.58, 1));
+    const nBand = Math.ceil(bandLogical / Math.max(cellArea * (dense ? 0.5 : 0.58), 1));
     n = Math.max(n, nBand);
-    n = Math.max(n, 20 + 12 * gcount);
-    return clamp(n, 28, 250);
+    n = Math.max(n, (dense ? 32 : 20) + (dense ? 16 : 12) * gcount);
+    const out = clamp(n, dense ? 34 : 28, 250);
+    if (_megaSuggestMemo.size > 64) _megaSuggestMemo.clear();
+    _megaSuggestMemo.set(mkey, out);
+    return out;
+  }
+
+  /**
+   * 呈现层巨字：按 mask 栅格与格距估算「一格一字」上限，略留空位给华容道；
+   * 须在 `rasterizeMask` 之后调用（依赖 `mp.scale`）。
+   */
+  function presentationMegaParticleCapFromMask(mp, cellW) {
+    if (!mp || mp.fillCount == null) return 250;
+    const cW = Math.max(8, cellW || 12);
+    const scaleM =
+      mp.scale != null && mp.scale > 0 ? +mp.scale : mp.w / 320;
+    const cellPx = Math.max(0.55, cW * scaleM);
+    const approx = Math.floor(mp.fillCount / Math.max(1, cellPx * cellPx));
+    return clamp(Math.floor(approx * 0.985), 32, 250);
   }
 
   /**
    * 小字粒子铺满任意字符串的笔画轮廓（与 sampleSilhouette 同源栅格采样）。
    * opts.kao：颜文字专用字体栈；否则无 CJK 时用等宽（数字/ASCII），有汉字用-serif。
+   * opts.shellSample：真=仅外圈薄墨壳（待机水墨感）；假=**全不透明笔画**步进抽样（呈现辨形）。
+   * opts.inkFpsSampling：假分支内用栅格点云 + 最远点采样（FPS）近似蓝噪声铺点，减轻扫描条纹。
+   * spread / enforce 在两种采样后统一执行；仅 shell 路径在末尾做 snapTargetsToShellPx。
    */
   function buildTextSilhouetteLayout(raw, n, S, opts) {
     const o = opts || {};
@@ -1123,53 +1367,99 @@
     });
     const kao = o.kao;
     let targets;
+    let shellMeta = null;
+    const capFill = o.cap != null ? o.cap : 420;
+    const jitterFill =
+      o.jitterScale != null ? o.jitterScale : kao ? 0.05 : 0.018;
+    const phaseFromRaw = () => {
+      let h = ((n | 0) * 1103515245) | 0;
+      const rs = String(raw || "");
+      for (let i = 0; i < rs.length; i++) {
+        h = (Math.imul(h, 31) + rs.charCodeAt(i)) | 0;
+      }
+      return h >>> 0;
+    };
     if (o.shellSample) {
-      const shellMeta = o.snapToShell !== false ? {} : null;
+      shellMeta = o.snapToShell !== false ? {} : null;
       targets = sampleSilhouetteShell(draw, S, n, {
         cap: o.cap != null ? o.cap : 400,
         shellMax: o.shellMax != null ? o.shellMax : 3,
         jitterScale: o.jitterScale != null ? o.jitterScale : 0.008,
       }, shellMeta);
-      if (o.spreadMin != null && targets.length > 1) {
-        spreadTargets2D(
-          targets,
-          o.spreadMin,
-          o.spreadPasses != null ? o.spreadPasses : 4
-        );
-      }
-      if (o.enforceSpacing != null && targets.length > 1) {
-        enforceTargetsMinSpacing(
-          targets,
-          o.enforceSpacing,
-          o.enforceSpacingPasses != null ? o.enforceSpacingPasses : 8
-        );
-      }
-      if (
-        shellMeta &&
-        shellMeta.pxFlat &&
-        shellMeta.pxFlat.length >= 4
-      ) {
-        const farSq = (Math.max(S * 0.017, 9)) ** 2;
-        snapTargetsToShellPx(
-          targets,
-          shellMeta.pxFlat,
-          shellMeta.scale,
-          shellMeta.sampleS,
-          farSq
-        );
-        if (o.enforceSpacing != null && targets.length > 1) {
-          enforceTargetsMinSpacing(
-            targets,
-            o.enforceSpacing * 0.92,
-            6
-          );
+    } else if (o.inkFpsSampling) {
+      const ink = collectSilhouetteInkPointsWorld(draw, S, capFill);
+      const pts0 = ink.pts;
+      if (!pts0.length) {
+        targets = sampleSilhouette(draw, S, n, {
+          cap: capFill,
+          jitterScale: jitterFill,
+          startPhase: o.startPhase != null ? o.startPhase : phaseFromRaw(),
+        });
+      } else {
+        const maxPre = clamp(Math.round(n * 52 + 2200), 3000, 10000);
+        const pts = subsampleInkPointsUniform(pts0, maxPre);
+        let seedU = 2166136261 ^ ((n | 0) * 2654435761) >>> 0;
+        const rs = String(raw || "");
+        for (let i = 0; i < rs.length; i++) {
+          seedU = Math.imul(seedU ^ rs.charCodeAt(i), 16777619) >>> 0;
         }
+        const picked = farthestPointSamplingInk(pts, n, seedU);
+        targets = picked.map((p) => ({
+          x: p.x + (Math.random() - 0.5) * jitterFill,
+          y: p.y + (Math.random() - 0.5) * jitterFill,
+        }));
+        while (targets.length < n) {
+          const p =
+            targets[targets.length % Math.max(1, targets.length)] || {
+              x: 0,
+              y: 0,
+            };
+          targets.push({ x: p.x + rand(-2, 2), y: p.y + rand(-2, 2) });
+        }
+        targets = targets.slice(0, n);
       }
     } else {
       targets = sampleSilhouette(draw, S, n, {
-        cap: 336,
-        jitterScale: kao ? 0.05 : 0.035,
+        cap: capFill,
+        jitterScale: jitterFill,
+        startPhase: o.startPhase != null ? o.startPhase : phaseFromRaw(),
       });
+    }
+    if (o.spreadMin != null && targets.length > 1) {
+      spreadTargets2D(
+        targets,
+        o.spreadMin,
+        o.spreadPasses != null ? o.spreadPasses : 4
+      );
+    }
+    if (o.enforceSpacing != null && targets.length > 1) {
+      enforceTargetsMinSpacing(
+        targets,
+        o.enforceSpacing,
+        o.enforceSpacingPasses != null ? o.enforceSpacingPasses : 8
+      );
+    }
+    if (
+      o.shellSample &&
+      shellMeta &&
+      shellMeta.pxFlat &&
+      shellMeta.pxFlat.length >= 4
+    ) {
+      const farSq = (Math.max(S * 0.017, 9)) ** 2;
+      snapTargetsToShellPx(
+        targets,
+        shellMeta.pxFlat,
+        shellMeta.scale,
+        shellMeta.sampleS,
+        farSq
+      );
+      if (o.enforceSpacing != null && targets.length > 1) {
+        enforceTargetsMinSpacing(
+          targets,
+          o.enforceSpacing * 0.92,
+          6
+        );
+      }
     }
     return {
       targets,
@@ -2436,8 +2726,8 @@
   /** 侧栏「呈现」模式：压低时间尺度与振幅，利于辨形（计时/巨字/颜文字共用）。 */
   const DISPLAY_MOTION_KERNELS = {
     id: "display",
-    timeScale: 0.34,
-    ampScale: 0.26,
+    timeScale: 0.32,
+    ampScale: 0.24,
     wanderRadScale: 0.48,
     wanderPickIntervalMul: 1.72,
     anchorAmpScale: 0.4,
@@ -2461,10 +2751,14 @@
   /** 呈现层剪影（巨字 / 颜文字）：在 DISPLAY 内核上再压低，轮廓优先 */
   function mergePresentationSilhouetteMotion(self, mk) {
     if (!isPresentationSilhouetteHarm(self)) return mk;
+    const dynOn = !!self.presentationGlyphDynamics;
+    /** 开内动时再略压时间/振幅，减轻「过快、难辨形」；关内动仍走下方 sleep 支路 */
+    const ts0 = dynOn ? 0.31 : 0.42;
+    const amp0 = dynOn ? 0.18 : 0.26;
     let out = {
       ...mk,
-      timeScale: mk.timeScale * 0.42,
-      ampScale: mk.ampScale * 0.26,
+      timeScale: mk.timeScale * ts0,
+      ampScale: mk.ampScale * amp0,
       crispMicroScale: Math.min(0.22, mk.crispMicroScale * 0.28),
       anchorAmpScale: mk.anchorAmpScale * 0.48,
       springFollowScale: mk.springFollowScale * 0.85,
@@ -2611,7 +2905,7 @@
     }
   }
 
-  function buildFormLayoutData(self, name, n, S) {
+  function buildFormLayoutData(self, name, n, S, resolvedMegaCache) {
     if (name === "script" && self.scriptLines && self.scriptLines.length) {
       const b = buildScriptLayout(self.scriptLines, n, S);
       return {
@@ -2631,26 +2925,41 @@
           ? self.gridCell
           : clamp(Math.round(S * 0.042), 13, 19);
       const pres = self.uiArcMode === "presentation";
-      const { Slay, disp } = resolveMegaLayoutInput(self, S);
+      const { Slay, disp } =
+        resolvedMegaCache &&
+        resolvedMegaCache.Slay > 0 &&
+        String(resolvedMegaCache.disp || "").length
+          ? resolvedMegaCache
+          : resolveMegaLayoutInput(self, S);
       const dispFlat = String(disp || "字").replace(/\n/g, "");
-      const gLen = Math.max(1, Array.from(dispFlat).length);
+      const gLen = Math.max(1, segmentStringGraphemes(dispFlat).length);
       const presOne = pres && gLen <= 1;
+      if (pres) {
+        /** 呈现层：全笔画撒点 + 较紧 spread/enforce，优先「可辨形」；待机见 shellSample 分支 */
+        return buildTextSilhouetteLayout(disp, n, Slay, {
+          shellSample: false,
+          inkFpsSampling: true,
+          noStroke: true,
+          cap: 480,
+          spreadMin:
+            Math.max(Slay * 0.028, gc * 0.72) * (presOne ? 0.95 : 1),
+          spreadPasses: presOne ? 22 : 20,
+          jitterScale: 0.001,
+          enforceSpacing:
+            Math.max(Slay * 0.034, gc * 0.84) * (presOne ? 0.93 : 1),
+          enforceSpacingPasses: presOne ? 30 : 26,
+        });
+      }
       return buildTextSilhouetteLayout(disp, n, Slay, {
         shellSample: true,
         noStroke: true,
         shellMax: 3,
         cap: 420,
-        spreadMin: Math.max(
-          S * (pres ? 0.057 : 0.051),
-          gc * (pres ? 1.14 : 1.02)
-        ) * (presOne ? 1.1 : 1),
-        spreadPasses: pres ? (presOne ? 26 : 20) : 12,
-        jitterScale: pres ? 0.0015 : 0.0022,
-        enforceSpacing: Math.max(
-          S * (pres ? 0.068 : 0.054),
-          gc * (pres ? 1.4 : 1.12)
-        ) * (presOne ? 1.14 : 1),
-        enforceSpacingPasses: pres ? (presOne ? 40 : 30) : 16,
+        spreadMin: Math.max(S * 0.051, gc * 1.02),
+        spreadPasses: 12,
+        jitterScale: 0.0022,
+        enforceSpacing: Math.max(S * 0.054, gc * 1.12),
+        enforceSpacingPasses: 16,
         snapToShell: true,
       });
     }
@@ -2875,6 +3184,13 @@
       this.ripples = []; // {x,y,r,alpha}
       /** URL ?dev=1 或 opts：显示活动区虚线框（默认关，避免「漂浮轮廓」观感） */
       this.showPlayfieldGuide = opts.showPlayfieldGuide === true;
+      /** 与 `showPlayfieldGuide` 同闸：`setForm` 后写入，供画布诊断 overlay */
+      this._devPerfHud = null;
+      this._devLoopLastMs = 0;
+      this._devLoopEmaMs = 0;
+      this._devUpdateLastMs = 0;
+      this._devRenderLastMs = 0;
+      this._devResizeLastMs = 0;
       this.dragging = false;
       this.dragOffset = { x: 0, y: 0 };
       /** 呈现巨字排版：拼满画布（分行+自动缩） / 逐字轮换 */
@@ -2976,6 +3292,9 @@
       this._snakeWalkPath = [];
       this._snakePhase = 0;
       this._snakePathT = 0;
+      /** URL 显式 `presentationDynamics=1` 时，不在「文稿→灵」初切巨字时强行关内动 */
+      this._presentationDynamicsPinnedByUrl =
+        opts.presentationGlyphDynamics === true;
       /** 与 DISPLAY/STANDBY 内核同步，供 UI toast 使用 */
       this.motionProfile = "standby";
       /** 侧栏层级：standby=待机形态；presentation=计时/巨字/颜文字（决定运动内核与独立参数） */
@@ -3182,6 +3501,9 @@
     }
 
     _resize() {
+      const dev = this.showPlayfieldGuide === true;
+      const tr0 =
+        dev && typeof performance !== "undefined" ? performance.now() : 0;
       const host = this.canvas.parentElement;
       let w = host ? Math.floor(host.clientWidth) : 0;
       let h = host ? Math.floor(host.clientHeight) : 0;
@@ -3236,6 +3558,9 @@
       if (this.formData) {
         if (this.morphGlyphToTarget) this._cancelMorph(false);
         this.setForm(this.form, true);
+      }
+      if (dev && tr0) {
+        this._devResizeLastMs = performance.now() - tr0;
       }
     }
 
@@ -3295,8 +3620,17 @@
 
     setForm(name, silent, noEmitOnFormChange) {
       if (!FORMS[name]) return;
+      const devHud = this.showPlayfieldGuide === true;
+      const perfAll0 =
+        devHud && typeof performance !== "undefined" ? performance.now() : 0;
+      let perfMega0 = 0;
+      let perfMega1 = 0;
+      let perfLayout0 = 0;
+      let perfLayout1 = 0;
       if (this.morphGlyphToTarget) this._cancelMorph(false);
+      const prevForm = this.form;
       const S = this.size;
+      let megaResolvedCache = null;
       if (name === "script") {
         this.gridCell = clamp(Math.round(S * 0.052), 13, 26);
         this._resizeGlyphsForScript(this.scriptLines, { mode: "script" });
@@ -3307,7 +3641,10 @@
             "fit_canvas"
         ) {
           const rawT = String(this._pickMacroDisplayForLayout() || "字");
-          const G = Math.max(1, Array.from(String(rawT).trim() || "字").length);
+          const G = Math.max(
+            1,
+            segmentStringGraphemes(String(rawT).trim() || "字").length
+          );
           this.gridCell = computePresentationMegaGridCell(this, S, G);
         } else {
           this.gridCell = clamp(Math.round(S * 0.0425), 13, 20);
@@ -3324,20 +3661,44 @@
         this.gridCell = clamp(Math.round(S * 0.0345), 10, 15);
       }
       if (name === "mega") {
+        if (devHud) perfMega0 = performance.now();
+        _megaSuggestMemo.clear();
         const mul =
           this._arcPrefs[this.uiArcMode].megaParticleMul != null
             ? clamp(+this._arcPrefs[this.uiArcMode].megaParticleMul, 0.72, 1.28)
             : 1;
+        const resolvedMega = resolveMegaLayoutInput(this, S);
+        megaResolvedCache = resolvedMega;
+        const suggestOpts =
+          this.viewMode === "pet" && this.uiArcMode === "presentation"
+            ? { densePresentation: true }
+            : undefined;
         let want = suggestMegaGlyphParticleCount(
-          resolveMegaLayoutInput(this, S).disp,
-          S,
-          this.gridCell
+          resolvedMega.disp,
+          resolvedMega.Slay,
+          this.gridCell,
+          suggestOpts
         );
         want = clamp(Math.round(want * mul), 26, 255);
+        if (
+          this.viewMode === "pet" &&
+          this.uiArcMode === "presentation"
+        ) {
+          const probeDraw = createMacroTextDraw(resolvedMega.disp, {
+            noStroke: true,
+          });
+          const mpProbe = rasterizeMask(probeDraw, resolvedMega.Slay, 320);
+          const capP = presentationMegaParticleCapFromMask(
+            mpProbe,
+            this.gridCell || 12
+          );
+          want = clamp(Math.min(want, capP), 26, 255);
+        }
         if (want !== this.glyphs.length) {
           this.particleCount = want;
           this._initGlyphs();
         }
+        if (devHud) perfMega1 = performance.now();
       } else if (name === "clock") {
         const sec = this.clockGranularity === "sec";
         const on = countTimerOnes(sec ? getLiveChronoRows() : getLiveClockRows());
@@ -3362,8 +3723,39 @@
           this._initGlyphs();
         }
       }
-      const data = buildFormLayoutData(this, name, this.particleCount, S);
-      if (!data || !data.targets || !data.targets.length) return;
+      if (devHud) perfLayout0 = performance.now();
+      const data = buildFormLayoutData(
+        this,
+        name,
+        this.particleCount,
+        S,
+        megaResolvedCache
+      );
+      if (devHud) perfLayout1 = performance.now();
+      if (!data || !data.targets || !data.targets.length) {
+        if (devHud && perfAll0) {
+          this._devPerfHud = {
+            ok: false,
+            key: name,
+            allMs: performance.now() - perfAll0,
+            megaSizingMs:
+              name === "mega" && perfMega0 && perfMega1
+                ? perfMega1 - perfMega0
+                : null,
+            buildLayoutMs:
+              perfLayout0 && perfLayout1 ? perfLayout1 - perfLayout0 : null,
+            particles: this.glyphs ? this.glyphs.length : 0,
+            gridCell: this.gridCell,
+            uiArc: this.uiArcMode,
+            memoSize: _megaSuggestMemo.size,
+          };
+        }
+        return;
+      }
+      const megaMaskS =
+        name === "mega" && megaResolvedCache
+          ? megaResolvedCache.Slay
+          : S;
       this.form = name;
       if (name !== "script") {
         if (isDisplayPresentationForm(name)) {
@@ -3419,38 +3811,14 @@
       this._cinnabarIdx = null; // 换形 → 重新挑朱砂字
 
       if (data.maskDraw) {
-        this._maskPack = rasterizeMask(data.maskDraw, S);
+        this._maskPack = rasterizeMask(data.maskDraw, megaMaskS, 320);
         this._maskFormKey = name;
         this._maskSizeIdx = Math.round(S * 10);
-        this._rebuildMatteLayerCanvas(data.maskDraw, S);
+        this._rebuildMatteLayerCanvas(data.maskDraw, megaMaskS);
       } else {
         this._maskPack = null;
         this._maskFormKey = "";
         this._silhouetteMatteLayer = null;
-      }
-
-      /** 呈现层巨字/颜：粒子数不得超过 mask 内大致可分的格位（待机层不截，避免「字变少」与待机观感劣化） */
-      if (
-        this._maskPack &&
-        this._maskPack.fillCount != null &&
-        this.viewMode === "pet" &&
-        this.uiArcMode === "presentation" &&
-        (name === "mega" || String(name).startsWith("kao_"))
-      ) {
-        const cellW = this.gridCell || 12;
-        const mp = this._maskPack;
-        const stepPx = Math.max(
-          1,
-          (cellW * Math.max(mp.w, 1)) / Math.max(S, 1)
-        );
-        const approxCells = Math.floor(
-          mp.fillCount / Math.max(1, stepPx * stepPx)
-        );
-        const capG = clamp(Math.floor(approxCells * 0.68), 24, 190);
-        if (this.glyphs.length > capG) {
-          this.glyphs.length = capG;
-          this.particleCount = capG;
-        }
       }
 
       if (this.faceLayerMode && name !== "script") this._assignFaceGlyphs();
@@ -3580,6 +3948,33 @@
         } catch (_) {}
       }
 
+      /** 呈现巨字/颜初落位：多遍叠分、推迟邻格互换；从「文稿」成化灵时若无 URL 钉死内动则先关内动，便于先辨形 */
+      const presSilShellSettle =
+        this.viewMode === "pet" &&
+        this.uiArcMode === "presentation" &&
+        (name === "mega" || String(name).startsWith("kao_")) &&
+        this._maskPack &&
+        this._maskPack.grid &&
+        this.gridMarch &&
+        this.gridSnapping &&
+        this.glyphs &&
+        this.glyphs.length > 1;
+      if (presSilShellSettle) {
+        if (prevForm === "script" && !this._presentationDynamicsPinnedByUrl) {
+          this._arcPrefs.presentation.presentationGlyphDynamics = false;
+          applyArcVisualPrefsToPet(this);
+        }
+        for (let si = 0; si < 10; si++) {
+          this._separateOverlappingGridGlyphs();
+        }
+        const nowMs =
+          typeof performance !== "undefined"
+            ? performance.now()
+            : Date.now();
+        this._huarongNextAt = Math.max(this._huarongNextAt || 0, nowMs + 1250);
+        this._glyphFlash = Math.min(this._glyphFlash || 0, 0.05);
+      }
+
       this._shapeMutationT = 0.72;
       this._rebuildShapeFieldFromForm();
       if (
@@ -3590,6 +3985,25 @@
           this._externalWalkSnapshot.height !== this.shapeField.packedHeight)
       ) {
         this.resetExternalWalkConsumer();
+      }
+      if (devHud && perfAll0) {
+        const wall =
+          typeof performance !== "undefined" ? performance.now() : perfAll0;
+        this._devPerfHud = {
+          ok: true,
+          key: name,
+          allMs: wall - perfAll0,
+          megaSizingMs:
+            name === "mega" && perfMega0 && perfMega1
+              ? perfMega1 - perfMega0
+              : null,
+          buildLayoutMs:
+            perfLayout0 && perfLayout1 ? perfLayout1 - perfLayout0 : null,
+          particles: this.glyphs.length,
+          gridCell: this.gridCell,
+          uiArc: this.uiArcMode,
+          memoSize: _megaSuggestMemo.size,
+        };
       }
     }
 
@@ -4058,8 +4472,10 @@
       const passes =
         presDense
           ? decoupDrag
-            ? 20
-            : 18
+            ? 16
+            : this.presentationGlyphDynamics
+              ? 12
+              : 18
           : usesMaskSnakeStream(this) && silMask
             ? 7
             : mega
@@ -4175,7 +4591,7 @@
       const presSleep = presL && !this.presentationGlyphDynamics;
       let hSleep = 1;
       if (presSleep) hSleep = 2.55;
-      else if (presL && this.presentationGlyphDynamics) hSleep = 0.88;
+      else if (presL && this.presentationGlyphDynamics) hSleep = 1.12;
       if (decoupDrag) hSleep *= 1.55;
       this._huarongNextAt =
         now +
@@ -4510,8 +4926,9 @@
       /** 轮廓难辨 / 越界时：略快淡出；合法区内：慢淡入减轻闪现与叠乱感 */
       const presSleep = !this.presentationGlyphDynamics;
       const fadeOut =
-        (0.4 / (0.62 + 0.38 * spd)) * (presSleep ? 1.08 : 1);
-      const fadeIn = (0.26 + 0.22 * spd) * (presSleep ? 1.22 : 1);
+        (0.4 / (0.62 + 0.38 * spd)) * (presSleep ? 0.92 : 1);
+      const fadeIn =
+        (0.2 + 0.16 * spd) * (presSleep ? 0.78 : 1.08);
       const tWall = performance.now() / 1000;
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
@@ -4539,7 +4956,7 @@
           if (a > tgt) a = tgt;
         }
         let aNext = clamp(a, 0, 1);
-        const maxStep = (presSleep ? 0.48 : 1.12) * dt;
+        const maxStep = (presSleep ? 0.28 : 1.12) * dt;
         if (aNext - prevA > maxStep) aNext = prevA + maxStep;
         if (prevA - aNext > maxStep) aNext = prevA - maxStep;
         g.alpha = aNext;
@@ -4562,7 +4979,7 @@
           const sleepFade = presL && !this.presentationGlyphDynamics;
           g.alpha = clamp(
             g._megaBaseAlpha * (sleepFade ? 0.36 : presL ? 0.32 : 0.48),
-            sleepFade ? 0.14 : presL ? 0.08 : 0.14,
+            sleepFade ? 0.22 : presL ? 0.08 : 0.14,
             sleepFade ? 0.42 : presL ? 0.36 : 0.5
           );
           g._megaOutsideAcc = 0;
@@ -5058,6 +5475,7 @@
     }
 
     _applyGridTypography() {
+      this._presSilUniformBodyPx = null;
       if (!this.gridUnity) {
         for (let i = 0; i < this.glyphs.length; i++) {
           this.glyphs[i].targetRot = rand(-0.18, 0.18);
@@ -5112,6 +5530,15 @@
           }
         }
         this._applyBodyGlyphEmMulToGlyphs();
+        if (
+          isPresentationSilhouetteHarm(this) &&
+          isMaskBackedMegaKao(this)
+        ) {
+          const g0 = this.glyphs.find((gg) => !gg.faceRole);
+          if (g0 && g0.size != null && !Number.isNaN(+g0.size)) {
+            this._presSilUniformBodyPx = +g0.size;
+          }
+        }
         return;
       }
       const emMin = Math.max(8, this.gridCell * 0.68);
@@ -5895,10 +6322,29 @@
 
     // ---------- 主循环 ---------- //
     _loop(now) {
+      const dev = this.showPlayfieldGuide === true;
+      const tLoop0 =
+        dev && typeof performance !== "undefined" ? performance.now() : 0;
       const dt = Math.min(0.033, (now - this._lastTime) / 1000);
       this._lastTime = now;
+      const tUp0 =
+        dev && typeof performance !== "undefined" ? performance.now() : 0;
       this._update(dt, now);
+      const tUp1 =
+        dev && tUp0 ? performance.now() : 0;
+      const tRn0 =
+        dev && typeof performance !== "undefined" ? performance.now() : 0;
       this._render(now);
+      if (dev && tLoop0) {
+        const tEnd = performance.now();
+        this._devLoopLastMs = tEnd - tLoop0;
+        this._devUpdateLastMs = tUp1 > tUp0 ? tUp1 - tUp0 : 0;
+        this._devRenderLastMs = tEnd - tRn0;
+        const ema = this._devLoopEmaMs;
+        this._devLoopEmaMs = ema
+          ? ema * 0.85 + this._devLoopLastMs * 0.15
+          : this._devLoopLastMs;
+      }
       this._raf = requestAnimationFrame(this._loop.bind(this));
     }
 
@@ -5950,12 +6396,17 @@
       const sleepMul =
         this.mode === "sleep" && this.viewMode === "pet" ? 0.32 : 1;
       this._sleepMotionMul = sleepMul;
-      const ensBoost = silMaskPet
+      const ensBoostCore = silMaskPet
         ? 0.62 + 0.48 * clamp(gms0, 0.35, 2.5)
         : 1;
+      const ensBoost =
+        ensBoostCore *
+        (presSilHarm && this.presentationGlyphDynamics ? 0.55 : 1);
       this._ensemblePhase +=
         dt *
-        (0.78 + 0.12 * Math.sin(t * 0.17)) *
+        (silMaskPet
+          ? 0.82
+          : 0.78 + 0.12 * Math.sin(t * 0.17)) *
         (silMaskPet ? gmsSil : gms) *
         ensBoost *
         sleepMul;
@@ -6424,7 +6875,13 @@
               const breath = Math.sin(sync);
               const sway = Math.sin(sync * 0.5 + 0.85);
               const ang = g.tx * 0.012 + g.ty * 0.01;
-              const m = 0.82 + 0.18 * Math.sin(ang * 1.35 + sync * 0.28);
+              /** 全队同拍前提下，用格位哈希弱去相关，减轻邻字同相「整块晃」感（幅面 <±5%） */
+              const deco =
+                1 +
+                0.034 *
+                Math.sin(g.tx * 0.31 + g.ty * 0.27 + gi * 0.19);
+              const m =
+                (0.82 + 0.18 * Math.sin(ang * 1.35 + sync * 0.28)) * deco;
               wx +=
                 (breath * Math.cos(ang) + sway * 0.3 * Math.sin(ang)) *
                 pAmpBase *
@@ -6460,16 +6917,22 @@
               const dispScale =
                 (this.form === "mega" ? 1.03 : 1) * mk.crispMicroScale;
               const ph = this._fluidPhase;
+              const decoF =
+                1 +
+                0.03 *
+                Math.sin(g.tx * 0.29 + g.ty * 0.21 + gi * 0.13);
               wx +=
                 Math.sin(t * 0.95 + ph + g.tx * 0.008) *
                 waveAmpEff *
                 0.24 *
-                dispScale;
+                dispScale *
+                decoF;
               wy +=
                 Math.cos(t * 0.88 - ph * 0.65 + g.ty * 0.008) *
                 waveAmpEff *
                 0.22 *
-                dispScale;
+                dispScale *
+                decoF;
             } else {
               const nx = wx * 0.017 + this._fluidPhase;
               const ny = wy * 0.015 - this._fluidPhase * 0.75;
@@ -6515,19 +6978,42 @@
             const ph =
               this._ensemblePhase * (0.38 + 0.2 * gms0) +
               gi * 0.37 +
-              g.tx * 0.011;
+              g.tx * 0.011 +
+              0.055 * Math.sin(g.ty * 0.17 + g.tx * 0.13);
             const sx = Math.sin(ph);
             const sy = Math.cos(ph * 0.93 + 0.71);
+            const on = 0.535;
+            const off = 0.38;
+            const prevX = g._silHistDgx | 0;
+            const prevY = g._silHistDgy | 0;
             let dgx = 0;
             let dgy = 0;
-            if (sx >= 0.5) dgx = 1;
-            else if (sx <= -0.5) dgx = -1;
-            if (sy >= 0.5) dgy = 1;
-            else if (sy <= -0.5) dgy = -1;
+            if (prevX === 1) {
+              if (sx >= off) dgx = 1;
+              else if (sx <= -on) dgx = -1;
+            } else if (prevX === -1) {
+              if (sx <= -off) dgx = -1;
+              else if (sx >= on) dgx = 1;
+            } else {
+              if (sx >= on) dgx = 1;
+              else if (sx <= -on) dgx = -1;
+            }
+            if (prevY === 1) {
+              if (sy >= off) dgy = 1;
+              else if (sy <= -on) dgy = -1;
+            } else if (prevY === -1) {
+              if (sy <= -off) dgy = -1;
+              else if (sy >= on) dgy = 1;
+            } else {
+              if (sy >= on) dgy = 1;
+              else if (sy <= -on) dgy = -1;
+            }
             if (dgx !== 0 && dgy !== 0) {
               if (Math.abs(sx) >= Math.abs(sy)) dgy = 0;
               else dgx = 0;
             }
+            g._silHistDgx = dgx;
+            g._silHistDgy = dgy;
             tgx += dgx;
             tgy += dgy;
           }
@@ -6631,9 +7117,16 @@
             const cap = cell * 0.46 * jitAmp;
             const tox = clamp(txo, -cap, cap);
             const toy = clamp(tyo, -cap, cap);
-            const sm = 1 - Math.exp(-dt * (presGlyphSleep ? 13.5 : 22));
-            g._silDrawOx = lerp(g._silDrawOx || 0, tox, sm);
-            g._silDrawOy = lerp(g._silDrawOy || 0, toy, sm);
+            const oxPrev = g._silDrawOx || 0;
+            const oyPrev = g._silDrawOy || 0;
+            const err = Math.hypot(tox - oxPrev, toy - oyPrev);
+            const errNorm = cap > 1e-6 ? err / cap : 0;
+            const baseRate = presGlyphSleep ? 13.5 : 22;
+            /** 误差大时略提高收敛率，贴近目标后自动柔化，减轻贴边微振 */
+            const rate = baseRate * (1 + 2.15 * errNorm * errNorm);
+            const sm = 1 - Math.exp(-dt * rate);
+            g._silDrawOx = lerp(oxPrev, tox, sm);
+            g._silDrawOy = lerp(oyPrev, toy, sm);
           } else {
             g._silDrawOx = 0;
             g._silDrawOy = 0;
@@ -6659,9 +7152,13 @@
               flip
             );
           }
-          /** 呈现剪影叠分第二遍隔帧执行，减轻每帧双遍带来的卡顿 */
+          /** 呈现剪影：每帧必跑第一遍叠分；关内动时每帧双遍；开内动时隔帧第二遍，减轻卡顿 */
           this._sepAltFrame = (this._sepAltFrame || 0) + 1;
-          if (!presSilHarm || (this._sepAltFrame & 1) === 1) {
+          const sepSecondPass =
+            !presSilHarm ||
+            presGlyphSleep ||
+            (this._sepAltFrame & 1) === 1;
+          if (sepSecondPass) {
             this._separateOverlappingGridGlyphs();
           }
         }
@@ -6831,7 +7328,7 @@
         this._silhouetteMatteLayer = null;
         return;
       }
-      const cap = 280;
+      const cap = 320;
       const sampleS = Math.min(Math.max(8, Math.round(S)), cap);
       const scale = sampleS / S;
       const c = document.createElement("canvas");
@@ -6954,6 +7451,56 @@
         ctx.restore();
       }
 
+      if (this.showPlayfieldGuide) {
+        const lines = [];
+        const lf = this._devLoopLastMs;
+        const em = this._devLoopEmaMs;
+        const up = this._devUpdateLastMs;
+        const rn = this._devRenderLastMs;
+        const rs = this._devResizeLastMs;
+        lines.push(
+          `frame ${lf > 0 ? lf.toFixed(1) + "ms" : "—"} (~${em > 0 ? em.toFixed(1) : "—"}ms) upd=${(up > 0 ? up : 0).toFixed(1)} ren=${(rn > 0 ? rn : 0).toFixed(1)}`
+        );
+        if (rs > 0) {
+          lines.push(`resize ${rs.toFixed(1)}ms`);
+        }
+        const p = this._devPerfHud;
+        if (p) {
+          lines.push(
+            `${p.ok ? "setForm" : "setForm·fail"} · ${p.key} · ${
+              p.allMs != null ? p.allMs.toFixed(1) + "ms" : "—"
+            }`
+          );
+          if (p.megaSizingMs != null) {
+            lines.push(`mega定粒/resolve ${p.megaSizingMs.toFixed(1)}ms`);
+          }
+          if (p.buildLayoutMs != null) {
+            lines.push(`buildLayout ${p.buildLayoutMs.toFixed(1)}ms`);
+          }
+          lines.push(`N=${p.particles} cell=${p.gridCell} ${p.uiArc}`);
+          if (p.memoSize != null) {
+            lines.push(`suggestMemo×${p.memoSize}`);
+          }
+        }
+        ctx.save();
+        ctx.font =
+          '11px ui-monospace,SFMono-Regular,"Cascadia Code",Consolas,monospace';
+        ctx.textAlign = "right";
+        ctx.textBaseline = "top";
+        const pad = 8;
+        let y = pad + 4;
+        for (let li = 0; li < lines.length; li++) {
+          const line = lines[li];
+          const tw = ctx.measureText(line).width;
+          ctx.fillStyle = light ? "rgba(255,255,255,0.92)" : "rgba(28,28,30,0.92)";
+          ctx.fillRect(W - pad - tw - 6, y - 2, tw + 10, 15);
+          ctx.fillStyle = light ? "rgba(0,0,0,0.72)" : "rgba(255,255,255,0.82)";
+          ctx.fillText(line, W - pad, y);
+          y += 15;
+        }
+        ctx.restore();
+      }
+
       if (this.viewMode === "intro") {
         ctx.save();
         ctx.lineWidth = 1.2;
@@ -6994,6 +7541,9 @@
         this.rotation
       );
 
+      /** 呈现剪影躯体：本帧共用的整数 px 字号，避免逐字 round 造成大小不一 */
+      this._presSilUniformPxInt = null;
+
       const drawGlyph = (g, opts) => {
         const crispForm = isGridLayoutImmutableForm(this.form);
         const edge = g.edge;
@@ -7022,7 +7572,16 @@
           crispForm &&
           isMaskBackedMegaKao(this) &&
           !g.faceRole;
-        const baseSize = g.size * this.scale * (opts.sizeMul || 1);
+        const uniformBodyPx =
+          megaSilPres &&
+          this._presSilUniformBodyPx != null &&
+          !Number.isNaN(+this._presSilUniformBodyPx)
+            ? +this._presSilUniformBodyPx
+            : null;
+        const baseSize =
+          (uniformBodyPx != null ? uniformBodyPx : g.size) *
+          this.scale *
+          (opts.sizeMul || 1);
         let size = baseSize * (megaSilPres ? 1 : roleMul);
         if (this.gridUnity && this.gridCell) {
           let cap = this.gridCell * (crispForm ? 0.92 : 0.88) * this.scale;
@@ -7040,31 +7599,49 @@
         if (size < 7.5) size = 7.5;
         if (this.gridUnity) size = Math.max(size, 8.5);
         const flashW = opts.flashWeight != null ? opts.flashWeight : 0.5;
-        const flashBoost = silDraw
-          ? 1
-          : 1 + Math.min(flash, 0.52) * flashW * 0.42;
+        const flashBoost =
+          megaSilPres || silDraw
+            ? 1
+            : 1 + Math.min(flash, 0.52) * flashW * 0.42;
         const edgeAlpha = megaSilPres
-          ? lerp(0.98, 0.94, edge)
+          ? 1
           : crispForm
             ? lerp(0.99, 0.92, edge)
             : lerp(0.94, 0.42, edge);
-        const glowMul = g.faceRole ? 1 : this._glowAlphaMul(g, t);
+        const glowMul =
+          g.faceRole || megaSilPres ? 1 : this._glowAlphaMul(g, t);
         const presBodyAlphaMul =
           isPresentationSilhouetteHarm(this) &&
           !this.presentationGlyphDynamics &&
           !g.faceRole
             ? 0.74
             : 1;
+        const ga = g.alpha == null || Number.isNaN(+g.alpha) ? 1 : +g.alpha;
+        const glyphAlpha =
+          megaSilPres && !this.presentationGlyphDynamics
+            ? clamp(ga, 0.9, 1)
+            : ga;
         const alpha =
           (opts.alphaMul != null ? opts.alphaMul : 1) *
           presBodyAlphaMul *
           flashBoost *
           edgeAlpha *
-          g.alpha *
+          glyphAlpha *
           glowMul;
         const fontMain =
           '"LXGW WenKai","LXGW WenKai Screen","Noto Serif SC","Noto Sans SC",serif';
-        const pxInt = Math.max(8, Math.round(size));
+        let pxInt = Math.max(8, Math.round(size));
+        if (
+          megaSilPres &&
+          uniformBodyPx != null &&
+          !emojiLike &&
+          this.gridUnity
+        ) {
+          if (this._presSilUniformPxInt == null) {
+            this._presSilUniformPxInt = pxInt;
+          }
+          pxInt = this._presSilUniformPxInt;
+        }
         const szLabel =
           crispForm || this.gridUnity ? `${pxInt}px` : `${(Math.round(size * 10) / 10).toFixed(1)}px`;
         const fontPrefix = emojiLike ? "" : "600 ";
@@ -7091,9 +7668,13 @@
           const br = parseInt(this.bodyTintHex.slice(1, 3), 16);
           const bge = parseInt(this.bodyTintHex.slice(3, 5), 16);
           const bb = parseInt(this.bodyTintHex.slice(5, 7), 16);
-          const ek = light
-            ? lerp(0.5, 1, edge)
-            : lerp(0.42, 1, 1 - edge * 0.65);
+          const ek = megaSilPres
+            ? light
+              ? 0.88
+              : 0.82
+            : light
+              ? lerp(0.5, 1, edge)
+              : lerp(0.42, 1, 1 - edge * 0.65);
           fillStyle = `rgba(${clamp(Math.round(br * ek), 0, 255)},${clamp(
             Math.round(bge * ek),
             0,
@@ -7106,19 +7687,21 @@
           const bx0 = this.pos.x;
           const Sref = Math.max(this.size * 0.48, 105);
           let u = 0.5;
-          if (cm === 1) {
-            const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
-            u = clamp(ny * 0.32 + breath * 0.68, 0, 1);
-          } else if (cm === 2) {
-            const d = clamp(Math.hypot(g.x - bx0, g.y - by0) / Sref, 0, 1);
-            u = clamp(d * 0.42 + breath * 0.58, 0, 1);
-          } else if (cm === 3) {
-            const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
-            u = clamp(
-              ny * 0.35 + breath * 0.65 + Math.sin(t * 2.05 + (g.depth || 0)) * 0.2,
-              0,
-              1
-            );
+          if (!(megaSilPres && !this.presentationGlyphDynamics)) {
+            if (cm === 1) {
+              const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
+              u = clamp(ny * 0.32 + breath * 0.68, 0, 1);
+            } else if (cm === 2) {
+              const d = clamp(Math.hypot(g.x - bx0, g.y - by0) / Sref, 0, 1);
+              u = clamp(d * 0.42 + breath * 0.58, 0, 1);
+            } else if (cm === 3) {
+              const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
+              u = clamp(
+                ny * 0.35 + breath * 0.65 + Math.sin(t * 2.05 + (g.depth || 0)) * 0.2,
+                0,
+                1
+              );
+            }
           }
           if (light) {
             const inkR = Math.round(lerp(6, 152, u));
@@ -7132,8 +7715,12 @@
             fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
           }
         } else if (opts.cel === false) {
-          const pulse = Math.sin(t * 2.25 + (g.depth || 0) * 2.8) * 0.1;
-          const edgeUse = clamp(edge + pulse, 0, 1);
+          const pulse = megaSilPres
+            ? 0
+            : Math.sin(t * 2.25 + (g.depth || 0) * 2.8) * 0.1;
+          const edgeUse = megaSilPres
+            ? 0.54
+            : clamp(edge + pulse, 0, 1);
           if (light) {
             const inkR = Math.round(lerp(22, 108, edgeUse));
             const inkG = Math.round(lerp(24, 118, edgeUse));
@@ -7146,13 +7733,29 @@
             fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
           }
         } else {
-          const cel = celRgbFromGlyph(g, light, t, this._fluidPhase || 0);
+          const celGn = megaSilPres
+            ? Object.assign({}, g, {
+                edge: 0.5,
+                tx: 0,
+                ty: 0,
+                patrolSeed: 0,
+              })
+            : g;
+          const celT =
+            megaSilPres && !this.presentationGlyphDynamics ? 0 : t;
+          const cel = celRgbFromGlyph(
+            celGn,
+            light,
+            celT,
+            this._fluidPhase || 0
+          );
           const [or, og, ob] = cel.outlineRgb;
           const outlineA = alpha * (0.5 + cel.edgeMul * 0.38);
           const px = this._pxScale || 1;
           const useCelHalo =
             !light &&
             !g.faceRole &&
+            !megaSilPres &&
             cel.edgeMul > 0.38;
           if (useCelHalo) {
             outlinePass = {
@@ -7563,8 +8166,8 @@
       b.presentationGlyphDynamics = !b.presentationGlyphDynamics;
       const next = !!b.presentationGlyphDynamics;
       if (next && !prev) {
-        // 画布可感知：关→开体内动时略提亮一瞬（mask 剪影在 _render 内对 flash 再压低）
-        this._glyphFlash = Math.min(0.34, Math.max(this._glyphFlash || 0, 0.22));
+        // 关→开：极弱提亮，避免巨字辨形时「整屏闪一下」
+        this._glyphFlash = Math.min(0.16, Math.max(this._glyphFlash || 0, 0.09));
       }
       if (this.uiArcMode === "presentation") {
         applyArcVisualPrefsToPet(this);
@@ -7595,7 +8198,7 @@
         const nowMs =
           typeof performance !== "undefined" ? performance.now() : Date.now();
         /** 先静约 0.9s，再允许邻格互换；互换时在关内动下带一次淡入淡出感 */
-        this._huarongNextAt = nowMs + 900;
+        this._huarongNextAt = nowMs + 1050;
       }
       return true;
     }

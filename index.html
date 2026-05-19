@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.34.6" />
+  <meta name="ziling-build" content="3.35.9" />
   <title>字灵 · 开发者页控制台</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.34.6" />
+  <link rel="stylesheet" href="./styles.css?v=3.35.9" />
 </head>
 <body>
   <div class="app" data-ui-arc="standby">
@@ -29,53 +29,65 @@
       <aside class="rail rail-left" aria-label="侧栏控制台">
         <div class="rail-left-body">
           <div class="rail-section">
-            <div class="rail-section-title">① 层级 · 日常互动 · 墨色光色</div>
+            <div class="rail-section-head">
+              <div class="rail-section-title">① 层级与外观</div>
+              <p class="rail-section-hint">主字下为一句用途；完整说明请悬停</p>
+            </div>
             <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="层级与外观">
-              <button type="button" class="rail-tool" data-action="arcMode" title="【层】待机 ⟷ 呈现：两套参数分记。走格三键、字号、内动等亦分套；呈现巨字轮廓仅小字拼形（不叠整块灰底）。">层</button>
-              <button type="button" class="rail-tool" data-action="morph" title="【变】仅在当前层内随机换形（不跨层）。呈现层不会跳到待机曲线。">变</button>
-              <button type="button" class="rail-tool" data-action="feed" title="【觅】觅食：字灵沿路径巡游，吸收下方诗笺/标签中的字入字池。">觅</button>
-              <button type="button" class="rail-tool" data-action="ink" title="【墨】躯体墨色场：在几种水墨渐变模式间循环（当前层记忆）。">墨</button>
-              <button type="button" class="rail-tool" data-action="tint" title="【颜】打开色盘，设置小字颜色（写入当前层偏好）。">颜</button>
-              <button type="button" class="rail-tool" data-action="glow" title="【浮】浮光律动：边缘闪光等发光模式循环（当前层记忆）。">浮</button>
-              <button type="button" class="rail-tool" data-action="speed" title="【速】体内运动总闸门：调制谐波节拍、格移追赶感、流体相位；与「徙」倍率不同，且受层级 calm 曲线影响。">速</button>
-              <button type="button" class="rail-tool" data-action="sleep" title="【眠】小憩：整体略缩，巡逻/流体/格移明显压低，便于辨形与减少躁动。">眠</button>
-              <button type="button" class="rail-tool" data-action="shake" title="【抖】抖擞：短时激发散开与表情，用于打破沉闷。">抖</button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="arcMode" title="【层】待机 ⟷ 呈现：两套参数分记。走格三键、字号、内动等亦分套；呈现巨字轮廓仅小字拼形（不叠整块灰底）。"><span class="rail-tool-k">层</span><span class="rail-tool-hint">待机↔呈现</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="morph" title="【变】仅在当前层内随机换形（不跨层）。呈现层不会跳到待机曲线。"><span class="rail-tool-k">变</span><span class="rail-tool-hint">换形态</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="feed" title="【觅】觅食：字灵沿路径巡游，吸收下方诗笺/标签中的字入字池。"><span class="rail-tool-k">觅</span><span class="rail-tool-hint">诗笺吸字</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="ink" title="【墨】躯体墨色场：在几种水墨渐变模式间循环（当前层记忆）。"><span class="rail-tool-k">墨</span><span class="rail-tool-hint">墨色场</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="tint" title="【颜】打开色盘，设置小字颜色（写入当前层偏好）。"><span class="rail-tool-k">颜</span><span class="rail-tool-hint">字色盘</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="glow" title="【浮】浮光律动：边缘闪光等发光模式循环（当前层记忆）。"><span class="rail-tool-k">浮</span><span class="rail-tool-hint">边缘光</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="speed" title="【速】体内运动总闸门：调制谐波节拍、格移追赶感、流体相位；与「徙」倍率不同，且受层级 calm 曲线影响。"><span class="rail-tool-k">速</span><span class="rail-tool-hint">体内节拍</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="sleep" title="【眠】小憩：整体略缩，巡逻/流体/格移明显压低，便于辨形与减少躁动。"><span class="rail-tool-k">眠</span><span class="rail-tool-hint">整体静</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="shake" title="【抖】抖擞：短时激发散开与表情，用于打破沉闷。"><span class="rail-tool-k">抖</span><span class="rail-tool-hint">散开一下</span></button>
             </nav>
           </div>
           <div class="rail-section">
-            <div class="rail-section-title">② 格点 · 走格范式 · 躯体字号</div>
+            <div class="rail-section-head">
+              <div class="rail-section-title">② 格点 · 走格 · 字号</div>
+              <p class="rail-section-hint">谐步=一字一格；徙=追格快慢；与「速」分工不同</p>
+            </div>
             <nav class="rail-tools rail-tools-motion" role="toolbar" aria-label="走格范式（巨字/颜 mask 内）">
-              <button type="button" class="rail-tool" data-action="setMotionStyle" data-motion="harmonic" title="【谐步】离散格 ±1 曼哈顿步进，一字一格（呈现推荐）。「颤」只影响亚像素绘移，不再关掉谐步。">谐步</button>
-              <button type="button" class="rail-tool" data-action="setMotionStyle" data-motion="snake_stream" title="【廊道】可走格走廊排序，一队字沿轨滑移；开「内动」时观感更明显。">廊道</button>
-              <button type="button" class="rail-tool ui-arc-standby-only" data-action="setMotionStyle" data-motion="contour_drift" title="【漫游】壳内随机游走（仅待机层；呈现层隐藏——易叠字且与小字拼轮廓目标冲突）。">漫游</button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="setMotionStyle" data-motion="harmonic" title="【谐步】离散格 ±1 曼哈顿步进，一字一格（呈现推荐）。「颤」只影响亚像素绘移，不再关掉谐步。"><span class="rail-tool-k">谐步</span><span class="rail-tool-hint">格±1</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="setMotionStyle" data-motion="snake_stream" title="【廊道】可走格走廊排序，一队字沿轨滑移；开「内动」时观感更明显。"><span class="rail-tool-k">廊道</span><span class="rail-tool-hint">沿轨滑</span></button>
+              <button type="button" class="rail-tool rail-tool--stack ui-arc-standby-only" data-action="setMotionStyle" data-motion="contour_drift" title="【漫游】壳内随机游走（仅待机层；呈现层隐藏——易叠字且与小字拼轮廓目标冲突）。"><span class="rail-tool-k">漫游</span><span class="rail-tool-hint">壳内游</span></button>
             </nav>
             <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="格点与纹理">
-              <button type="button" class="rail-tool" data-action="bodyGlyphEm" title="【字号】躯体字统一缩放挡（待机/呈现各记；文稿/曲线/巨字同乘子；与巨字「字比」独立）。">字号</button>
-              <button type="button" class="rail-tool" data-action="glyphsJitter" title="【颤】亚格颤抖：开时字粒可有亚像素微振；谐步下仍保持离散格迈移。">颤</button>
-              <button type="button" class="rail-tool" data-action="silhouetteJitterAmp" title="【颤幅】亚格颤动画位移幅度挡（须开「颤」才有绘移；当前层记忆）。">颤幅</button>
-              <button type="button" class="rail-tool" data-action="textureMotion" title="【紊】纹理体动：流=弹簧式纹理相位；序=芯层邻格换位（巨字/颜 mask 或格移关闭时序不生效）。">紊</button>
-              <button type="button" class="rail-tool" data-action="fluid" title="【波】液体波纹强度：影响非 mask 或 mask 内允许的相位摆动（当前层记忆）。">波</button>
-              <button type="button" class="rail-tool" data-action="gridMarch" title="【徙】格点迁移速度倍率：字粒沿格追赶布局锚点的快慢（当前层记忆）。">徙</button>
-              <button type="button" class="rail-tool" data-action="megaPack" title="【粒】巨字/颜粒子数倍率：在巨字或颜形态下点按后重建粒子规模（当前层记忆）。">粒</button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="bodyGlyphEm" title="【字号】躯体字统一缩放挡（待机/呈现各记；文稿/曲线/巨字同乘子；与巨字「字比」独立）。"><span class="rail-tool-k">字号</span><span class="rail-tool-hint">小字倍</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="glyphsJitter" title="【颤】亚格颤抖：开时字粒可有亚像素微振；谐步下仍保持离散格迈移。"><span class="rail-tool-k">颤</span><span class="rail-tool-hint">亚像素</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="silhouetteJitterAmp" title="【颤幅】亚格颤动画位移幅度挡（须开「颤」才有绘移；当前层记忆）。"><span class="rail-tool-k">颤幅</span><span class="rail-tool-hint">颤强度</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="textureMotion" title="【紊】纹理体动：流=弹簧式纹理相位；序=芯层邻格换位（巨字/颜 mask 或格移关闭时序不生效）。"><span class="rail-tool-k">紊</span><span class="rail-tool-hint">纹理动</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="fluid" title="【波】液体波纹强度：影响非 mask 或 mask 内允许的相位摆动（当前层记忆）。"><span class="rail-tool-k">波</span><span class="rail-tool-hint">流体幅</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="gridMarch" title="【徙】格点迁移速度倍率：字粒沿格追赶布局锚点的快慢（当前层记忆）。"><span class="rail-tool-k">徙</span><span class="rail-tool-hint">追格速</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="megaPack" title="【粒】巨字/颜粒子数倍率：在巨字或颜形态下点按后重建粒子规模（当前层记忆）。"><span class="rail-tool-k">粒</span><span class="rail-tool-hint">粒子数</span></button>
             </nav>
           </div>
           <div class="rail-section">
-            <div class="rail-section-title">③ 巨字/颜 · 垫底（待机）· 动静</div>
+            <div class="rail-section-head">
+              <div class="rail-section-title">③ 剪影 · 垫底 · 动静</div>
+              <p class="rail-section-hint">灰底/淡影仅待机；呈现辨形靠「规整」「内动」</p>
+            </div>
             <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="巨字颜剪影">
               <div class="ui-arc-standby-only" style="display: contents">
-              <button type="button" class="rail-tool" data-action="silhouetteMatteUnderlay" title="【整块灰底·待机】在字粒下绘制整张巨字/颜 mask 半透明垫底（仅待机层常用；呈现层轮廓由小字拼出，不叠此底）。">灰底</button>
-              <button type="button" class="rail-tool" data-action="outlineContourFirst" title="【淡影·待机】关内动且未开整块灰底时可选极弱整 mask（仅待机调试；呈现层不启用）。">淡影</button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="silhouetteMatteUnderlay" title="【整块灰底·待机】在字粒下绘制整张巨字/颜 mask 半透明垫底（仅待机层常用；呈现层轮廓由小字拼出，不叠此底）。"><span class="rail-tool-k">灰底</span><span class="rail-tool-hint">待机垫</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="outlineContourFirst" title="【淡影·待机】关内动且未开整块灰底时可选极弱整 mask（仅待机调试；呈现层不启用）。"><span class="rail-tool-k">淡影</span><span class="rail-tool-hint">弱整mask</span></button>
               </div>
-              <button type="button" class="rail-tool" data-action="presentationDynamics" title="【字内动】开=体内谐波/流体/蛇行等；关=锁格真静（停谐步扰动、蛇行格、亚格颤绘移、空位拉回；叠分仍解共格）。开「内动」不叠整张巨字 mask 大字底。关→开时字粒略闪确认。">内动</button>
-              <button type="button" class="rail-tool rail-tool-span2" data-action="silhouetteCalm" title="【规整】呈现层一键：横竖格·谐步 + 关内动 + 关亚格颤 + 纹理回「流」+ 略抑流体，并立刻疏散叠格；约 0.9s 后再启邻格互换，关内动下换位带淡隐。不切「层」。">规整</button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="presentationDynamics" title="【字内动】开=体内谐波/流体/蛇行等；关=锁格真静（停谐步扰动、蛇行格、亚格颤绘移、空位拉回；叠分仍解共格）。开「内动」不叠整张巨字 mask 大字底。关→开时字粒略闪确认。"><span class="rail-tool-k">内动</span><span class="rail-tool-hint">体内波动</span></button>
+              <button type="button" class="rail-tool rail-tool--stack rail-tool-span2" data-action="silhouetteCalm" title="【规整】呈现层一键：横竖格·谐步 + 关内动 + 关亚格颤 + 纹理回「流」+ 略抑流体，并立刻疏散叠格；约 0.9s 后再启邻格互换，关内动下换位带淡隐。不切「层」。"><span class="rail-tool-k">规整</span><span class="rail-tool-hint">一键先静</span></button>
             </nav>
           </div>
           <div class="rail-section ui-arc-present-only">
-            <div class="rail-section-title">④ 呈现层 · 巨字排版</div>
+            <div class="rail-section-head">
+              <div class="rail-section-title">④ 呈现巨字排版</div>
+              <p class="rail-section-hint">仅呈现层；巨字形下点按会重建</p>
+            </div>
             <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="巨字排版">
-              <button type="button" class="rail-tool" data-action="megaScale" title="【字比】巨字相对身幅缩放挡位（与当前小字格距取下限）；仅在巨字形下点按会重建布局。">字比</button>
-              <button type="button" class="rail-tool" data-action="macroFit" title="【容纳】长文进巨字：缩字填满 / 截断可放前缀 / 双行拆排；巨字形下点按重建。">容纳</button>
-              <button type="button" class="rail-tool rail-tool-span2" data-action="megaPresentLayout" title="【排布】呈现巨字：拼满画布（短串也分行、按画布收紧格距并自动缩比）↔ 全文逐字轮换剪影（约 2.4s 一字）。巨字形下点按切换并重建。">排布</button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="megaScale" title="【字比】巨字相对身幅缩放挡位（与当前小字格距取下限）；仅在巨字形下点按会重建布局。"><span class="rail-tool-k">字比</span><span class="rail-tool-hint">巨字缩放</span></button>
+              <button type="button" class="rail-tool rail-tool--stack" data-action="macroFit" title="【容纳】长文进巨字：缩字填满 / 截断可放前缀 / 双行拆排；巨字形下点按重建。"><span class="rail-tool-k">容纳</span><span class="rail-tool-hint">长文策略</span></button>
+              <button type="button" class="rail-tool rail-tool--stack rail-tool-span2" data-action="megaPresentLayout" title="【排布】呈现巨字：拼满画布（短串也分行、按画布收紧格距并自动缩比）↔ 全文逐字轮换剪影（约 2.4s 一字）。巨字形下点按切换并重建。"><span class="rail-tool-k">排布</span><span class="rail-tool-hint">拼满↔逐字</span></button>
             </nav>
           </div>
         </div>
@@ -114,7 +126,7 @@
         <div class="stage-main" id="stageMain" aria-hidden="false">
           <canvas id="petCanvas" aria-label="字灵画布"></canvas>
           <div class="form-label" id="formLabel">软团</div>
-          <div class="hint" id="hint">点页眉 <strong>?</strong> 入门 · 侧栏按钮<strong>悬停</strong>可看长说明 · <strong>规整</strong>后先静再节律换位（轻淡）· 呈现巨字/颜拖曳<strong>剪影跟手、松手才落锚</strong> · 关「内动」<strong>锁格真静</strong>（叠分仍解共格）· <strong>排布 / 颤幅</strong> · 构建 <strong>3.34.6</strong> · URL <code>?macroFit=</code> <code>?megaScale=</code> 等见 PLAN / HANDOFF</div>
+          <div class="hint" id="hint">点页眉 <strong>?</strong> 入门 · 侧栏按钮<strong>悬停</strong>可看长说明 · <strong>规整</strong>后先静再节律换位（轻淡）· 呈现巨字/颜拖曳<strong>剪影跟手、松手才落锚</strong> · 关「内动」<strong>锁格真静</strong>（叠分仍解共格）· <strong>排布 / 颤幅</strong> · 构建 <strong>3.35.9</strong> · URL <code>?macroFit=</code> <code>?megaScale=</code> 等见 PLAN / HANDOFF</div>
         </div>
       </section>
 
@@ -270,7 +282,7 @@
             <li><code>?form=mega&amp;macroText=春</code> — 巨字</li>
             <li><code>?form=clock</code> / <code>?form=chrono</code> — 计时</li>
             <li><code>?uiArc=presentation</code> — 直接进入呈现层侧栏形态区</li>
-            <li><code>?dev=1</code> — 显示画布活动区虚线</li>
+            <li><code>?dev=1</code> — 活动区虚线；右上显示<strong>上一帧</strong> <code>frame</code>/<code>upd</code>/<code>ren</code> 与 <code>resize</code>，换形后另有 <strong>setForm</strong> 分段与 <code>suggestMemo</code> 等</li>
           </ul>
         </section>
       </div>
@@ -311,11 +323,11 @@
     </div>
   </div>
 
-  <script src="./js/ziling/play-bounds.js?v=3.34.6"></script>
-  <script src="./js/ziling/shape-field.js?v=3.34.6"></script>
-  <script src="./js/ziling/matrix-bridge.js?v=3.34.6"></script>
-  <script src="./js/ziling/shape-consumer.js?v=3.34.6"></script>
-  <script src="./pet.js?v=3.34.6"></script>
-  <script src="./app.js?v=3.34.6"></script>
+  <script src="./js/ziling/play-bounds.js?v=3.35.9"></script>
+  <script src="./js/ziling/shape-field.js?v=3.35.9"></script>
+  <script src="./js/ziling/matrix-bridge.js?v=3.35.9"></script>
+  <script src="./js/ziling/shape-consumer.js?v=3.35.9"></script>
+  <script src="./pet.js?v=3.35.9"></script>
+  <script src="./app.js?v=3.35.9"></script>
 </body>
 </html>

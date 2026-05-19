@@ -3,6 +3,12 @@
  */
 (function () {
   "use strict";
+  if (!window.ZiLing || typeof window.ZiLing.Pet !== "function") {
+    console.error(
+      "[ZiLing] window.ZiLing.Pet 未定义：请检查 pet.js 是否先于 app.js 加载，或浏览器控制台是否有 pet.js 语法/运行时错误。"
+    );
+    return;
+  }
   const {
     Pet,
     FORMS,
@@ -19,6 +25,8 @@
   const canvas = document.getElementById("petCanvas");
   const stage = document.getElementById("stage");
   const stageMain = document.getElementById("stageMain");
+  /** 画布命中区：mouseup 仅在此区域内才 preventDefault，避免「拖完释在侧栏」吃掉层切换等 click */
+  const petHost = stageMain || stage;
   const formLabel = document.getElementById("formLabel");
   const hint = document.getElementById("hint");
   const toastEl = document.getElementById("toast");
@@ -29,6 +37,18 @@
   const buildMeta = document.querySelector('meta[name="ziling-build"]');
   if (buildStamp && buildMeta && buildMeta.content) {
     buildStamp.textContent = "build " + buildMeta.content;
+  }
+
+  /** 与 `styles.css` 中 `--font-app` 一致，供觅食飘字等内联样式复用，避免与全页字体脱节 */
+  function cssFontAppStack() {
+    try {
+      const raw = getComputedStyle(document.documentElement)
+        .getPropertyValue("--font-app")
+        .trim();
+      return raw.replace(/^["']|["']$/g, "") || "";
+    } catch (_) {
+      return "";
+    }
   }
 
   const openingPanel = document.getElementById("openingPanel");
@@ -135,8 +155,9 @@
   }
 
   function syncMotionStyleRail(p) {
-    if (!p || !window.ZiLing || !ZiLing.normalizeBodyMotionStyle) return;
-    const cur = ZiLing.normalizeBodyMotionStyle(p.bodyMotionStyle);
+    const Z = window.ZiLing;
+    if (!p || !Z || typeof Z.normalizeBodyMotionStyle !== "function") return;
+    const cur = Z.normalizeBodyMotionStyle(p.bodyMotionStyle);
     document.querySelectorAll('[data-action="setMotionStyle"]').forEach((btn) => {
       const m = btn.dataset.motion;
       const on = m === cur;
@@ -284,6 +305,7 @@
 
   let toastTimer = null;
   function toast(msg) {
+    if (!toastEl) return;
     toastEl.textContent = msg;
     toastEl.classList.add("show");
     if (toastTimer) clearTimeout(toastTimer);
@@ -501,8 +523,30 @@
     if (pet.dragging) pet.dragTo(p.x, p.y);
   }
 
+  function eventTargetInsidePetHost(e) {
+    if (!e || !e.target || !petHost) return false;
+    try {
+      return petHost.contains(e.target);
+    } catch (_) {
+      return false;
+    }
+  }
+
   function onUp(e) {
-    if (e && e.cancelable) e.preventDefault();
+    /** 画布指针会话中仅在 **mouseup 落在画布/stage 内** 时默认阻止，避免拖曳结束在侧栏按钮上释手时 cancel 掉「层」等 click。 */
+    const canvasPointerSession =
+      downPos != null ||
+      dragPhase !== "none" ||
+      pet.dragging ||
+      revertArmOnRelease;
+    if (
+      e &&
+      e.cancelable &&
+      canvasPointerSession &&
+      eventTargetInsidePetHost(e)
+    ) {
+      e.preventDefault();
+    }
     const now = performance.now();
     const dt = now - downTime;
     clearLongPressTimer();
@@ -570,7 +614,6 @@
     downZone = "";
   }
 
-  const petHost = stageMain || stage;
   if (petHost) {
     petHost.addEventListener("touchstart", onDown, { passive: false });
     petHost.addEventListener("touchmove", onMove, { passive: false });
@@ -649,9 +692,12 @@
     closeTintPopover();
   });
 
-  // ---------- 侧栏：互动 + 快捷形态 ----------
-  document.querySelectorAll(".rail-tool").forEach((btn) => {
-    btn.addEventListener("click", (ev) => {
+  // ---------- 侧栏：互动 + 快捷形态（左栏事件委托，closest 到 .rail-tool，减轻 span 内点按与指针目标异常时「层」等失效） ----------
+  const railLeftEl = document.querySelector(".rail.rail-left");
+  if (railLeftEl) {
+    railLeftEl.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".rail-tool[data-action]");
+      if (!btn || !railLeftEl.contains(btn)) return;
       const action = btn.dataset.action;
       if (action === "tint") {
         ev.stopPropagation();
@@ -808,7 +854,7 @@
         toast("抖擞精神");
       }
     });
-  });
+  }
 
   // ---------- 把下面诗笺里的每个字拆成 span ----------
   const feedableNodes = [];
@@ -944,12 +990,15 @@
       const el = document.createElement("div");
       const ch = candidates[Math.floor(Math.random() * candidates.length)];
       el.textContent = ch;
+      const fontStack =
+        cssFontAppStack() ||
+        '"LXGW WenKai","Noto Sans SC",system-ui,sans-serif';
       el.style.cssText = `
         position:absolute;
         left:${p.x}px;
         top:${p.y}px;
         transform: translate(-50%, -50%);
-        font-family: ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+        font-family: ${fontStack};
         font-size: ${14 + Math.random() * 6}px;
         color: rgba(0, 122, 255, 0.35);
         text-shadow: none;
