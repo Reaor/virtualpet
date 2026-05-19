@@ -28,6 +28,14 @@
 
 **本地打开**：静态文件即可；注意 **带 `?v=` 缓存** 强刷。
 
+### 2.0 GitHub 与拉取请求（便于人类核对）
+
+- 本仓库远程一般为 **`https://github.com/Reaor/virtualpet`**（以 `git remote -v` 为准）。
+- 功能分支示例：`cursor/mega-present-readability-e208`。在 GitHub 上可用 **Compare** 查看相对 `main` 的完整 diff：  
+  `https://github.com/Reaor/virtualpet/compare/main...cursor/mega-present-readability-e208`
+- Cloud Agent 可能创建或更新 **Draft PR**；若 PR 已合并/关闭，历史上仍可在 **Pull requests → Closed** 或上述 Compare 链接中看到改动。
+- **页眉构建号**（`buildStamp` / `ziling-build`）应与当前 `index.html` 一致，作为「线上是否已吃到最新静态文件」的一眼校验。
+
 ---
 
 ## 3. 核心状态机（必读）

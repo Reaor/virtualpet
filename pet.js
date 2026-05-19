@@ -914,9 +914,9 @@
     return { x, y };
   }
 
-  /** 巨字/汉字剪影：无衬线优先，字腔略大、笔画分界更清晰（系统回退链） */
+  /** 巨字 mask / 测量：与 DOM `--font-app`、画布 `drawGlyph` 同置 LXGW 于前，减少「屏上字 vs 离屏量」口径漂移（仍保留无衬线回退以保字腔几何）。 */
   const FONT_MACRO_CJK_OPEN =
-    '"Noto Sans SC","Source Han Sans SC","Noto Sans CJK SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei UI","Liberation Sans",sans-serif';
+    '"LXGW WenKai","LXGW WenKai Screen","Noto Sans SC","Source Han Sans SC","Noto Sans CJK SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei UI","Liberation Sans",sans-serif';
   const FONT_SILHOUETTE_MONO =
     'ui-monospace,"Cascadia Code","SFMono-Regular","Consolas","Liberation Mono",monospace';
   /** 颜文字：混排符号，不用纯等宽，避免缺字形 */

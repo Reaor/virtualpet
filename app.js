@@ -37,6 +37,18 @@
     buildStamp.textContent = "build " + buildMeta.content;
   }
 
+  /** 与 `styles.css` 中 `--font-app` 一致，供觅食飘字等内联样式复用，避免与全页字体脱节 */
+  function cssFontAppStack() {
+    try {
+      const raw = getComputedStyle(document.documentElement)
+        .getPropertyValue("--font-app")
+        .trim();
+      return raw.replace(/^["']|["']$/g, "") || "";
+    } catch (_) {
+      return "";
+    }
+  }
+
   const openingPanel = document.getElementById("openingPanel");
   const openingPreset = document.getElementById("openingPreset");
   const btnPresentScript = document.getElementById("btnPresentScript");
@@ -510,7 +522,13 @@
   }
 
   function onUp(e) {
-    if (e && e.cancelable) e.preventDefault();
+    /** 仅在画布交互会话中默认行为：全局 mouseup 若一律 preventDefault，会阻断目标上的 click（侧栏等「点一下」按钮会失效）。 */
+    const canvasPointerSession =
+      downPos != null ||
+      dragPhase !== "none" ||
+      pet.dragging ||
+      revertArmOnRelease;
+    if (e && e.cancelable && canvasPointerSession) e.preventDefault();
     const now = performance.now();
     const dt = now - downTime;
     clearLongPressTimer();
@@ -952,12 +970,15 @@
       const el = document.createElement("div");
       const ch = candidates[Math.floor(Math.random() * candidates.length)];
       el.textContent = ch;
+      const fontStack =
+        cssFontAppStack() ||
+        '"LXGW WenKai","Noto Sans SC",system-ui,sans-serif';
       el.style.cssText = `
         position:absolute;
         left:${p.x}px;
         top:${p.y}px;
         transform: translate(-50%, -50%);
-        font-family: ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+        font-family: ${fontStack};
         font-size: ${14 + Math.random() * 6}px;
         color: rgba(0, 122, 255, 0.35);
         text-shadow: none;
