@@ -510,7 +510,13 @@
   }
 
   function onUp(e) {
-    if (e && e.cancelable) e.preventDefault();
+    /** 仅在画布交互会话中默认行为：全局 mouseup 若一律 preventDefault，会阻断目标上的 click（侧栏等「点一下」按钮会失效）。 */
+    const canvasPointerSession =
+      downPos != null ||
+      dragPhase !== "none" ||
+      pet.dragging ||
+      revertArmOnRelease;
+    if (e && e.cancelable && canvasPointerSession) e.preventDefault();
     const now = performance.now();
     const dt = now - downTime;
     clearLongPressTimer();
