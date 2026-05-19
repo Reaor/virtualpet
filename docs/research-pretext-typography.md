@@ -62,3 +62,17 @@
 - 构建号：页面页眉 `build …` 与 `meta ziling-build` 应对齐 `index.html`
 
 若 Cloud Agent 创建的 PR 已合并或关闭，Compare 链接仍可看完整 diff。
+
+---
+
+## 5. 顺滑感与 Pretext：性能与「有序」节拍（3.35.8）
+
+Pretext 类工具的「丝滑」多来自 **少做无效工作** 与 **稳定的时间片语义**；字灵在 **mask 巨字/颜** 下，主线程热点常在 **`_separateOverlappingGridGlyphs`（多 pass × 全量 Map）** 与 **`fillText` 粒子绘制**。
+
+**3.35.8 已落地的工程取舍**（见 `pet.js` 与 `DESIGN` 变更表）：
+
+- 呈现剪影叠分 **第二遍** 与开内动一致改为 **隔帧**（关内动不再每帧双遍），降低持续卡顿；仍保留每帧 **第一遍** 与 passes 内收敛。
+- `presDense` 下叠分 **passes** 略减一档，在辨形与算力之间再收一点。
+- **mask 剪影** 的 `_ensemblePhase` 增量去掉轻微 `sin(t)` 调制，节拍更恒定；`crispMotion` / crisp 流体 **去相关幅**略收，观感更接近「齐舞」式有序弱变。
+
+验收：肉眼帧时间与 `?dev=1` 画布右上 **upd** 分段；若 `upd` 仍高，下一步应剖 `rasterizeMask` / 粒子上限而非再叠随机谐波。
