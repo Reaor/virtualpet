@@ -1,5 +1,7 @@
 # 字灵巨字 / 剪影排版：为何难、可走的技术路线
 
+> **姊妹篇**（Pretext 映射、全页 `--font-app`、PR 自检）：`docs/research-pretext-typography.md`。
+
 ## 1. 与「优秀字排版」的根本差异
 
 产品级排版（书籍、杂志、UI）通常依赖：

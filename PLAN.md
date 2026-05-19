@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.35.6** 起）。
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.35.7** 起）。
 > **接手说明**：`HANDOFF.md`（架构、常见坑、需求归纳、**侧栏 title 与区块**；**非**完整对话逐字存档）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
@@ -13,6 +13,7 @@
 | 入门说明 | 点页眉 **?** 应弹出居中说明层（原生 `<dialog>`）；**Esc** 或点遮罩外关闭 |
 | 脚本 / 样式 URL | `./pet.js?v=…` / `./app.js?v=…` / `./styles.css?v=…`（强刷缓存） |
 | `?dev=1` | 画布右上：**上一帧** `frame` / `upd` / `ren` / EMA、最近一次 **resize**、以及换形后的 **setForm** 分段（见 `AGENTS.md`） |
+| GitHub diff | 功能分支相对 `main`：`https://github.com/Reaor/virtualpet/compare/main...cursor/mega-present-readability-e208`（远程名以 `git remote` 为准；亦见 `HANDOFF.md` §2.0） |
 | 页面 | 浅色 App 风；**无**整段「AI 建议」面板（协议仍可在代码 `ingestAiSuggestionBlock` 使用） |
 
 若不符：多为 **CDN/浏览器缓存**。请无痕窗口或核对 Network 里 `pet.js` 响应内容首行附近版本。
