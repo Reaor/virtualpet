@@ -4472,10 +4472,10 @@
       const passes =
         presDense
           ? decoupDrag
-            ? 22
+            ? 16
             : this.presentationGlyphDynamics
-              ? 18
-              : 26
+              ? 12
+              : 18
           : usesMaskSnakeStream(this) && silMask
             ? 7
             : mega
@@ -6394,7 +6394,9 @@
         (presSilHarm && this.presentationGlyphDynamics ? 0.55 : 1);
       this._ensemblePhase +=
         dt *
-        (0.78 + 0.12 * Math.sin(t * 0.17)) *
+        (silMaskPet
+          ? 0.82
+          : 0.78 + 0.12 * Math.sin(t * 0.17)) *
         (silMaskPet ? gmsSil : gms) *
         ensBoost *
         sleepMul;
@@ -6866,7 +6868,7 @@
               /** 全队同拍前提下，用格位哈希弱去相关，减轻邻字同相「整块晃」感（幅面 <±5%） */
               const deco =
                 1 +
-                0.048 *
+                0.034 *
                 Math.sin(g.tx * 0.31 + g.ty * 0.27 + gi * 0.19);
               const m =
                 (0.82 + 0.18 * Math.sin(ang * 1.35 + sync * 0.28)) * deco;
@@ -6907,7 +6909,7 @@
               const ph = this._fluidPhase;
               const decoF =
                 1 +
-                0.042 *
+                0.03 *
                 Math.sin(g.tx * 0.29 + g.ty * 0.21 + gi * 0.13);
               wx +=
                 Math.sin(t * 0.95 + ph + g.tx * 0.008) *
@@ -7140,12 +7142,10 @@
               flip
             );
           }
-          /** 关内动时每帧双遍叠分（规整辨形）；开内动时隔帧第二遍省算力 */
+          /** 呈现剪影：每帧必跑第一遍叠分；第二遍隔帧（关内动/开内动同策略），减轻主线程卡顿仍靠 passes 内收敛 */
           this._sepAltFrame = (this._sepAltFrame || 0) + 1;
           const sepSecondPass =
-            !presSilHarm ||
-            !this.presentationGlyphDynamics ||
-            (this._sepAltFrame & 1) === 1;
+            !presSilHarm || (this._sepAltFrame & 1) === 1;
           if (sepSecondPass) {
             this._separateOverlappingGridGlyphs();
           }
@@ -8124,7 +8124,6 @@
         applyArcVisualPrefsToPet(this);
         this._applyGridTypography();
         if (this.gridMarch && this.gridSnapping && this.glyphs && this.glyphs.length) {
-          this._separateOverlappingGridGlyphs();
           this._separateOverlappingGridGlyphs();
         }
         const nowMs =

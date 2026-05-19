@@ -163,8 +163,8 @@ body {
   position: relative;
 }
 .rail-left {
-  flex: 0 0 176px;
-  min-width: 176px;
+  flex: 0 0 188px;
+  min-width: 188px;
   align-items: stretch;
   pointer-events: auto;
   margin-right: 0;
@@ -187,13 +187,28 @@ body {
   width: 100%;
 }
 
+.rail-section-head {
+  margin: 0 0 6px;
+  padding: 0 2px;
+}
 .rail-section-title {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--label);
-  letter-spacing: 0.04em;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
   margin: 0 0 4px 2px;
-  line-height: 1.2;
+  line-height: 1.25;
+}
+.rail-section-head .rail-section-title {
+  margin: 0 0 2px;
+  padding: 0;
+}
+.rail-section-hint {
+  margin: 0;
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--label);
+  line-height: 1.35;
 }
 
 .rail-right-head {
@@ -303,6 +318,42 @@ body {
   font-weight: 700;
   cursor: pointer;
   touch-action: manipulation;
+}
+/** 双行：主字 + 副标，减少「单字谜面」感 */
+.rail-tool--stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 5px 4px;
+  line-height: 1.05;
+}
+.rail-tool--stack .rail-tool-k {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.rail-tool--stack .rail-tool-hint {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--label);
+  max-width: 100%;
+  text-align: center;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+.rail-tools-grid .rail-tool--stack {
+  min-height: 42px;
+}
+.rail-tools-grid .rail-tool--stack .rail-tool-k {
+  font-size: 14px;
+}
+.rail-tools-motion .rail-tool--stack {
+  min-height: 40px;
+}
+.rail-tools-motion .rail-tool--stack .rail-tool-k {
+  font-size: 13px;
 }
 .rail-tool:active {
   transform: scale(0.95);
@@ -1134,6 +1185,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .rail-tool:active,
+  .rail-tool--stack:active,
   .rail-script:active,
   .import-btn:active,
   .opening-btn:active,
