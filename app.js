@@ -3,6 +3,12 @@
  */
 (function () {
   "use strict";
+  if (!window.ZiLing || typeof window.ZiLing.Pet !== "function") {
+    console.error(
+      "[ZiLing] window.ZiLing.Pet 未定义：请检查 pet.js 是否先于 app.js 加载，或浏览器控制台是否有 pet.js 语法/运行时错误。"
+    );
+    return;
+  }
   const {
     Pet,
     FORMS,
@@ -135,8 +141,9 @@
   }
 
   function syncMotionStyleRail(p) {
-    if (!p || !window.ZiLing || !ZiLing.normalizeBodyMotionStyle) return;
-    const cur = ZiLing.normalizeBodyMotionStyle(p.bodyMotionStyle);
+    const Z = window.ZiLing;
+    if (!p || !Z || typeof Z.normalizeBodyMotionStyle !== "function") return;
+    const cur = Z.normalizeBodyMotionStyle(p.bodyMotionStyle);
     document.querySelectorAll('[data-action="setMotionStyle"]').forEach((btn) => {
       const m = btn.dataset.motion;
       const on = m === cur;
@@ -284,6 +291,7 @@
 
   let toastTimer = null;
   function toast(msg) {
+    if (!toastEl) return;
     toastEl.textContent = msg;
     toastEl.classList.add("show");
     if (toastTimer) clearTimeout(toastTimer);

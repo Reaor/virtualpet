@@ -949,7 +949,7 @@
         .filter(Boolean);
       const useLines = lines.length ? lines : [text];
       const joined = useLines.join("");
-      const gLen = Math.max(2, Array.from(joined).length);
+      const gLen = Math.max(2, segmentStringGraphemes(joined).length);
       let fs = s * 0.52 * Math.min(1, 8.5 / gLen);
       const maxW = s * 0.9;
       for (let iter = 0; iter < 26; iter++) {
@@ -1032,15 +1032,19 @@
   /** 字素级拆分（emoji / 代理对等），无 `Intl.Segmenter` 时退回 `Array.from` */
   function segmentStringGraphemes(s) {
     const str = String(s || "");
-    if (typeof Intl !== "undefined" && Intl.Segmenter) {
-      try {
-        const seg = new Intl.Segmenter(undefined, {
-          granularity: "grapheme",
-        });
-        return Array.from(seg.segment(str), (p) => p.segment);
-      } catch (_) {}
+    try {
+      if (typeof Intl !== "undefined" && Intl.Segmenter) {
+        try {
+          const seg = new Intl.Segmenter(undefined, {
+            granularity: "grapheme",
+          });
+          return Array.from(seg.segment(str), (p) => p.segment);
+        } catch (_) {}
+      }
+      return Array.from(str);
+    } catch (_) {
+      return Array.from(str);
     }
-    return Array.from(str);
   }
 
   /**
@@ -1288,6 +1292,12 @@
     return { Slay: S * scaleEffFinal, disp: dispFinal, gc, mode };
   }
 
+  /** 巨字粒子估算缓存：fit_canvas 迭代与 setForm 前后会重复问同一 (字串,S,格)；借鉴 Pretext「测量少次、口径一致」。 */
+  const _megaSuggestMemo = new Map();
+  function megaSuggestMemoKey(text, S, cellEst, dense) {
+    return `${dense ? 1 : 0}|${cellEst}|${Math.round(S * 4) / 4}|${text}`;
+  }
+
   /**
    * 巨字粒子数：按剪影填充面积 / 格面积估算；`opts.densePresentation` 为真时
    * 提高目标密度（略减留白乘子），便于呈现层「辨形」而非待机层的壳层水墨感。
@@ -1298,15 +1308,18 @@
     const text = String(displayText || "字").trim() || "字";
     const graphemes = segmentStringGraphemes(text.replace(/\n/g, ""));
     const gcount = Math.max(1, graphemes.length);
+    const cellEst =
+      cellPx != null && cellPx > 0
+        ? cellPx
+        : clamp(Math.round(S * 0.043), 12, 20);
+    const mkey = megaSuggestMemoKey(text, S, cellEst, dense);
+    if (_megaSuggestMemo.has(mkey)) return _megaSuggestMemo.get(mkey);
+
     const draw = createMacroTextDraw(text, { noStroke: true });
     const sampleS = Math.min(420, Math.round(S));
     const scaleRel = S / sampleS;
     const fillPx = countSilhouetteFillPixels(draw, S, sampleS);
     const areaLogical = fillPx * scaleRel * scaleRel;
-    const cellEst =
-      cellPx != null && cellPx > 0
-        ? cellPx
-        : clamp(Math.round(S * 0.043), 12, 20);
     const cellPack = dense ? 0.86 : 0.92;
     const cellArea = cellEst * cellEst * cellPack;
     const voidFrac = dense
@@ -1318,7 +1331,10 @@
     const nBand = Math.ceil(bandLogical / Math.max(cellArea * (dense ? 0.5 : 0.58), 1));
     n = Math.max(n, nBand);
     n = Math.max(n, (dense ? 32 : 20) + (dense ? 16 : 12) * gcount);
-    return clamp(n, dense ? 34 : 28, 250);
+    const out = clamp(n, dense ? 34 : 28, 250);
+    if (_megaSuggestMemo.size > 64) _megaSuggestMemo.clear();
+    _megaSuggestMemo.set(mkey, out);
+    return out;
   }
 
   /**
@@ -2889,7 +2905,7 @@
     }
   }
 
-  function buildFormLayoutData(self, name, n, S) {
+  function buildFormLayoutData(self, name, n, S, resolvedMegaCache) {
     if (name === "script" && self.scriptLines && self.scriptLines.length) {
       const b = buildScriptLayout(self.scriptLines, n, S);
       return {
@@ -2909,7 +2925,12 @@
           ? self.gridCell
           : clamp(Math.round(S * 0.042), 13, 19);
       const pres = self.uiArcMode === "presentation";
-      const { Slay, disp } = resolveMegaLayoutInput(self, S);
+      const { Slay, disp } =
+        resolvedMegaCache &&
+        resolvedMegaCache.Slay > 0 &&
+        String(resolvedMegaCache.disp || "").length
+          ? resolvedMegaCache
+          : resolveMegaLayoutInput(self, S);
       const dispFlat = String(disp || "字").replace(/\n/g, "");
       const gLen = Math.max(1, segmentStringGraphemes(dispFlat).length);
       const presOne = pres && gLen <= 1;
@@ -3163,6 +3184,13 @@
       this.ripples = []; // {x,y,r,alpha}
       /** URL ?dev=1 或 opts：显示活动区虚线框（默认关，避免「漂浮轮廓」观感） */
       this.showPlayfieldGuide = opts.showPlayfieldGuide === true;
+      /** 与 `showPlayfieldGuide` 同闸：`setForm` 后写入，供画布诊断 overlay */
+      this._devPerfHud = null;
+      this._devLoopLastMs = 0;
+      this._devLoopEmaMs = 0;
+      this._devUpdateLastMs = 0;
+      this._devRenderLastMs = 0;
+      this._devResizeLastMs = 0;
       this.dragging = false;
       this.dragOffset = { x: 0, y: 0 };
       /** 呈现巨字排版：拼满画布（分行+自动缩） / 逐字轮换 */
@@ -3473,6 +3501,9 @@
     }
 
     _resize() {
+      const dev = this.showPlayfieldGuide === true;
+      const tr0 =
+        dev && typeof performance !== "undefined" ? performance.now() : 0;
       const host = this.canvas.parentElement;
       let w = host ? Math.floor(host.clientWidth) : 0;
       let h = host ? Math.floor(host.clientHeight) : 0;
@@ -3527,6 +3558,9 @@
       if (this.formData) {
         if (this.morphGlyphToTarget) this._cancelMorph(false);
         this.setForm(this.form, true);
+      }
+      if (dev && tr0) {
+        this._devResizeLastMs = performance.now() - tr0;
       }
     }
 
@@ -3586,9 +3620,17 @@
 
     setForm(name, silent, noEmitOnFormChange) {
       if (!FORMS[name]) return;
+      const devHud = this.showPlayfieldGuide === true;
+      const perfAll0 =
+        devHud && typeof performance !== "undefined" ? performance.now() : 0;
+      let perfMega0 = 0;
+      let perfMega1 = 0;
+      let perfLayout0 = 0;
+      let perfLayout1 = 0;
       if (this.morphGlyphToTarget) this._cancelMorph(false);
       const prevForm = this.form;
       const S = this.size;
+      let megaResolvedCache = null;
       if (name === "script") {
         this.gridCell = clamp(Math.round(S * 0.052), 13, 26);
         this._resizeGlyphsForScript(this.scriptLines, { mode: "script" });
@@ -3599,7 +3641,10 @@
             "fit_canvas"
         ) {
           const rawT = String(this._pickMacroDisplayForLayout() || "字");
-          const G = Math.max(1, Array.from(String(rawT).trim() || "字").length);
+          const G = Math.max(
+            1,
+            segmentStringGraphemes(String(rawT).trim() || "字").length
+          );
           this.gridCell = computePresentationMegaGridCell(this, S, G);
         } else {
           this.gridCell = clamp(Math.round(S * 0.0425), 13, 20);
@@ -3616,11 +3661,14 @@
         this.gridCell = clamp(Math.round(S * 0.0345), 10, 15);
       }
       if (name === "mega") {
+        if (devHud) perfMega0 = performance.now();
+        _megaSuggestMemo.clear();
         const mul =
           this._arcPrefs[this.uiArcMode].megaParticleMul != null
             ? clamp(+this._arcPrefs[this.uiArcMode].megaParticleMul, 0.72, 1.28)
             : 1;
         const resolvedMega = resolveMegaLayoutInput(this, S);
+        megaResolvedCache = resolvedMega;
         const suggestOpts =
           this.viewMode === "pet" && this.uiArcMode === "presentation"
             ? { densePresentation: true }
@@ -3650,6 +3698,7 @@
           this.particleCount = want;
           this._initGlyphs();
         }
+        if (devHud) perfMega1 = performance.now();
       } else if (name === "clock") {
         const sec = this.clockGranularity === "sec";
         const on = countTimerOnes(sec ? getLiveChronoRows() : getLiveClockRows());
@@ -3674,10 +3723,39 @@
           this._initGlyphs();
         }
       }
-      const data = buildFormLayoutData(this, name, this.particleCount, S);
-      if (!data || !data.targets || !data.targets.length) return;
+      if (devHud) perfLayout0 = performance.now();
+      const data = buildFormLayoutData(
+        this,
+        name,
+        this.particleCount,
+        S,
+        megaResolvedCache
+      );
+      if (devHud) perfLayout1 = performance.now();
+      if (!data || !data.targets || !data.targets.length) {
+        if (devHud && perfAll0) {
+          this._devPerfHud = {
+            ok: false,
+            key: name,
+            allMs: performance.now() - perfAll0,
+            megaSizingMs:
+              name === "mega" && perfMega0 && perfMega1
+                ? perfMega1 - perfMega0
+                : null,
+            buildLayoutMs:
+              perfLayout0 && perfLayout1 ? perfLayout1 - perfLayout0 : null,
+            particles: this.glyphs ? this.glyphs.length : 0,
+            gridCell: this.gridCell,
+            uiArc: this.uiArcMode,
+            memoSize: _megaSuggestMemo.size,
+          };
+        }
+        return;
+      }
       const megaMaskS =
-        name === "mega" ? resolveMegaLayoutInput(this, S).Slay : S;
+        name === "mega" && megaResolvedCache
+          ? megaResolvedCache.Slay
+          : S;
       this.form = name;
       if (name !== "script") {
         if (isDisplayPresentationForm(name)) {
@@ -3907,6 +3985,25 @@
           this._externalWalkSnapshot.height !== this.shapeField.packedHeight)
       ) {
         this.resetExternalWalkConsumer();
+      }
+      if (devHud && perfAll0) {
+        const wall =
+          typeof performance !== "undefined" ? performance.now() : perfAll0;
+        this._devPerfHud = {
+          ok: true,
+          key: name,
+          allMs: wall - perfAll0,
+          megaSizingMs:
+            name === "mega" && perfMega0 && perfMega1
+              ? perfMega1 - perfMega0
+              : null,
+          buildLayoutMs:
+            perfLayout0 && perfLayout1 ? perfLayout1 - perfLayout0 : null,
+          particles: this.glyphs.length,
+          gridCell: this.gridCell,
+          uiArc: this.uiArcMode,
+          memoSize: _megaSuggestMemo.size,
+        };
       }
     }
 
@@ -6215,10 +6312,29 @@
 
     // ---------- 主循环 ---------- //
     _loop(now) {
+      const dev = this.showPlayfieldGuide === true;
+      const tLoop0 =
+        dev && typeof performance !== "undefined" ? performance.now() : 0;
       const dt = Math.min(0.033, (now - this._lastTime) / 1000);
       this._lastTime = now;
+      const tUp0 =
+        dev && typeof performance !== "undefined" ? performance.now() : 0;
       this._update(dt, now);
+      const tUp1 =
+        dev && tUp0 ? performance.now() : 0;
+      const tRn0 =
+        dev && typeof performance !== "undefined" ? performance.now() : 0;
       this._render(now);
+      if (dev && tLoop0) {
+        const tEnd = performance.now();
+        this._devLoopLastMs = tEnd - tLoop0;
+        this._devUpdateLastMs = tUp1 > tUp0 ? tUp1 - tUp0 : 0;
+        this._devRenderLastMs = tEnd - tRn0;
+        const ema = this._devLoopEmaMs;
+        this._devLoopEmaMs = ema
+          ? ema * 0.85 + this._devLoopLastMs * 0.15
+          : this._devLoopLastMs;
+      }
       this._raf = requestAnimationFrame(this._loop.bind(this));
     }
 
@@ -6747,7 +6863,13 @@
               const breath = Math.sin(sync);
               const sway = Math.sin(sync * 0.5 + 0.85);
               const ang = g.tx * 0.012 + g.ty * 0.01;
-              const m = 0.82 + 0.18 * Math.sin(ang * 1.35 + sync * 0.28);
+              /** 全队同拍前提下，用格位哈希弱去相关，减轻邻字同相「整块晃」感（幅面 <±5%） */
+              const deco =
+                1 +
+                0.048 *
+                Math.sin(g.tx * 0.31 + g.ty * 0.27 + gi * 0.19);
+              const m =
+                (0.82 + 0.18 * Math.sin(ang * 1.35 + sync * 0.28)) * deco;
               wx +=
                 (breath * Math.cos(ang) + sway * 0.3 * Math.sin(ang)) *
                 pAmpBase *
@@ -6783,16 +6905,22 @@
               const dispScale =
                 (this.form === "mega" ? 1.03 : 1) * mk.crispMicroScale;
               const ph = this._fluidPhase;
+              const decoF =
+                1 +
+                0.042 *
+                Math.sin(g.tx * 0.29 + g.ty * 0.21 + gi * 0.13);
               wx +=
                 Math.sin(t * 0.95 + ph + g.tx * 0.008) *
                 waveAmpEff *
                 0.24 *
-                dispScale;
+                dispScale *
+                decoF;
               wy +=
                 Math.cos(t * 0.88 - ph * 0.65 + g.ty * 0.008) *
                 waveAmpEff *
                 0.22 *
-                dispScale;
+                dispScale *
+                decoF;
             } else {
               const nx = wx * 0.017 + this._fluidPhase;
               const ny = wy * 0.015 - this._fluidPhase * 0.75;
@@ -6838,19 +6966,42 @@
             const ph =
               this._ensemblePhase * (0.38 + 0.2 * gms0) +
               gi * 0.37 +
-              g.tx * 0.011;
+              g.tx * 0.011 +
+              0.055 * Math.sin(g.ty * 0.17 + g.tx * 0.13);
             const sx = Math.sin(ph);
             const sy = Math.cos(ph * 0.93 + 0.71);
+            const on = 0.535;
+            const off = 0.38;
+            const prevX = g._silHistDgx | 0;
+            const prevY = g._silHistDgy | 0;
             let dgx = 0;
             let dgy = 0;
-            if (sx >= 0.5) dgx = 1;
-            else if (sx <= -0.5) dgx = -1;
-            if (sy >= 0.5) dgy = 1;
-            else if (sy <= -0.5) dgy = -1;
+            if (prevX === 1) {
+              if (sx >= off) dgx = 1;
+              else if (sx <= -on) dgx = -1;
+            } else if (prevX === -1) {
+              if (sx <= -off) dgx = -1;
+              else if (sx >= on) dgx = 1;
+            } else {
+              if (sx >= on) dgx = 1;
+              else if (sx <= -on) dgx = -1;
+            }
+            if (prevY === 1) {
+              if (sy >= off) dgy = 1;
+              else if (sy <= -on) dgy = -1;
+            } else if (prevY === -1) {
+              if (sy <= -off) dgy = -1;
+              else if (sy >= on) dgy = 1;
+            } else {
+              if (sy >= on) dgy = 1;
+              else if (sy <= -on) dgy = -1;
+            }
             if (dgx !== 0 && dgy !== 0) {
               if (Math.abs(sx) >= Math.abs(sy)) dgy = 0;
               else dgx = 0;
             }
+            g._silHistDgx = dgx;
+            g._silHistDgy = dgy;
             tgx += dgx;
             tgy += dgy;
           }
@@ -6954,9 +7105,16 @@
             const cap = cell * 0.46 * jitAmp;
             const tox = clamp(txo, -cap, cap);
             const toy = clamp(tyo, -cap, cap);
-            const sm = 1 - Math.exp(-dt * (presGlyphSleep ? 13.5 : 22));
-            g._silDrawOx = lerp(g._silDrawOx || 0, tox, sm);
-            g._silDrawOy = lerp(g._silDrawOy || 0, toy, sm);
+            const oxPrev = g._silDrawOx || 0;
+            const oyPrev = g._silDrawOy || 0;
+            const err = Math.hypot(tox - oxPrev, toy - oyPrev);
+            const errNorm = cap > 1e-6 ? err / cap : 0;
+            const baseRate = presGlyphSleep ? 13.5 : 22;
+            /** 误差大时略提高收敛率，贴近目标后自动柔化，减轻贴边微振 */
+            const rate = baseRate * (1 + 2.15 * errNorm * errNorm);
+            const sm = 1 - Math.exp(-dt * rate);
+            g._silDrawOx = lerp(oxPrev, tox, sm);
+            g._silDrawOy = lerp(oyPrev, toy, sm);
           } else {
             g._silDrawOx = 0;
             g._silDrawOy = 0;
@@ -7281,6 +7439,56 @@
         ctx.restore();
       }
 
+      if (this.showPlayfieldGuide) {
+        const lines = [];
+        const lf = this._devLoopLastMs;
+        const em = this._devLoopEmaMs;
+        const up = this._devUpdateLastMs;
+        const rn = this._devRenderLastMs;
+        const rs = this._devResizeLastMs;
+        lines.push(
+          `frame ${lf > 0 ? lf.toFixed(1) + "ms" : "—"} (~${em > 0 ? em.toFixed(1) : "—"}ms) upd=${(up > 0 ? up : 0).toFixed(1)} ren=${(rn > 0 ? rn : 0).toFixed(1)}`
+        );
+        if (rs > 0) {
+          lines.push(`resize ${rs.toFixed(1)}ms`);
+        }
+        const p = this._devPerfHud;
+        if (p) {
+          lines.push(
+            `${p.ok ? "setForm" : "setForm·fail"} · ${p.key} · ${
+              p.allMs != null ? p.allMs.toFixed(1) + "ms" : "—"
+            }`
+          );
+          if (p.megaSizingMs != null) {
+            lines.push(`mega定粒/resolve ${p.megaSizingMs.toFixed(1)}ms`);
+          }
+          if (p.buildLayoutMs != null) {
+            lines.push(`buildLayout ${p.buildLayoutMs.toFixed(1)}ms`);
+          }
+          lines.push(`N=${p.particles} cell=${p.gridCell} ${p.uiArc}`);
+          if (p.memoSize != null) {
+            lines.push(`suggestMemo×${p.memoSize}`);
+          }
+        }
+        ctx.save();
+        ctx.font =
+          '11px ui-monospace,SFMono-Regular,"Cascadia Code",Consolas,monospace';
+        ctx.textAlign = "right";
+        ctx.textBaseline = "top";
+        const pad = 8;
+        let y = pad + 4;
+        for (let li = 0; li < lines.length; li++) {
+          const line = lines[li];
+          const tw = ctx.measureText(line).width;
+          ctx.fillStyle = light ? "rgba(255,255,255,0.92)" : "rgba(28,28,30,0.92)";
+          ctx.fillRect(W - pad - tw - 6, y - 2, tw + 10, 15);
+          ctx.fillStyle = light ? "rgba(0,0,0,0.72)" : "rgba(255,255,255,0.82)";
+          ctx.fillText(line, W - pad, y);
+          y += 15;
+        }
+        ctx.restore();
+      }
+
       if (this.viewMode === "intro") {
         ctx.save();
         ctx.lineWidth = 1.2;
@@ -7371,7 +7579,7 @@
           ? 1
           : 1 + Math.min(flash, 0.52) * flashW * 0.42;
         const edgeAlpha = megaSilPres
-          ? lerp(0.98, 0.94, edge)
+          ? lerp(0.995, 0.9, edge)
           : crispForm
             ? lerp(0.99, 0.92, edge)
             : lerp(0.94, 0.42, edge);
