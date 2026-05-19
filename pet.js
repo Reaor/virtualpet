@@ -949,7 +949,7 @@
         .filter(Boolean);
       const useLines = lines.length ? lines : [text];
       const joined = useLines.join("");
-      const gLen = Math.max(2, Array.from(joined).length);
+      const gLen = Math.max(2, segmentStringGraphemes(joined).length);
       let fs = s * 0.52 * Math.min(1, 8.5 / gLen);
       const maxW = s * 0.9;
       for (let iter = 0; iter < 26; iter++) {
@@ -1032,15 +1032,19 @@
   /** 字素级拆分（emoji / 代理对等），无 `Intl.Segmenter` 时退回 `Array.from` */
   function segmentStringGraphemes(s) {
     const str = String(s || "");
-    if (typeof Intl !== "undefined" && Intl.Segmenter) {
-      try {
-        const seg = new Intl.Segmenter(undefined, {
-          granularity: "grapheme",
-        });
-        return Array.from(seg.segment(str), (p) => p.segment);
-      } catch (_) {}
+    try {
+      if (typeof Intl !== "undefined" && Intl.Segmenter) {
+        try {
+          const seg = new Intl.Segmenter(undefined, {
+            granularity: "grapheme",
+          });
+          return Array.from(seg.segment(str), (p) => p.segment);
+        } catch (_) {}
+      }
+      return Array.from(str);
+    } catch (_) {
+      return Array.from(str);
     }
-    return Array.from(str);
   }
 
   /**
@@ -1288,6 +1292,12 @@
     return { Slay: S * scaleEffFinal, disp: dispFinal, gc, mode };
   }
 
+  /** 巨字粒子估算缓存：fit_canvas 迭代与 setForm 前后会重复问同一 (字串,S,格)；借鉴 Pretext「测量少次、口径一致」。 */
+  const _megaSuggestMemo = new Map();
+  function megaSuggestMemoKey(text, S, cellEst, dense) {
+    return `${dense ? 1 : 0}|${cellEst}|${Math.round(S * 4) / 4}|${text}`;
+  }
+
   /**
    * 巨字粒子数：按剪影填充面积 / 格面积估算；`opts.densePresentation` 为真时
    * 提高目标密度（略减留白乘子），便于呈现层「辨形」而非待机层的壳层水墨感。
@@ -1298,15 +1308,18 @@
     const text = String(displayText || "字").trim() || "字";
     const graphemes = segmentStringGraphemes(text.replace(/\n/g, ""));
     const gcount = Math.max(1, graphemes.length);
+    const cellEst =
+      cellPx != null && cellPx > 0
+        ? cellPx
+        : clamp(Math.round(S * 0.043), 12, 20);
+    const mkey = megaSuggestMemoKey(text, S, cellEst, dense);
+    if (_megaSuggestMemo.has(mkey)) return _megaSuggestMemo.get(mkey);
+
     const draw = createMacroTextDraw(text, { noStroke: true });
     const sampleS = Math.min(420, Math.round(S));
     const scaleRel = S / sampleS;
     const fillPx = countSilhouetteFillPixels(draw, S, sampleS);
     const areaLogical = fillPx * scaleRel * scaleRel;
-    const cellEst =
-      cellPx != null && cellPx > 0
-        ? cellPx
-        : clamp(Math.round(S * 0.043), 12, 20);
     const cellPack = dense ? 0.86 : 0.92;
     const cellArea = cellEst * cellEst * cellPack;
     const voidFrac = dense
@@ -1318,7 +1331,10 @@
     const nBand = Math.ceil(bandLogical / Math.max(cellArea * (dense ? 0.5 : 0.58), 1));
     n = Math.max(n, nBand);
     n = Math.max(n, (dense ? 32 : 20) + (dense ? 16 : 12) * gcount);
-    return clamp(n, dense ? 34 : 28, 250);
+    const out = clamp(n, dense ? 34 : 28, 250);
+    if (_megaSuggestMemo.size > 64) _megaSuggestMemo.clear();
+    _megaSuggestMemo.set(mkey, out);
+    return out;
   }
 
   /**
@@ -2889,7 +2905,7 @@
     }
   }
 
-  function buildFormLayoutData(self, name, n, S) {
+  function buildFormLayoutData(self, name, n, S, resolvedMegaCache) {
     if (name === "script" && self.scriptLines && self.scriptLines.length) {
       const b = buildScriptLayout(self.scriptLines, n, S);
       return {
@@ -2909,7 +2925,12 @@
           ? self.gridCell
           : clamp(Math.round(S * 0.042), 13, 19);
       const pres = self.uiArcMode === "presentation";
-      const { Slay, disp } = resolveMegaLayoutInput(self, S);
+      const { Slay, disp } =
+        resolvedMegaCache &&
+        resolvedMegaCache.Slay > 0 &&
+        String(resolvedMegaCache.disp || "").length
+          ? resolvedMegaCache
+          : resolveMegaLayoutInput(self, S);
       const dispFlat = String(disp || "字").replace(/\n/g, "");
       const gLen = Math.max(1, segmentStringGraphemes(dispFlat).length);
       const presOne = pres && gLen <= 1;
@@ -3589,6 +3610,7 @@
       if (this.morphGlyphToTarget) this._cancelMorph(false);
       const prevForm = this.form;
       const S = this.size;
+      let megaResolvedCache = null;
       if (name === "script") {
         this.gridCell = clamp(Math.round(S * 0.052), 13, 26);
         this._resizeGlyphsForScript(this.scriptLines, { mode: "script" });
@@ -3599,7 +3621,10 @@
             "fit_canvas"
         ) {
           const rawT = String(this._pickMacroDisplayForLayout() || "字");
-          const G = Math.max(1, Array.from(String(rawT).trim() || "字").length);
+          const G = Math.max(
+            1,
+            segmentStringGraphemes(String(rawT).trim() || "字").length
+          );
           this.gridCell = computePresentationMegaGridCell(this, S, G);
         } else {
           this.gridCell = clamp(Math.round(S * 0.0425), 13, 20);
@@ -3616,11 +3641,13 @@
         this.gridCell = clamp(Math.round(S * 0.0345), 10, 15);
       }
       if (name === "mega") {
+        _megaSuggestMemo.clear();
         const mul =
           this._arcPrefs[this.uiArcMode].megaParticleMul != null
             ? clamp(+this._arcPrefs[this.uiArcMode].megaParticleMul, 0.72, 1.28)
             : 1;
         const resolvedMega = resolveMegaLayoutInput(this, S);
+        megaResolvedCache = resolvedMega;
         const suggestOpts =
           this.viewMode === "pet" && this.uiArcMode === "presentation"
             ? { densePresentation: true }
@@ -3674,10 +3701,18 @@
           this._initGlyphs();
         }
       }
-      const data = buildFormLayoutData(this, name, this.particleCount, S);
+      const data = buildFormLayoutData(
+        this,
+        name,
+        this.particleCount,
+        S,
+        megaResolvedCache
+      );
       if (!data || !data.targets || !data.targets.length) return;
       const megaMaskS =
-        name === "mega" ? resolveMegaLayoutInput(this, S).Slay : S;
+        name === "mega" && megaResolvedCache
+          ? megaResolvedCache.Slay
+          : S;
       this.form = name;
       if (name !== "script") {
         if (isDisplayPresentationForm(name)) {
