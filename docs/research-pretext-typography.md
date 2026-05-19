@@ -65,7 +65,7 @@
 
 ---
 
-## 5. 顺滑感与 Pretext：性能与「有序」节拍（3.35.8–3.35.9）
+## 5. 顺滑感与 Pretext：性能与「有序」节拍（3.35.8–3.35.10）
 
 Pretext 类工具的「丝滑」多来自 **少做无效工作** 与 **稳定的时间片语义**；字灵在 **mask 巨字/颜** 下，主线程热点常在 **`_separateOverlappingGridGlyphs`（多 pass × 全量 Map）** 与 **`fillText` 粒子绘制**。
 
@@ -76,5 +76,7 @@ Pretext 类工具的「丝滑」多来自 **少做无效工作** 与 **稳定的
 - **mask 剪影** 的 `_ensemblePhase` 增量去掉轻微 `sin(t)` 调制，节拍更恒定；`crispMotion` / crisp 流体 **去相关幅**略收，观感更接近「齐舞」式有序弱变。
 
 验收：肉眼帧时间与 `?dev=1` 画布右上 **upd** 分段；若 `upd` 仍高，下一步应剖 `rasterizeMask` / 粒子上限而非再叠随机谐波。
+
+**3.35.10 补充**：侧栏每次点击后在 **同一微任务尾部** 调用 `stabilizeAfterControl`：**`snapshotArcVisualPrefs` → `applyArcVisualPrefsToPet` → `_applyGridTypography`**，必要时再叠分 —— 对应 Pretext 的 **测量/排版与绘制少次、同口径**；避免「只写了桶、忘了写活属性」或反之的双轨漂移。
 
 **3.35.9 补充**：呈现剪影躯体绘制走 **统一 em → 统一 round(px)**，减少「同形下字大小不一」；墨色 / cel / 浮光 在 `megaSilPres` 关内动路径 **压边缘与相位差** 以减「深浅不一、微乱」。叠分在 **关内动** 恢复 **每帧双遍**（开内动仍隔帧第二遍）——用算力换共格稳定；与 `DESIGN.md` 变更表「3.35.9」一致。

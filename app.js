@@ -692,6 +692,23 @@
     closeTintPopover();
   });
 
+  /** 侧栏操作后是否跑 mask 叠分（较重）：不含已内部重建/多遍叠分的项（如「规整」、巨字重建），避免重复热点 */
+  function railControlNeedsLayoutHard(action) {
+    return (
+      action === "arcMode" ||
+      action === "morph" ||
+      action === "setMotionStyle" ||
+      action === "bodyGlyphEm" ||
+      action === "glyphsJitter" ||
+      action === "silhouetteJitterAmp" ||
+      action === "textureMotion" ||
+      action === "silhouetteMatteUnderlay" ||
+      action === "outlineContourFirst" ||
+      action === "presentationDynamics" ||
+      action === "gridMarch"
+    );
+  }
+
   // ---------- 侧栏：互动 + 快捷形态（左栏事件委托，closest 到 .rail-tool，减轻 span 内点按与指针目标异常时「层」等失效） ----------
   const railLeftEl = document.querySelector(".rail.rail-left");
   if (railLeftEl) {
@@ -705,14 +722,16 @@
         if (pop) pop.hidden = !pop.hidden;
         return;
       }
-      if (action === "arcMode") {
-        pet.cycleUiArcMode();
-        const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
-        toast(
-          `层级 · ${lab}（色/速/谐步·廊道/字号/颤/紊/灰底·淡影/内动/规整/墨/浮/波/徙/粒/字比/容纳 分套保留）`
-        );
-        syncMotionStyleRail(pet);
-      } else if (action === "morph") {
+      const layoutHard = railControlNeedsLayoutHard(action);
+      try {
+        if (action === "arcMode") {
+          pet.cycleUiArcMode();
+          const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
+          toast(
+            `层级 · ${lab}（色/速/谐步·廊道/字号/颤/紊/灰底·淡影/内动/规整/墨/浮/波/徙/粒/字比/容纳 分套保留）`
+          );
+          syncMotionStyleRail(pet);
+        } else if (action === "morph") {
         pet.abortFeeding();
         const order = getFormOrderForUiArcMode(pet.uiArcMode);
         const cur = pet.form;
@@ -752,13 +771,13 @@
         if (pet.uiArcMode === "presentation" && motion === "contour_drift") {
           toast("呈现巨字/颜不使用「壳漫游」，已保持谐步（待机层仍可选漫游）");
           syncMotionStyleRail(pet);
-          return;
+        } else {
+          pet.setBodyMotionStyle(motion);
+          const lab =
+            (BODY_MOTION_LABELS && BODY_MOTION_LABELS[motion]) || motion;
+          toast(`走格：${lab}（${arcLayerZh()}）`);
+          syncMotionStyleRail(pet);
         }
-        pet.setBodyMotionStyle(motion);
-        const lab =
-          (BODY_MOTION_LABELS && BODY_MOTION_LABELS[motion]) || motion;
-        toast(`走格：${lab}（${arcLayerZh()}）`);
-        syncMotionStyleRail(pet);
       } else if (action === "bodyGlyphEm") {
         const v = pet.cycleBodyGlyphEmMul();
         toast(
@@ -852,6 +871,14 @@
       } else if (action === "shake") {
         pet.shake();
         toast("抖擞精神");
+      }
+      } finally {
+        /** 与 pet 内核同一微任务尾部对齐：快照↔应用↔排版（+ 可选叠分），缓解连点参数打架（Pretext：少次、一致口径） */
+        queueMicrotask(() => {
+          if (pet && typeof pet.stabilizeAfterControl === "function") {
+            pet.stabilizeAfterControl({ layoutHard });
+          }
+        });
       }
     });
   }
