@@ -5475,6 +5475,7 @@
     }
 
     _applyGridTypography() {
+      this._presSilUniformBodyPx = null;
       if (!this.gridUnity) {
         for (let i = 0; i < this.glyphs.length; i++) {
           this.glyphs[i].targetRot = rand(-0.18, 0.18);
@@ -5529,6 +5530,15 @@
           }
         }
         this._applyBodyGlyphEmMulToGlyphs();
+        if (
+          isPresentationSilhouetteHarm(this) &&
+          isMaskBackedMegaKao(this)
+        ) {
+          const g0 = this.glyphs.find((gg) => !gg.faceRole);
+          if (g0 && g0.size != null && !Number.isNaN(+g0.size)) {
+            this._presSilUniformBodyPx = +g0.size;
+          }
+        }
         return;
       }
       const emMin = Math.max(8, this.gridCell * 0.68);
@@ -7142,10 +7152,12 @@
               flip
             );
           }
-          /** 呈现剪影：每帧必跑第一遍叠分；第二遍隔帧（关内动/开内动同策略），减轻主线程卡顿仍靠 passes 内收敛 */
+          /** 呈现剪影：每帧必跑第一遍叠分；关内动时每帧双遍；开内动时隔帧第二遍，减轻卡顿 */
           this._sepAltFrame = (this._sepAltFrame || 0) + 1;
           const sepSecondPass =
-            !presSilHarm || (this._sepAltFrame & 1) === 1;
+            !presSilHarm ||
+            presGlyphSleep ||
+            (this._sepAltFrame & 1) === 1;
           if (sepSecondPass) {
             this._separateOverlappingGridGlyphs();
           }
@@ -7529,6 +7541,9 @@
         this.rotation
       );
 
+      /** 呈现剪影躯体：本帧共用的整数 px 字号，避免逐字 round 造成大小不一 */
+      this._presSilUniformPxInt = null;
+
       const drawGlyph = (g, opts) => {
         const crispForm = isGridLayoutImmutableForm(this.form);
         const edge = g.edge;
@@ -7557,7 +7572,16 @@
           crispForm &&
           isMaskBackedMegaKao(this) &&
           !g.faceRole;
-        const baseSize = g.size * this.scale * (opts.sizeMul || 1);
+        const uniformBodyPx =
+          megaSilPres &&
+          this._presSilUniformBodyPx != null &&
+          !Number.isNaN(+this._presSilUniformBodyPx)
+            ? +this._presSilUniformBodyPx
+            : null;
+        const baseSize =
+          (uniformBodyPx != null ? uniformBodyPx : g.size) *
+          this.scale *
+          (opts.sizeMul || 1);
         let size = baseSize * (megaSilPres ? 1 : roleMul);
         if (this.gridUnity && this.gridCell) {
           let cap = this.gridCell * (crispForm ? 0.92 : 0.88) * this.scale;
@@ -7575,31 +7599,49 @@
         if (size < 7.5) size = 7.5;
         if (this.gridUnity) size = Math.max(size, 8.5);
         const flashW = opts.flashWeight != null ? opts.flashWeight : 0.5;
-        const flashBoost = silDraw
-          ? 1
-          : 1 + Math.min(flash, 0.52) * flashW * 0.42;
+        const flashBoost =
+          megaSilPres || silDraw
+            ? 1
+            : 1 + Math.min(flash, 0.52) * flashW * 0.42;
         const edgeAlpha = megaSilPres
-          ? lerp(0.995, 0.9, edge)
+          ? 1
           : crispForm
             ? lerp(0.99, 0.92, edge)
             : lerp(0.94, 0.42, edge);
-        const glowMul = g.faceRole ? 1 : this._glowAlphaMul(g, t);
+        const glowMul =
+          g.faceRole || megaSilPres ? 1 : this._glowAlphaMul(g, t);
         const presBodyAlphaMul =
           isPresentationSilhouetteHarm(this) &&
           !this.presentationGlyphDynamics &&
           !g.faceRole
             ? 0.74
             : 1;
+        const ga = g.alpha == null || Number.isNaN(+g.alpha) ? 1 : +g.alpha;
+        const glyphAlpha =
+          megaSilPres && !this.presentationGlyphDynamics
+            ? clamp(ga, 0.9, 1)
+            : ga;
         const alpha =
           (opts.alphaMul != null ? opts.alphaMul : 1) *
           presBodyAlphaMul *
           flashBoost *
           edgeAlpha *
-          g.alpha *
+          glyphAlpha *
           glowMul;
         const fontMain =
           '"LXGW WenKai","LXGW WenKai Screen","Noto Serif SC","Noto Sans SC",serif';
-        const pxInt = Math.max(8, Math.round(size));
+        let pxInt = Math.max(8, Math.round(size));
+        if (
+          megaSilPres &&
+          uniformBodyPx != null &&
+          !emojiLike &&
+          this.gridUnity
+        ) {
+          if (this._presSilUniformPxInt == null) {
+            this._presSilUniformPxInt = pxInt;
+          }
+          pxInt = this._presSilUniformPxInt;
+        }
         const szLabel =
           crispForm || this.gridUnity ? `${pxInt}px` : `${(Math.round(size * 10) / 10).toFixed(1)}px`;
         const fontPrefix = emojiLike ? "" : "600 ";
@@ -7626,9 +7668,13 @@
           const br = parseInt(this.bodyTintHex.slice(1, 3), 16);
           const bge = parseInt(this.bodyTintHex.slice(3, 5), 16);
           const bb = parseInt(this.bodyTintHex.slice(5, 7), 16);
-          const ek = light
-            ? lerp(0.5, 1, edge)
-            : lerp(0.42, 1, 1 - edge * 0.65);
+          const ek = megaSilPres
+            ? light
+              ? 0.88
+              : 0.82
+            : light
+              ? lerp(0.5, 1, edge)
+              : lerp(0.42, 1, 1 - edge * 0.65);
           fillStyle = `rgba(${clamp(Math.round(br * ek), 0, 255)},${clamp(
             Math.round(bge * ek),
             0,
@@ -7641,19 +7687,21 @@
           const bx0 = this.pos.x;
           const Sref = Math.max(this.size * 0.48, 105);
           let u = 0.5;
-          if (cm === 1) {
-            const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
-            u = clamp(ny * 0.32 + breath * 0.68, 0, 1);
-          } else if (cm === 2) {
-            const d = clamp(Math.hypot(g.x - bx0, g.y - by0) / Sref, 0, 1);
-            u = clamp(d * 0.42 + breath * 0.58, 0, 1);
-          } else if (cm === 3) {
-            const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
-            u = clamp(
-              ny * 0.35 + breath * 0.65 + Math.sin(t * 2.05 + (g.depth || 0)) * 0.2,
-              0,
-              1
-            );
+          if (!(megaSilPres && !this.presentationGlyphDynamics)) {
+            if (cm === 1) {
+              const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
+              u = clamp(ny * 0.32 + breath * 0.68, 0, 1);
+            } else if (cm === 2) {
+              const d = clamp(Math.hypot(g.x - bx0, g.y - by0) / Sref, 0, 1);
+              u = clamp(d * 0.42 + breath * 0.58, 0, 1);
+            } else if (cm === 3) {
+              const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
+              u = clamp(
+                ny * 0.35 + breath * 0.65 + Math.sin(t * 2.05 + (g.depth || 0)) * 0.2,
+                0,
+                1
+              );
+            }
           }
           if (light) {
             const inkR = Math.round(lerp(6, 152, u));
@@ -7667,8 +7715,12 @@
             fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
           }
         } else if (opts.cel === false) {
-          const pulse = Math.sin(t * 2.25 + (g.depth || 0) * 2.8) * 0.1;
-          const edgeUse = clamp(edge + pulse, 0, 1);
+          const pulse = megaSilPres
+            ? 0
+            : Math.sin(t * 2.25 + (g.depth || 0) * 2.8) * 0.1;
+          const edgeUse = megaSilPres
+            ? 0.54
+            : clamp(edge + pulse, 0, 1);
           if (light) {
             const inkR = Math.round(lerp(22, 108, edgeUse));
             const inkG = Math.round(lerp(24, 118, edgeUse));
@@ -7681,13 +7733,29 @@
             fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
           }
         } else {
-          const cel = celRgbFromGlyph(g, light, t, this._fluidPhase || 0);
+          const celGn = megaSilPres
+            ? Object.assign({}, g, {
+                edge: 0.5,
+                tx: 0,
+                ty: 0,
+                patrolSeed: 0,
+              })
+            : g;
+          const celT =
+            megaSilPres && !this.presentationGlyphDynamics ? 0 : t;
+          const cel = celRgbFromGlyph(
+            celGn,
+            light,
+            celT,
+            this._fluidPhase || 0
+          );
           const [or, og, ob] = cel.outlineRgb;
           const outlineA = alpha * (0.5 + cel.edgeMul * 0.38);
           const px = this._pxScale || 1;
           const useCelHalo =
             !light &&
             !g.faceRole &&
+            !megaSilPres &&
             cel.edgeMul > 0.38;
           if (useCelHalo) {
             outlinePass = {
@@ -8124,6 +8192,7 @@
         applyArcVisualPrefsToPet(this);
         this._applyGridTypography();
         if (this.gridMarch && this.gridSnapping && this.glyphs && this.glyphs.length) {
+          this._separateOverlappingGridGlyphs();
           this._separateOverlappingGridGlyphs();
         }
         const nowMs =

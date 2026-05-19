@@ -25,6 +25,8 @@
   const canvas = document.getElementById("petCanvas");
   const stage = document.getElementById("stage");
   const stageMain = document.getElementById("stageMain");
+  /** 画布命中区：mouseup 仅在此区域内才 preventDefault，避免「拖完释在侧栏」吃掉层切换等 click */
+  const petHost = stageMain || stage;
   const formLabel = document.getElementById("formLabel");
   const hint = document.getElementById("hint");
   const toastEl = document.getElementById("toast");
@@ -521,14 +523,30 @@
     if (pet.dragging) pet.dragTo(p.x, p.y);
   }
 
+  function eventTargetInsidePetHost(e) {
+    if (!e || !e.target || !petHost) return false;
+    try {
+      return petHost.contains(e.target);
+    } catch (_) {
+      return false;
+    }
+  }
+
   function onUp(e) {
-    /** 仅在画布交互会话中默认行为：全局 mouseup 若一律 preventDefault，会阻断目标上的 click（侧栏等「点一下」按钮会失效）。 */
+    /** 画布指针会话中仅在 **mouseup 落在画布/stage 内** 时默认阻止，避免拖曳结束在侧栏按钮上释手时 cancel 掉「层」等 click。 */
     const canvasPointerSession =
       downPos != null ||
       dragPhase !== "none" ||
       pet.dragging ||
       revertArmOnRelease;
-    if (e && e.cancelable && canvasPointerSession) e.preventDefault();
+    if (
+      e &&
+      e.cancelable &&
+      canvasPointerSession &&
+      eventTargetInsidePetHost(e)
+    ) {
+      e.preventDefault();
+    }
     const now = performance.now();
     const dt = now - downTime;
     clearLongPressTimer();
@@ -596,7 +614,6 @@
     downZone = "";
   }
 
-  const petHost = stageMain || stage;
   if (petHost) {
     petHost.addEventListener("touchstart", onDown, { passive: false });
     petHost.addEventListener("touchmove", onMove, { passive: false });
@@ -675,9 +692,12 @@
     closeTintPopover();
   });
 
-  // ---------- 侧栏：互动 + 快捷形态 ----------
-  document.querySelectorAll(".rail-tool").forEach((btn) => {
-    btn.addEventListener("click", (ev) => {
+  // ---------- 侧栏：互动 + 快捷形态（左栏事件委托，closest 到 .rail-tool，减轻 span 内点按与指针目标异常时「层」等失效） ----------
+  const railLeftEl = document.querySelector(".rail.rail-left");
+  if (railLeftEl) {
+    railLeftEl.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".rail-tool[data-action]");
+      if (!btn || !railLeftEl.contains(btn)) return;
       const action = btn.dataset.action;
       if (action === "tint") {
         ev.stopPropagation();
@@ -834,7 +854,7 @@
         toast("抖擞精神");
       }
     });
-  });
+  }
 
   // ---------- 把下面诗笺里的每个字拆成 span ----------
   const feedableNodes = [];
