@@ -3871,9 +3871,14 @@
         g.wtgy = 0;
         const ph = (g.patrolSeed || 0) * 13.7 + i * 1.73;
         const lagBase =
-          silMk && !g.faceRole
-            ? 0.9 + (Math.sin(ph * 1.1) * 0.5 + 0.5) * 0.1
-            : 0.86 + (Math.sin(ph * 1.1) * 0.5 + 0.5) * 0.2;
+          silMk &&
+          !g.faceRole &&
+          isPresentationSilhouetteHarm(this) &&
+          !this.presentationGlyphDynamics
+            ? 0.96
+            : silMk && !g.faceRole
+              ? 0.9 + (Math.sin(ph * 1.1) * 0.5 + 0.5) * 0.1
+              : 0.86 + (Math.sin(ph * 1.1) * 0.5 + 0.5) * 0.2;
         g.lagK = g.faceRole ? lagBase * 0.52 : lagBase;
         g.lagX = bx;
         g.lagY = by;
@@ -4475,7 +4480,7 @@
             ? 16
             : this.presentationGlyphDynamics
               ? 12
-              : 18
+              : 15
           : usesMaskSnakeStream(this) && silMask
             ? 7
             : mega
@@ -7998,6 +8003,46 @@
         }
       }
       this.digestText(lines.join(""));
+    }
+
+    /**
+     * 侧栏或脚本改完偏好后调用：**快照当前活属性 → 写回当前层级桶 → 再应用**，并重算格点字号；
+     * 可选对 mask 巨字/颜跑两遍叠分，缓解连点后参数漂移、叠字、字身歪斜残留。
+     * @param {{ layoutHard?: boolean }} [opts] layoutHard=true 时在格迈+贴格下额外叠分（较重）
+     */
+    stabilizeAfterControl(opts) {
+      const layoutHard = !!(opts && opts.layoutHard);
+      snapshotArcVisualPrefs(this);
+      applyArcVisualPrefsToPet(this);
+      if (this.viewMode !== "pet" || !this.glyphs || !this.glyphs.length) return;
+      this._snapSilhouetteBodyUprightIfStill();
+      if (!this.gridUnity) return;
+      this._applyGridTypography();
+      if (
+        layoutHard &&
+        this.gridMarch &&
+        this.gridSnapping &&
+        isMaskBackedMegaKao(this) &&
+        this.glyphs.length > 1
+      ) {
+        this._separateOverlappingGridGlyphs();
+        this._separateOverlappingGridGlyphs();
+      }
+    }
+
+    /** 呈现剪影且关内动：字身立即扶正，避免 `rot` 慢跟随造成「整片歪」 */
+    _snapSilhouetteBodyUprightIfStill() {
+      if (
+        !isPresentationSilhouetteHarm(this) ||
+        !isMaskBackedMegaKao(this) ||
+        this.presentationGlyphDynamics
+      ) {
+        return;
+      }
+      for (const g of this.glyphs) {
+        if (g.faceRole) continue;
+        g.rot = 0;
+      }
     }
 
     /** 浮光：浓淡律动乘在透明度上（0=关） */
