@@ -6863,7 +6863,13 @@
               const breath = Math.sin(sync);
               const sway = Math.sin(sync * 0.5 + 0.85);
               const ang = g.tx * 0.012 + g.ty * 0.01;
-              const m = 0.82 + 0.18 * Math.sin(ang * 1.35 + sync * 0.28);
+              /** 全队同拍前提下，用格位哈希弱去相关，减轻邻字同相「整块晃」感（幅面 <±5%） */
+              const deco =
+                1 +
+                0.048 *
+                Math.sin(g.tx * 0.31 + g.ty * 0.27 + gi * 0.19);
+              const m =
+                (0.82 + 0.18 * Math.sin(ang * 1.35 + sync * 0.28)) * deco;
               wx +=
                 (breath * Math.cos(ang) + sway * 0.3 * Math.sin(ang)) *
                 pAmpBase *
@@ -6899,16 +6905,22 @@
               const dispScale =
                 (this.form === "mega" ? 1.03 : 1) * mk.crispMicroScale;
               const ph = this._fluidPhase;
+              const decoF =
+                1 +
+                0.042 *
+                Math.sin(g.tx * 0.29 + g.ty * 0.21 + gi * 0.13);
               wx +=
                 Math.sin(t * 0.95 + ph + g.tx * 0.008) *
                 waveAmpEff *
                 0.24 *
-                dispScale;
+                dispScale *
+                decoF;
               wy +=
                 Math.cos(t * 0.88 - ph * 0.65 + g.ty * 0.008) *
                 waveAmpEff *
                 0.22 *
-                dispScale;
+                dispScale *
+                decoF;
             } else {
               const nx = wx * 0.017 + this._fluidPhase;
               const ny = wy * 0.015 - this._fluidPhase * 0.75;
@@ -6954,19 +6966,42 @@
             const ph =
               this._ensemblePhase * (0.38 + 0.2 * gms0) +
               gi * 0.37 +
-              g.tx * 0.011;
+              g.tx * 0.011 +
+              0.055 * Math.sin(g.ty * 0.17 + g.tx * 0.13);
             const sx = Math.sin(ph);
             const sy = Math.cos(ph * 0.93 + 0.71);
+            const on = 0.535;
+            const off = 0.38;
+            const prevX = g._silHistDgx | 0;
+            const prevY = g._silHistDgy | 0;
             let dgx = 0;
             let dgy = 0;
-            if (sx >= 0.5) dgx = 1;
-            else if (sx <= -0.5) dgx = -1;
-            if (sy >= 0.5) dgy = 1;
-            else if (sy <= -0.5) dgy = -1;
+            if (prevX === 1) {
+              if (sx >= off) dgx = 1;
+              else if (sx <= -on) dgx = -1;
+            } else if (prevX === -1) {
+              if (sx <= -off) dgx = -1;
+              else if (sx >= on) dgx = 1;
+            } else {
+              if (sx >= on) dgx = 1;
+              else if (sx <= -on) dgx = -1;
+            }
+            if (prevY === 1) {
+              if (sy >= off) dgy = 1;
+              else if (sy <= -on) dgy = -1;
+            } else if (prevY === -1) {
+              if (sy <= -off) dgy = -1;
+              else if (sy >= on) dgy = 1;
+            } else {
+              if (sy >= on) dgy = 1;
+              else if (sy <= -on) dgy = -1;
+            }
             if (dgx !== 0 && dgy !== 0) {
               if (Math.abs(sx) >= Math.abs(sy)) dgy = 0;
               else dgx = 0;
             }
+            g._silHistDgx = dgx;
+            g._silHistDgy = dgy;
             tgx += dgx;
             tgy += dgy;
           }
@@ -7070,9 +7105,16 @@
             const cap = cell * 0.46 * jitAmp;
             const tox = clamp(txo, -cap, cap);
             const toy = clamp(tyo, -cap, cap);
-            const sm = 1 - Math.exp(-dt * (presGlyphSleep ? 13.5 : 22));
-            g._silDrawOx = lerp(g._silDrawOx || 0, tox, sm);
-            g._silDrawOy = lerp(g._silDrawOy || 0, toy, sm);
+            const oxPrev = g._silDrawOx || 0;
+            const oyPrev = g._silDrawOy || 0;
+            const err = Math.hypot(tox - oxPrev, toy - oyPrev);
+            const errNorm = cap > 1e-6 ? err / cap : 0;
+            const baseRate = presGlyphSleep ? 13.5 : 22;
+            /** 误差大时略提高收敛率，贴近目标后自动柔化，减轻贴边微振 */
+            const rate = baseRate * (1 + 2.15 * errNorm * errNorm);
+            const sm = 1 - Math.exp(-dt * rate);
+            g._silDrawOx = lerp(oxPrev, tox, sm);
+            g._silDrawOy = lerp(oyPrev, toy, sm);
           } else {
             g._silDrawOx = 0;
             g._silDrawOy = 0;
@@ -7537,7 +7579,7 @@
           ? 1
           : 1 + Math.min(flash, 0.52) * flashW * 0.42;
         const edgeAlpha = megaSilPres
-          ? lerp(0.98, 0.94, edge)
+          ? lerp(0.995, 0.9, edge)
           : crispForm
             ? lerp(0.99, 0.92, edge)
             : lerp(0.94, 0.42, edge);
