@@ -3186,6 +3186,11 @@
       this.showPlayfieldGuide = opts.showPlayfieldGuide === true;
       /** 与 `showPlayfieldGuide` 同闸：`setForm` 后写入，供画布诊断 overlay */
       this._devPerfHud = null;
+      this._devLoopLastMs = 0;
+      this._devLoopEmaMs = 0;
+      this._devUpdateLastMs = 0;
+      this._devRenderLastMs = 0;
+      this._devResizeLastMs = 0;
       this.dragging = false;
       this.dragOffset = { x: 0, y: 0 };
       /** 呈现巨字排版：拼满画布（分行+自动缩） / 逐字轮换 */
@@ -3496,6 +3501,9 @@
     }
 
     _resize() {
+      const dev = this.showPlayfieldGuide === true;
+      const tr0 =
+        dev && typeof performance !== "undefined" ? performance.now() : 0;
       const host = this.canvas.parentElement;
       let w = host ? Math.floor(host.clientWidth) : 0;
       let h = host ? Math.floor(host.clientHeight) : 0;
@@ -3550,6 +3558,9 @@
       if (this.formData) {
         if (this.morphGlyphToTarget) this._cancelMorph(false);
         this.setForm(this.form, true);
+      }
+      if (dev && tr0) {
+        this._devResizeLastMs = performance.now() - tr0;
       }
     }
 
@@ -6301,10 +6312,29 @@
 
     // ---------- 主循环 ---------- //
     _loop(now) {
+      const dev = this.showPlayfieldGuide === true;
+      const tLoop0 =
+        dev && typeof performance !== "undefined" ? performance.now() : 0;
       const dt = Math.min(0.033, (now - this._lastTime) / 1000);
       this._lastTime = now;
+      const tUp0 =
+        dev && typeof performance !== "undefined" ? performance.now() : 0;
       this._update(dt, now);
+      const tUp1 =
+        dev && tUp0 ? performance.now() : 0;
+      const tRn0 =
+        dev && typeof performance !== "undefined" ? performance.now() : 0;
       this._render(now);
+      if (dev && tLoop0) {
+        const tEnd = performance.now();
+        this._devLoopLastMs = tEnd - tLoop0;
+        this._devUpdateLastMs = tUp1 > tUp0 ? tUp1 - tUp0 : 0;
+        this._devRenderLastMs = tEnd - tRn0;
+        const ema = this._devLoopEmaMs;
+        this._devLoopEmaMs = ema
+          ? ema * 0.85 + this._devLoopLastMs * 0.15
+          : this._devLoopLastMs;
+      }
       this._raf = requestAnimationFrame(this._loop.bind(this));
     }
 
@@ -7367,21 +7397,37 @@
         ctx.restore();
       }
 
-      if (this.showPlayfieldGuide && this._devPerfHud) {
+      if (this.showPlayfieldGuide) {
+        const lines = [];
+        const lf = this._devLoopLastMs;
+        const em = this._devLoopEmaMs;
+        const up = this._devUpdateLastMs;
+        const rn = this._devRenderLastMs;
+        const rs = this._devResizeLastMs;
+        lines.push(
+          `frame ${lf > 0 ? lf.toFixed(1) + "ms" : "—"} (~${em > 0 ? em.toFixed(1) : "—"}ms) upd=${(up > 0 ? up : 0).toFixed(1)} ren=${(rn > 0 ? rn : 0).toFixed(1)}`
+        );
+        if (rs > 0) {
+          lines.push(`resize ${rs.toFixed(1)}ms`);
+        }
         const p = this._devPerfHud;
-        const lines = [
-          `${p.ok ? "setForm" : "setForm·fail"} · ${p.key} · ${
-            p.allMs != null ? p.allMs.toFixed(1) + "ms" : "—"
-          }`,
-          p.megaSizingMs != null
-            ? `mega定粒/resolve ${p.megaSizingMs.toFixed(1)}ms`
-            : null,
-          p.buildLayoutMs != null
-            ? `buildLayout ${p.buildLayoutMs.toFixed(1)}ms`
-            : null,
-          `N=${p.particles} cell=${p.gridCell} ${p.uiArc}`,
-          p.memoSize != null ? `suggestMemo×${p.memoSize}` : null,
-        ].filter(Boolean);
+        if (p) {
+          lines.push(
+            `${p.ok ? "setForm" : "setForm·fail"} · ${p.key} · ${
+              p.allMs != null ? p.allMs.toFixed(1) + "ms" : "—"
+            }`
+          );
+          if (p.megaSizingMs != null) {
+            lines.push(`mega定粒/resolve ${p.megaSizingMs.toFixed(1)}ms`);
+          }
+          if (p.buildLayoutMs != null) {
+            lines.push(`buildLayout ${p.buildLayoutMs.toFixed(1)}ms`);
+          }
+          lines.push(`N=${p.particles} cell=${p.gridCell} ${p.uiArc}`);
+          if (p.memoSize != null) {
+            lines.push(`suggestMemo×${p.memoSize}`);
+          }
+        }
         ctx.save();
         ctx.font =
           '11px ui-monospace,SFMono-Regular,"Cascadia Code",Consolas,monospace';
