@@ -904,8 +904,8 @@
         syncSandPlowRail(pet);
         toast(
           on
-            ? `拨开模式：开（${arcLayerZh()}；在画布任一处按下再拖，只拨字粒、身位不跟）`
-            : `拨开模式：关（${arcLayerZh()}）`
+            ? `沙拨字：开（${arcLayerZh()}；左栏②首行；画布任一处拖=拨字粒）`
+            : `沙拨字：关（${arcLayerZh()}）`
         );
       }
       } finally {

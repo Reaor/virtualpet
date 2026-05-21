@@ -7090,7 +7090,7 @@
                   edge *
                   edge *
                   cell *
-                  0.88 *
+                  1.42 *
                   dtBoost *
                   (silMaskPet ? 0.82 : 1);
                 wx += dx * inv * radial;
@@ -7103,7 +7103,7 @@
                     edge *
                     edge *
                     cell *
-                    0.34 *
+                    0.52 *
                     dtBoost *
                     Math.min(tl / 9.5, 1.95);
                   const tx = tvx / tl;
@@ -7240,6 +7240,52 @@
             );
             tgx = sn.gx;
             tgy = sn.gy;
+          }
+
+          if (
+            this._sandPlowDrag &&
+            this._sandPointer &&
+            !mT &&
+            !useSnakeCell &&
+            !g.faceRole &&
+            !(presSilHarm && presGlyphSleep && silMaskPet)
+          ) {
+            const spx = this._sandPointer.x;
+            const spy = this._sandPointer.y;
+            const sdx = wx - spx;
+            const sdy = wy - spy;
+            const sdist = Math.hypot(sdx, sdy);
+            const R0 = cell * (silMaskPet ? 6.9 : 9.8);
+            if (sdist > cell * 0.2 && sdist < R0) {
+              const inv = 1 / sdist;
+              const nx = sdx * inv;
+              const ny = sdy * inv;
+              const edge = 1 - sdist / R0;
+              const dragSp = Math.hypot(this.dragVel.x, this.dragVel.y);
+              const push =
+                edge * edge * (2.95 + Math.min(dragSp * 0.065, 1.15));
+              let kx = Math.trunc(nx * push);
+              let ky = Math.trunc(ny * push);
+              kx = clamp(kx, -3, 3);
+              ky = clamp(ky, -3, 3);
+              if (kx !== 0 || ky !== 0) {
+                tgx += kx;
+                tgy += ky;
+                if (silMaskPet) {
+                  const snK = this._nearestWalkableMarchCell(
+                    tgx,
+                    tgy,
+                    bx,
+                    by,
+                    cos,
+                    sin,
+                    flip
+                  );
+                  tgx = snK.gx;
+                  tgy = snK.gy;
+                }
+              }
+            }
           }
 
           const presSleepLock =

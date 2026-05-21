@@ -105,7 +105,8 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.35.13**：**拨开模式可起手**：`app.js` 在 `sandPlowMode` 下将 `dragPhase=pending` 扩至**画布任一处按下**（原先仅 `downZone===inner` 才进入 `beginDrag`，体外拖曳永远不生效）；侧栏「拨」后 **`syncSandPlowRail`**；`pet.js` 略**加大拨开半径/径向与切向强度**、贴边散略易触发。 |
+| 最新 | **3.35.14**：**沙拨字入口外显**：左栏 **② 区首行整宽**「沙拨字」+ 样式 `rail-tool--sand-plow`；`?` 入门增加 **沙拨** 专节；**格点级推开**（`tgx/tgy` 整数偏移 + mask 再走 `_nearestWalkableMarchCell`）补足原先仅亚格 `wx` 位移易被 `round` 吃掉的问题；`wx` 径向/切向略加强。 |
+| 先前 | **3.35.13**：**拨开模式可起手**：`app.js` 在 `sandPlowMode` 下将 `dragPhase=pending` 扩至**画布任一处按下**（原先仅 `downZone===inner` 才进入 `beginDrag`，体外拖曳永远不生效）；侧栏「拨」后 **`syncSandPlowRail`**；`pet.js` 略**加大拨开半径/径向与切向强度**、贴边散略易触发。 |
 | 先前 | **3.35.12**：**拨开模式**（侧栏「拨」）：`sandPlowMode` 写入 `_arcPrefs` 分套；开时 `beginDrag` / `dragTo` 走 **`_sandPlowDrag`**（指针更新 `dragVel`、**不挪** `pos` / 剪影解耦拖）；格迈前对 `wx,wy` 注入 **径向拨开 + 切向 streak**；活动区缘 **带冷却** 的 `_tapScatter` 推向 **躯壳中心** 以聚回框内；缘上拖指针仍触发 **`_wallShatter`**。`app.js`：`syncSandPlowRail`。 |
 | 先前 | **3.35.11**：**移动 / WebView**：`inferEmbeddedMobilePerfRelax` → `_embeddedMobilePerf`：画布 **DPR 上限 2**、粒子 **×0.72**（cap 200）、巨字 want **cap 200**、`_separateOverlappingGridGlyphs` **passes×0.68**、呈现开内动时 **第二遍叠分每 3 帧**、初 settle **6**、宠物模式 **减浅色格线 / 暗色斜线底纹**；`stabilizeAfterControl` / **规整** 在移动端 **单次叠分**。`app.js` 传 **`embeddedMobilePerf`**（**`?mobilePerf=1|0`**、**`?embedded=1`**）。 |
 | 先前 | **3.35.10**：**侧栏与层级一致性（架构收口）**：`Pet.stabilizeAfterControl` — 每次左栏操作后以 **`queueMicrotask`** 跑 **快照→应用→`_applyGridTypography`**，并对「未触发 `setForm` 全重建」的项可选 **两遍叠分**，缓解连点后 **`_arcPrefs` 与活属性漂移**、叠字、速度/字号观感打架；**呈现剪影 + 关内动** 下 **字身 `rot` 立即扶正**、**mask 字粒 `lagK` 收窄** 减轻歪斜与跟手不均；**叠分 passes**（静帧）略收以减负。`app.js`：**`try/finally`** 保证收尾；**漫游**拒选不再 `return` 跳过 `finally`。对齐 Pretext 思路：少次、同口径、尾部一次对齐（见 `docs/research-pretext-typography.md` §5）。 |
