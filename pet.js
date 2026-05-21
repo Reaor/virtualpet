@@ -3299,6 +3299,14 @@
       this._glyphFlash = 0;
       /** 换形后短促「落格」：弹簧略紧，字像落到格点上 */
       this._layoutSettle = 0;
+      /** 拖整体贴边：指针意图 vs 夹紧后位置（供贴边撞散 / 缓聚） */
+      this._dragLastWant = null;
+      this._dragLastClamp = null;
+      this._dragWallPinned = false;
+      /** 贴边时升高：格目标缓慢被拉向布局「家格」 */
+      this._wallRegroupK = 0;
+      this._dragWallPulseAcc = 0;
+      this._lastDragWallPulseAt = 0;
 
       /** 每字独立「巡逻」相位：体内相对位置持续缓慢变化 */
       this.internalMotion = opts.internalMotion !== false;
@@ -6204,24 +6212,109 @@
       return clamp(Math.max(r, 10), 10, rHi);
     }
 
-    _wallShatter(nx, ny) {
-      if (isMaskBackedMegaKao(this)) {
-        this._rumbleAmp = Math.min(0.18, (this._rumbleAmp || 0) + 0.06);
-        return;
-      }
+    /**
+     * 贴边撞散：全体非眉眼字 `_tapScatter`。
+     * 巨字 / 颜 mask 也参与（略收幅），不再整段跳过——否则「撞边」无字粒反馈。
+     * @param {{ pulse?: boolean }} [opts] pulse=持续贴边时的较弱、较高频脉冲
+     */
+    _wallShatter(nx, ny, opts) {
+      const o = opts || {};
+      const pulse = !!o.pulse;
       const cell = this.gridCell || 12;
-      const push = cell * (2.9 + Math.random() * 3.2);
+      const megaMask = isMaskBackedMegaKao(this);
+      let pushMag = 2.9 + Math.random() * 3.2;
+      if (megaMask) pushMag *= pulse ? 0.52 : 0.74;
+      else if (pulse) pushMag *= 0.55;
+      const push = cell * pushMag;
+      const tDur = megaMask ? (pulse ? 0.34 : 0.5) : pulse ? 0.32 : 0.62;
+      const jit = megaMask ? 0.3 : 0.45;
+      const blend = pulse ? 0.5 : 0.18;
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
-        g._tapScatterT = 0.62;
-        g._tapScatterT0 = 0.62;
+        const prevT = g._tapScatterT || 0;
+        g._tapScatterT = Math.max(prevT, tDur);
+        g._tapScatterT0 = Math.max(g._tapScatterT0 || 0, tDur);
         const fx = nx || rand(-0.5, 0.5);
         const fy = ny || rand(-0.5, 0.5);
-        g._tapScatterOX = fx * push + rand(-cell * 0.45, cell * 0.45);
-        g._tapScatterOY = fy * push + rand(-cell * 0.45, cell * 0.45);
+        const ox = fx * push + rand(-cell * jit, cell * jit);
+        const oy = fy * push + rand(-cell * jit, cell * jit);
+        g._tapScatterOX = (g._tapScatterOX || 0) * blend + ox;
+        g._tapScatterOY = (g._tapScatterOY || 0) * blend + oy;
       }
-      this._rumbleAmp = Math.min(0.62, (this._rumbleAmp || 0) + 0.34);
-      this._glyphFlash = Math.min(0.52, (this._glyphFlash || 0) + 0.24);
+      this._rumbleAmp = Math.min(
+        megaMask ? 0.26 : 0.62,
+        (this._rumbleAmp || 0) + (pulse ? 0.14 : megaMask ? 0.2 : 0.34)
+      );
+      this._glyphFlash = Math.min(
+        megaMask ? 0.24 : 0.52,
+        (this._glyphFlash || 0) + (pulse ? 0.12 : megaMask ? 0.16 : 0.24)
+      );
+    }
+
+    /** 拖整体时持续顶边：撞散脉冲 + 缓聚系数（沙拨拖不挪身位，不走此逻辑） */
+    _tickDragWallPhysics(dt, now) {
+      if (this.viewMode !== "pet" || !this.dragging || this._sandPlowDrag) {
+        if (!this.dragging) {
+          this._dragWallPinned = false;
+          this._wallRegroupK = 0;
+          this._dragWallPulseAcc = 0;
+        }
+        return;
+      }
+      if (!this.gridMarch || !this.gridSnapping) return;
+      if (isMotionLayoutLockedForm(this.form)) return;
+
+      const w = this._dragLastWant;
+      const c = this._dragLastClamp;
+      if (!w || !c) return;
+
+      const b = this._playBounds();
+      const r = this._bodyClampRadius();
+      const minX = b.minX + r;
+      const maxX = b.maxX - r;
+      const minY = b.minY + r;
+      const maxY = b.maxY - r;
+      const pinL = w.x < minX;
+      const pinR = w.x > maxX;
+      const pinT = w.y < minY;
+      const pinB = w.y > maxY;
+      const pinned = pinL || pinR || pinT || pinB;
+      this._dragWallPinned = pinned;
+
+      if (!pinned) {
+        this._wallRegroupK = Math.max(0, (this._wallRegroupK || 0) - dt * 1.35);
+        this._dragWallPulseAcc = 0;
+        return;
+      }
+
+      this._wallRegroupK = clamp(
+        (this._wallRegroupK || 0) + dt * 0.38,
+        0,
+        1.05
+      );
+
+      let wnx = pinL ? 1 : pinR ? -1 : 0;
+      let wny = pinT ? 1 : pinB ? -1 : 0;
+      const nlen = Math.hypot(wnx, wny);
+      if (nlen > 1e-4) {
+        wnx /= nlen;
+        wny /= nlen;
+      } else {
+        wnx = rand(-0.4, 0.4);
+        wny = rand(-0.4, 0.4);
+      }
+
+      const spd = Math.hypot(this.dragVel.x, this.dragVel.y);
+      this._dragWallPulseAcc += dt * (0.95 + Math.min(spd * 0.1, 3.2));
+      const interval = isMaskBackedMegaKao(this) ? 0.11 : 0.085;
+      if (
+        this._dragWallPulseAcc >= interval &&
+        now - (this._lastDragWallPulseAt || 0) > 38
+      ) {
+        this._dragWallPulseAcc -= interval * 0.55;
+        this._lastDragWallPulseAt = now;
+        this._wallShatter(wnx, wny, { pulse: true });
+      }
     }
 
     _applyPlayfieldBounds(dt, now) {
@@ -6298,6 +6391,12 @@
       this._sandPlowDrag = false;
       this._sandPointer = null;
       this._sandPrevPtr = null;
+      this._dragLastWant = null;
+      this._dragLastClamp = null;
+      this._dragWallPinned = false;
+      this._wallRegroupK = 0;
+      this._dragWallPulseAcc = 0;
+      this._lastDragWallPulseAt = 0;
       this.dragOffset.x = this.pos.x - x;
       this.dragOffset.y = this.pos.y - y;
       this._dragResidualLx = 0;
@@ -6368,6 +6467,8 @@
             this._wallShatter(wnx, wny);
           }
         }
+        this._dragLastWant = null;
+        this._dragLastClamp = null;
         return;
       }
       const wantX = x + this.dragOffset.x;
@@ -6415,6 +6516,8 @@
         this.pos.y = ny;
         this._dragShellWorld = null;
       }
+      this._dragLastWant = { x: wantX, y: wantY };
+      this._dragLastClamp = { x: nx, y: ny };
     }
     endDrag() {
       const pending = this._pendingScriptReturn;
@@ -6423,6 +6526,12 @@
       this._sandPlowDrag = false;
       this._sandPointer = null;
       this._sandPrevPtr = null;
+      this._dragLastWant = null;
+      this._dragLastClamp = null;
+      this._dragWallPinned = false;
+      this._wallRegroupK = 0;
+      this._dragWallPulseAcc = 0;
+      this._lastDragWallPulseAt = 0;
       this._dragPrevPos = null;
       if (this._dragShellDecoupled && this._dragShellWorld) {
         this.pos.x = this._dragShellWorld.x;
@@ -6625,6 +6734,7 @@
         this.pos.y += this.vel.y * dt;
       }
       this._applyPlayfieldBounds(dt, now);
+      this._tickDragWallPhysics(dt, now);
 
       if (
         this.form === "clock" &&
@@ -7098,14 +7208,14 @@
                 const tvx = this.dragVel.x;
                 const tvy = this.dragVel.y;
                 const tl = Math.hypot(tvx, tvy);
-                if (tl > 0.32) {
+                if (tl > 0.22) {
                   const streak =
                     edge *
                     edge *
                     cell *
-                    0.52 *
+                    0.58 *
                     dtBoost *
-                    Math.min(tl / 9.5, 1.95);
+                    Math.min(tl / 8.8, 2.05);
                   const tx = tvx / tl;
                   const ty = tvy / tl;
                   const px = -ty;
@@ -7113,6 +7223,31 @@
                   const alt = gi & 1 ? 1 : -1;
                   wx += px * streak * alt;
                   wy += py * streak * alt * 0.86;
+                }
+                if (edge > 0.1) {
+                  const dvl = Math.max(
+                    tl,
+                    Math.hypot(this.dragVel.x, this.dragVel.y)
+                  );
+                  const slam =
+                    edge *
+                    edge *
+                    cell *
+                    (0.68 + Math.min(dvl * 0.12, 3) * 0.48) *
+                    dtBoost *
+                    (silMaskPet ? 0.8 : 1);
+                  const ang = Math.atan2(dy, dx) + Math.min(dvl, 14) * 0.035;
+                  const sx = Math.sin(ang + gi * 0.33) * slam * 0.24;
+                  const sy = Math.cos(ang * 0.91 + gi * 0.29) * slam * 0.21;
+                  const ox = (dx / d) * slam + sx;
+                  const oy = (dy / d) * slam + sy;
+                  const tHit = 0.44 + edge * 0.26;
+                  if ((g._tapScatterT || 0) < tHit) {
+                    g._tapScatterT = tHit;
+                    g._tapScatterT0 = tHit;
+                  }
+                  g._tapScatterOX = (g._tapScatterOX || 0) * 0.4 + ox;
+                  g._tapScatterOY = (g._tapScatterOY || 0) * 0.4 + oy;
                 }
               }
             }
@@ -7137,7 +7272,8 @@
                 const kick =
                   cell *
                   (0.92 + Math.random() * 1.02) *
-                  clamp(pen / (cell * 0.85), 0.45, 2.1);
+                  clamp(pen / (cell * 0.85), 0.45, 2.1) *
+                  (this._dragWallPinned ? 1.32 : 1);
                 const tNeed = 0.35 + Math.random() * 0.12;
                 if ((g._tapScatterT || 0) < tNeed) {
                   g._tapScatterT = tNeed;
@@ -7243,6 +7379,40 @@
           }
 
           if (
+            (this._wallRegroupK || 0) > 0.05 &&
+            this.dragging &&
+            !this._sandPlowDrag &&
+            !mT &&
+            !useSnakeCell &&
+            !g.faceRole &&
+            !(presSilHarm && presGlyphSleep && silMaskPet)
+          ) {
+            const txlH = g.tx * flip;
+            const tylH = g.ty;
+            const homWx = bx + (txlH * cos - tylH * sin);
+            const homWy = by + (txlH * sin + tylH * cos);
+            const hgx = Math.round(homWx / cell);
+            const hgy = Math.round(homWy / cell);
+            const rk = clamp(this._wallRegroupK, 0, 1.2);
+            const a = 0.065 * rk * clamp(dt * 58, 0.48, 1.38);
+            tgx = Math.round(lerp(tgx, hgx, a));
+            tgy = Math.round(lerp(tgy, hgy, a));
+            if (silMaskPet) {
+              const snR = this._nearestWalkableMarchCell(
+                tgx,
+                tgy,
+                bx,
+                by,
+                cos,
+                sin,
+                flip
+              );
+              tgx = snR.gx;
+              tgy = snR.gy;
+            }
+          }
+
+          if (
             this._sandPlowDrag &&
             this._sandPointer &&
             !mT &&
@@ -7263,7 +7433,7 @@
               const edge = 1 - sdist / R0;
               const dragSp = Math.hypot(this.dragVel.x, this.dragVel.y);
               const push =
-                edge * edge * (2.95 + Math.min(dragSp * 0.065, 1.15));
+                edge * edge * (3.45 + Math.min(dragSp * 0.072, 1.35));
               let kx = Math.trunc(nx * push);
               let ky = Math.trunc(ny * push);
               kx = clamp(kx, -3, 3);
