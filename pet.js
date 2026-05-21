@@ -7080,7 +7080,7 @@
               const dx = wx - spx;
               const dy = wy - spy;
               const d2 = dx * dx + dy * dy;
-              const R = cell * (silMaskPet ? 4.05 : 5.85);
+              const R = cell * (silMaskPet ? 4.45 : 6.2);
               if (d2 > 0.2 && d2 < R * R) {
                 const d = Math.sqrt(d2);
                 const inv = 1 / d;
@@ -7090,22 +7090,22 @@
                   edge *
                   edge *
                   cell *
-                  0.6 *
+                  0.88 *
                   dtBoost *
-                  (silMaskPet ? 0.76 : 1);
+                  (silMaskPet ? 0.82 : 1);
                 wx += dx * inv * radial;
                 wy += dy * inv * radial;
                 const tvx = this.dragVel.x;
                 const tvy = this.dragVel.y;
                 const tl = Math.hypot(tvx, tvy);
-                if (tl > 0.52) {
+                if (tl > 0.32) {
                   const streak =
                     edge *
                     edge *
                     cell *
-                    0.24 *
+                    0.34 *
                     dtBoost *
-                    Math.min(tl / 10.2, 1.82);
+                    Math.min(tl / 9.5, 1.95);
                   const tx = tvx / tl;
                   const ty = tvy / tl;
                   const px = -ty;
@@ -7128,7 +7128,7 @@
               else if (wx > mx1) pen = Math.max(pen, wx - mx1);
               if (wy < my0) pen = Math.max(pen, my0 - wy);
               else if (wy > my1) pen = Math.max(pen, wy - my1);
-              if (pen > cell * 0.12 && (g._edgeSandCd || 0) <= 0) {
+              if (pen > cell * 0.08 && (g._edgeSandCd || 0) <= 0) {
                 let ix = bx - wx;
                 let iy = by - wy;
                 const il = Math.hypot(ix, iy) || 1;

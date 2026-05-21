@@ -493,21 +493,27 @@
     exceededDragThreshold = false;
     clearLongPressTimer();
 
-    if (pet.viewMode === "pet" && downZone === "inner") {
+    /** 拨开模式：须在画布任一处能起手拖，否则只会「体内 pending」永远进不了 beginDrag */
+    if (
+      pet.viewMode === "pet" &&
+      (downZone === "inner" || pet.sandPlowMode)
+    ) {
       dragPhase = "pending";
-      longPressTimer = setTimeout(() => {
-        longPressTimer = null;
-        if (
-          !exceededDragThreshold &&
-          pet.viewMode === "pet" &&
-          downZone === "inner" &&
-          pet.scriptLines &&
-          pet.scriptLines.length
-        ) {
-          revertArmOnRelease = true;
-          toast("松手还原文稿");
-        }
-      }, LONG_PRESS_MS);
+      if (downZone === "inner") {
+        longPressTimer = setTimeout(() => {
+          longPressTimer = null;
+          if (
+            !exceededDragThreshold &&
+            pet.viewMode === "pet" &&
+            downZone === "inner" &&
+            pet.scriptLines &&
+            pet.scriptLines.length
+          ) {
+            revertArmOnRelease = true;
+            toast("松手还原文稿");
+          }
+        }, LONG_PRESS_MS);
+      }
     } else if (downZone === "mid") {
       pet.nuisTap();
       pet.pulse(p.x, p.y);
@@ -895,9 +901,10 @@
         toast("抖擞精神");
       } else if (action === "sandPlow") {
         const on = pet.cycleSandPlowMode();
+        syncSandPlowRail(pet);
         toast(
           on
-            ? `拨开模式：开（${arcLayerZh()}；拖画布只拨体内字，身位不跟拖）`
+            ? `拨开模式：开（${arcLayerZh()}；在画布任一处按下再拖，只拨字粒、身位不跟）`
             : `拨开模式：关（${arcLayerZh()}）`
         );
       }
