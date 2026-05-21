@@ -3307,6 +3307,8 @@
       this._wallRegroupK = 0;
       this._dragWallPulseAcc = 0;
       this._lastDragWallPulseAt = 0;
+      /** 活动区外壁「碰壁」绘图层脉冲 0..1（与 `_wallShatter`、沙拨贴边联动） */
+      this._boundsWallPulse = 0;
 
       /** 每字独立「巡逻」相位：体内相对位置持续缓慢变化 */
       this.internalMotion = opts.internalMotion !== false;
@@ -6240,7 +6242,21 @@
         const oy = fy * push + rand(-cell * jit, cell * jit);
         g._tapScatterOX = (g._tapScatterOX || 0) * blend + ox;
         g._tapScatterOY = (g._tapScatterOY || 0) * blend + oy;
+        /** 绘图层冲量：不乘 `presSilHarm` 的 tapScatter `sc`，专供「一眼可见」的撞边/沙拨位移 */
+        const impMul = megaMask ? (pulse ? 0.42 : 0.58) : pulse ? 0.52 : 0.88;
+        const iDur = megaMask ? (pulse ? 0.24 : 0.36) : pulse ? 0.22 : 0.4;
+        const ibl = pulse ? 0.5 : 0.22;
+        const iox = ox * impMul + rand(-cell * 0.16, cell * 0.16);
+        const ioy = oy * impMul + rand(-cell * 0.16, cell * 0.16);
+        g._impactT = Math.max(g._impactT || 0, iDur);
+        g._impactT0 = Math.max(g._impactT0 || 0, iDur);
+        g._impactOx = (g._impactOx || 0) * ibl + iox;
+        g._impactOy = (g._impactOy || 0) * ibl + ioy;
       }
+      this._boundsWallPulse = Math.min(
+        1,
+        (this._boundsWallPulse || 0) + (pulse ? 0.32 : 0.68)
+      );
       this._rumbleAmp = Math.min(
         megaMask ? 0.26 : 0.62,
         (this._rumbleAmp || 0) + (pulse ? 0.14 : megaMask ? 0.2 : 0.34)
@@ -6794,6 +6810,10 @@
       }
       this._rumbleAmp = Math.max(0, (this._rumbleAmp || 0) - 1.8 * dt);
       this._glyphFlash = Math.max(0, (this._glyphFlash || 0) - 2.2 * dt);
+      this._boundsWallPulse = Math.max(0, (this._boundsWallPulse || 0) - 2.45 * dt);
+      for (const g of this.glyphs) {
+        if (g._impactT > 0) g._impactT -= dt * 2.85;
+      }
       this._layoutSettle = Math.max(0, (this._layoutSettle || 0) - dt * 1.1);
       this._shapeMutationT = Math.max(0, (this._shapeMutationT || 0) - dt);
 
@@ -7248,6 +7268,11 @@
                   }
                   g._tapScatterOX = (g._tapScatterOX || 0) * 0.4 + ox;
                   g._tapScatterOY = (g._tapScatterOY || 0) * 0.4 + oy;
+                  const visMul = silMaskPet ? 0.48 : 0.72;
+                  g._impactT = Math.max(g._impactT || 0, tHit * 0.9);
+                  g._impactT0 = Math.max(g._impactT0 || 0, tHit * 0.9);
+                  g._impactOx = (g._impactOx || 0) * 0.36 + ox * visMul;
+                  g._impactOy = (g._impactOy || 0) * 0.36 + oy * visMul;
                 }
               }
             }
@@ -7287,6 +7312,11 @@
                   (g._tapScatterOY || 0) * 0.32 +
                   iy * kick +
                   rand(-cell * 0.34, cell * 0.34);
+                const iKick = kick * 0.58;
+                g._impactT = Math.max(g._impactT || 0, tNeed * 0.92);
+                g._impactT0 = Math.max(g._impactT0 || 0, tNeed * 0.92);
+                g._impactOx = (g._impactOx || 0) * 0.34 + ix * iKick;
+                g._impactOy = (g._impactOy || 0) * 0.34 + iy * iKick;
                 g._edgeSandCd = 0.095 + Math.random() * 0.085;
               }
             }
@@ -7295,13 +7325,19 @@
           if (g._tapScatterT > 0) {
             const t0 = g._tapScatterT0 || 0.38;
             const f = clamp(g._tapScatterT / t0, 0, 1);
-            const sc = useSnakeCell
+            const sc0 = useSnakeCell
               ? 0.16
               : presSilHarm
                 ? 0.2
                 : silMaskPet
                   ? 0.42
                   : 1;
+            let sc = sc0;
+            if (this._sandPlowDrag) {
+              if (presSilHarm) sc += 0.11;
+              else if (silMaskPet) sc += 0.13;
+              else sc = Math.min(1.08, sc + 0.05);
+            }
             wx += (g._tapScatterOX || 0) * f * sc;
             wy += (g._tapScatterOY || 0) * f * sc;
             g._tapScatterT -= dt;
@@ -7441,6 +7477,11 @@
               if (kx !== 0 || ky !== 0) {
                 tgx += kx;
                 tgy += ky;
+                const iMag = cell * (0.38 + edge * 0.55);
+                g._impactT = Math.max(g._impactT || 0, 0.26 + edge * 0.14);
+                g._impactT0 = Math.max(g._impactT0 || 0, 0.26 + edge * 0.14);
+                g._impactOx = (g._impactOx || 0) * 0.45 + kx * iMag;
+                g._impactOy = (g._impactOy || 0) * 0.45 + ky * iMag;
                 if (silMaskPet) {
                   const snK = this._nearestWalkableMarchCell(
                     tgx,
@@ -7881,6 +7922,50 @@
         ctx.restore();
       }
 
+      if (this.viewMode === "pet") {
+        const bfx = this._playBounds();
+        const pulseFx = this._boundsWallPulse || 0;
+        let sandEdgeFx = 0;
+        if (this._sandPlowDrag && this._sandPointer) {
+          const px = this._sandPointer.x;
+          const py = this._sandPointer.y;
+          const cell0 = this.gridCell || 12;
+          const band0 = cell0 * 2.35;
+          const dL = Math.max(0, bfx.minX + band0 - px);
+          const dR = Math.max(0, px - (bfx.maxX - band0));
+          const dT = Math.max(0, bfx.minY + band0 - py);
+          const dB = Math.max(0, py - (bfx.maxY - band0));
+          const dm = Math.max(dL, dR, dT, dB, 0);
+          if (dm > 0) {
+            sandEdgeFx = clamp(dm / (cell0 * 3.1), 0, 1);
+          }
+        }
+        const stress = Math.max(pulseFx, sandEdgeFx * 0.78);
+        if (stress > 0.035) {
+          const rwf = bfx.maxX - bfx.minX;
+          const rhf = bfx.maxY - bfx.minY;
+          const a0 = stress * (light ? 0.13 : 0.19);
+          const spread = 8 + stress * 26;
+          ctx.save();
+          ctx.lineWidth = 1.1 + stress * 4;
+          ctx.strokeStyle = light
+            ? `rgba(0, 95, 210, ${a0})`
+            : `rgba(140, 205, 255, ${a0 * 1.05})`;
+          ctx.shadowColor = light
+            ? "rgba(40, 120, 255, 0.14)"
+            : "rgba(90, 170, 255, 0.18)";
+          ctx.shadowBlur = spread;
+          ctx.strokeRect(bfx.minX + 0.5, bfx.minY + 0.5, rwf - 1, rhf - 1);
+          ctx.shadowBlur = 0;
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = light
+            ? `rgba(255, 255, 255, ${a0 * 0.42})`
+            : `rgba(235, 242, 255, ${a0 * 0.28})`;
+          ctx.strokeRect(bfx.minX + 1.5, bfx.minY + 1.5, rwf - 3, rhf - 3);
+          ctx.restore();
+        }
+      }
+
       if (this.showPlayfieldGuide) {
         const lines = [];
         const lf = this._devLoopLastMs;
@@ -7984,6 +8069,14 @@
         if (silDraw) {
           rx += g._silDrawOx || 0;
           ry += g._silDrawOy || 0;
+        }
+        const impT = g._impactT || 0;
+        if (impT > 0) {
+          const t0i = g._impactT0 || 0.34;
+          const wf = clamp(impT / t0i, 0, 1);
+          const ease = wf * wf * (3 - 2 * wf);
+          rx += (g._impactOx || 0) * ease;
+          ry += (g._impactOy || 0) * ease;
         }
         if (this.gridUnity) {
           rx = this._snapLogicalToDevice(rx);

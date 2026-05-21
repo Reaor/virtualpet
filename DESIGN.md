@@ -105,7 +105,7 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.35.15**：**贴边撞散 + 缓聚**：拖整体时 `_dragLastWant` 越界则 `_tickDragWallPhysics` **持续 `_wallShatter` 脉冲**（与拖速耦合）+ **`_wallRegroupK`** 缓慢把格目标 **lerp 向布局家格**（仍曼哈顿迈格、mask 再走可走格）；**巨字/颜 mask** 的 `_wallShatter` **不再整段跳过**，仅略收幅。**沙拨**：叠 **速度/角度相关 `_tapScatter`** 与略强格踢；整体贴边时 **缘散略增强**。 |
+| 最新 | **3.35.16**：在 **3.35.15** 贴边/沙拨逻辑之上，增加 **绘图层冲量 `_impactOx/_impactOy/_impactT`**（不受 `presSilHarm` 下 `_tapScatter` 的 `sc` 压制），撞边与沙拨时字粒 **位移反馈更明显**；**活动区外框**在撞边脉冲与沙拨手指近边时 **轻量描边/光晕**（Pretext 取向：少算力、状态一眼可见）。 |
 | 先前 | **3.35.14**：**沙拨字入口外显**：左栏 **② 区首行整宽**「沙拨字」+ 样式 `rail-tool--sand-plow`；`?` 入门增加 **沙拨** 专节；**格点级推开**（`tgx/tgy` 整数偏移 + mask 再走 `_nearestWalkableMarchCell`）补足原先仅亚格 `wx` 位移易被 `round` 吃掉的问题；`wx` 径向/切向略加强。 |
 | 先前 | **3.35.13**：**拨开模式可起手**：`app.js` 在 `sandPlowMode` 下将 `dragPhase=pending` 扩至**画布任一处按下**（原先仅 `downZone===inner` 才进入 `beginDrag`，体外拖曳永远不生效）；侧栏「拨」后 **`syncSandPlowRail`**；`pet.js` 略**加大拨开半径/径向与切向强度**、贴边散略易触发。 |
 | 先前 | **3.35.12**：**拨开模式**（侧栏「拨」）：`sandPlowMode` 写入 `_arcPrefs` 分套；开时 `beginDrag` / `dragTo` 走 **`_sandPlowDrag`**（指针更新 `dragVel`、**不挪** `pos` / 剪影解耦拖）；格迈前对 `wx,wy` 注入 **径向拨开 + 切向 streak**；活动区缘 **带冷却** 的 `_tapScatter` 推向 **躯壳中心** 以聚回框内；缘上拖指针仍触发 **`_wallShatter`**。`app.js`：`syncSandPlowRail`。 |
