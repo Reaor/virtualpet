@@ -161,6 +161,7 @@
     appRoot.dataset.uiArc =
       p.uiArcMode === "presentation" ? "presentation" : "standby";
     syncMotionStyleRail(p);
+    syncSandPlowRail(p);
   }
 
   function syncMotionStyleRail(p) {
@@ -170,6 +171,14 @@
     document.querySelectorAll('[data-action="setMotionStyle"]').forEach((btn) => {
       const m = btn.dataset.motion;
       const on = m === cur;
+      btn.classList.toggle("rail-tool--active", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+
+  function syncSandPlowRail(p) {
+    document.querySelectorAll('[data-action="sandPlow"]').forEach((btn) => {
+      const on = !!(p && p.sandPlowMode);
       btn.classList.toggle("rail-tool--active", on);
       btn.setAttribute("aria-pressed", on ? "true" : "false");
     });
@@ -198,6 +207,7 @@
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
       syncUiMode();
       syncMotionStyleRail(pet);
+      syncSandPlowRail(pet);
     },
     onUiArcModeChange() {
       syncRailUiArcClass(pet);
@@ -412,6 +422,7 @@
     formLabel.textContent = FORMS[key].label;
     syncUiMode();
     syncMotionStyleRail(pet);
+    syncSandPlowRail(pet);
     if (announce) toast("换形 · " + FORMS[key].label);
   }
 
@@ -422,6 +433,7 @@
       formLabel.textContent = FORMS[key].label;
       syncUiMode();
       syncMotionStyleRail(pet);
+      syncSandPlowRail(pet);
       if (announce) toast("换形中 · " + FORMS[key].label);
       return;
     }
@@ -881,6 +893,13 @@
       } else if (action === "shake") {
         pet.shake();
         toast("抖擞精神");
+      } else if (action === "sandPlow") {
+        const on = pet.cycleSandPlowMode();
+        toast(
+          on
+            ? `拨开模式：开（${arcLayerZh()}；拖画布只拨体内字，身位不跟拖）`
+            : `拨开模式：关（${arcLayerZh()}）`
+        );
       }
       } finally {
         /** 与 pet 内核同一微任务尾部对齐：快照↔应用↔排版（+ 可选叠分），缓解连点参数打架（Pretext：少次、一致口径） */
