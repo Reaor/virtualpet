@@ -3307,6 +3307,10 @@
       this._wallRegroupK = 0;
       this._dragWallPulseAcc = 0;
       this._lastDragWallPulseAt = 0;
+      /** mask/巨字：本段「贴边」内只做一次撞散，避免高频 `_wallShatter` 成颤振 */
+      this._dragWallMegaEntryDone = false;
+      /** 沙拨 + 巨字：手指贴上活动区边时只触发一次墙散，移开边后复位 */
+      this._sandMegaWallShattered = false;
       /** 活动区外壁「碰壁」绘图层脉冲 0..1（与 `_wallShatter`、沙拨贴边联动） */
       this._boundsWallPulse = 0;
 
@@ -6217,20 +6221,34 @@
     /**
      * 贴边撞散：全体非眉眼字 `_tapScatter`。
      * 巨字 / 颜 mask 也参与（略收幅），不再整段跳过——否则「撞边」无字粒反馈。
-     * @param {{ pulse?: boolean }} [opts] pulse=持续贴边时的较弱、较高频脉冲
+     * @param {{ pulse?: boolean; edgeEntry?: boolean }} [opts]
+     *   pulse=持续贴边弱脉冲（非巨字）；edgeEntry=巨字/颜 mask 首次贴上边：相干外推、少随机
      */
     _wallShatter(nx, ny, opts) {
       const o = opts || {};
       const pulse = !!o.pulse;
+      const edgeEntry = !!o.edgeEntry;
       const cell = this.gridCell || 12;
       const megaMask = isMaskBackedMegaKao(this);
       let pushMag = 2.9 + Math.random() * 3.2;
-      if (megaMask) pushMag *= pulse ? 0.52 : 0.74;
+      if (megaMask) pushMag *= pulse ? 0.52 : edgeEntry ? 0.82 : 0.74;
       else if (pulse) pushMag *= 0.55;
       const push = cell * pushMag;
-      const tDur = megaMask ? (pulse ? 0.34 : 0.5) : pulse ? 0.32 : 0.62;
-      const jit = megaMask ? 0.3 : 0.45;
-      const blend = pulse ? 0.5 : 0.18;
+      const tDur = megaMask
+        ? pulse
+          ? 0.34
+          : edgeEntry
+            ? 0.56
+            : 0.5
+        : pulse
+          ? 0.32
+          : 0.62;
+      let jit = megaMask ? 0.3 : 0.45;
+      if (megaMask && edgeEntry) jit *= 0.2;
+      if (megaMask && pulse) jit *= 0.55;
+      let blend = pulse ? 0.5 : 0.18;
+      if (megaMask && edgeEntry) blend = 0.12;
+      if (megaMask && pulse) blend = Math.min(blend, 0.38);
       for (const g of this.glyphs) {
         if (g.faceRole) continue;
         const prevT = g._tapScatterT || 0;
@@ -6243,11 +6261,17 @@
         g._tapScatterOX = (g._tapScatterOX || 0) * blend + ox;
         g._tapScatterOY = (g._tapScatterOY || 0) * blend + oy;
         /** 绘图层冲量：不乘 `presSilHarm` 的 tapScatter `sc`，专供「一眼可见」的撞边/沙拨位移 */
-        const impMul = megaMask ? (pulse ? 0.42 : 0.58) : pulse ? 0.52 : 0.88;
-        const iDur = megaMask ? (pulse ? 0.24 : 0.36) : pulse ? 0.22 : 0.4;
-        const ibl = pulse ? 0.5 : 0.22;
-        const iox = ox * impMul + rand(-cell * 0.16, cell * 0.16);
-        const ioy = oy * impMul + rand(-cell * 0.16, cell * 0.16);
+        let impMul = megaMask ? (pulse ? 0.42 : 0.58) : pulse ? 0.52 : 0.88;
+        let iDur = megaMask ? (pulse ? 0.24 : 0.36) : pulse ? 0.22 : 0.4;
+        let ibl = pulse ? 0.5 : 0.22;
+        if (megaMask && edgeEntry) {
+          impMul = 0.62;
+          iDur = 0.48;
+          ibl = 0.14;
+        }
+        const jitImp = megaMask && edgeEntry ? cell * 0.05 : cell * 0.16;
+        const iox = ox * impMul + rand(-jitImp, jitImp);
+        const ioy = oy * impMul + rand(-jitImp, jitImp);
         g._impactT = Math.max(g._impactT || 0, iDur);
         g._impactT0 = Math.max(g._impactT0 || 0, iDur);
         g._impactOx = (g._impactOx || 0) * ibl + iox;
@@ -6255,7 +6279,8 @@
       }
       this._boundsWallPulse = Math.min(
         1,
-        (this._boundsWallPulse || 0) + (pulse ? 0.32 : 0.68)
+        (this._boundsWallPulse || 0) +
+          (pulse ? 0.32 : edgeEntry ? 0.52 : 0.68)
       );
       this._rumbleAmp = Math.min(
         megaMask ? 0.26 : 0.62,
@@ -6267,13 +6292,14 @@
       );
     }
 
-    /** 拖整体时持续顶边：撞散脉冲 + 缓聚系数（沙拨拖不挪身位，不走此逻辑） */
+    /** 拖整体时持续顶边：非巨字用弱撞散脉冲 + 缓聚；巨字/颜 mask 仅首次贴边一次撞散（禁高频抖） */
     _tickDragWallPhysics(dt, now) {
       if (this.viewMode !== "pet" || !this.dragging || this._sandPlowDrag) {
         if (!this.dragging) {
           this._dragWallPinned = false;
           this._wallRegroupK = 0;
           this._dragWallPulseAcc = 0;
+          this._dragWallMegaEntryDone = false;
         }
         return;
       }
@@ -6300,6 +6326,7 @@
       if (!pinned) {
         this._wallRegroupK = Math.max(0, (this._wallRegroupK || 0) - dt * 1.35);
         this._dragWallPulseAcc = 0;
+        this._dragWallMegaEntryDone = false;
         return;
       }
 
@@ -6320,14 +6347,27 @@
         wny = rand(-0.4, 0.4);
       }
 
+      const megaWall = isMaskBackedMegaKao(this);
+      if (megaWall) {
+        if (!this._dragWallMegaEntryDone) {
+          this._dragWallMegaEntryDone = true;
+          this._wallShatter(wnx, wny, { edgeEntry: true });
+        }
+        this._boundsWallPulse = Math.min(
+          1,
+          (this._boundsWallPulse || 0) + dt * 0.38
+        );
+        return;
+      }
+
       const spd = Math.hypot(this.dragVel.x, this.dragVel.y);
       this._dragWallPulseAcc += dt * (0.95 + Math.min(spd * 0.1, 3.2));
-      const interval = isMaskBackedMegaKao(this) ? 0.11 : 0.085;
+      const interval = 0.11;
       if (
         this._dragWallPulseAcc >= interval &&
-        now - (this._lastDragWallPulseAt || 0) > 38
+        now - (this._lastDragWallPulseAt || 0) > 52
       ) {
-        this._dragWallPulseAcc -= interval * 0.55;
+        this._dragWallPulseAcc -= interval * 0.5;
         this._lastDragWallPulseAt = now;
         this._wallShatter(wnx, wny, { pulse: true });
       }
@@ -6413,6 +6453,8 @@
       this._wallRegroupK = 0;
       this._dragWallPulseAcc = 0;
       this._lastDragWallPulseAt = 0;
+      this._dragWallMegaEntryDone = false;
+      this._sandMegaWallShattered = false;
       this.dragOffset.x = this.pos.x - x;
       this.dragOffset.y = this.pos.y - y;
       this._dragResidualLx = 0;
@@ -6471,17 +6513,24 @@
           this._sandPrevPtr.y = py;
         }
         this._sandPointer = { x: px, y: py };
-        if (nowMs - this._lastWallFxAt > 72) {
-          let wnx = 0;
-          let wny = 0;
-          if (x < b.minX + pin + 0.5) wnx = 1;
-          else if (x > b.maxX - pin - 0.5) wnx = -1;
-          if (y < b.minY + pin + 0.5) wny = 1;
-          else if (y > b.maxY - pin - 0.5) wny = -1;
-          if (wnx !== 0 || wny !== 0) {
+        const megaWall = isMaskBackedMegaKao(this);
+        let wnx = 0;
+        let wny = 0;
+        if (x < b.minX + pin + 0.5) wnx = 1;
+        else if (x > b.maxX - pin - 0.5) wnx = -1;
+        if (y < b.minY + pin + 0.5) wny = 1;
+        else if (y > b.maxY - pin - 0.5) wny = -1;
+        if (wnx === 0 && wny === 0) {
+          if (megaWall) this._sandMegaWallShattered = false;
+        } else if (megaWall) {
+          if (!this._sandMegaWallShattered) {
+            this._sandMegaWallShattered = true;
             this._lastWallFxAt = nowMs;
-            this._wallShatter(wnx, wny);
+            this._wallShatter(wnx, wny, { edgeEntry: true });
           }
+        } else if (nowMs - this._lastWallFxAt > 72) {
+          this._lastWallFxAt = nowMs;
+          this._wallShatter(wnx, wny);
         }
         this._dragLastWant = null;
         this._dragLastClamp = null;
@@ -6492,7 +6541,7 @@
       const nx = clamp(wantX, b.minX + r, b.maxX - r);
       const ny = clamp(wantY, b.minY + r, b.maxY - r);
       const nowMs = typeof performance !== "undefined" ? performance.now() : Date.now();
-      if (nowMs - this._lastWallFxAt > 70) {
+      if (!isMaskBackedMegaKao(this) && nowMs - this._lastWallFxAt > 70) {
         let wnx = 0;
         let wny = 0;
         if (wantX < b.minX + r - 0.5) wnx = 1;
@@ -6548,6 +6597,8 @@
       this._wallRegroupK = 0;
       this._dragWallPulseAcc = 0;
       this._lastDragWallPulseAt = 0;
+      this._dragWallMegaEntryDone = false;
+      this._sandMegaWallShattered = false;
       this._dragPrevPos = null;
       if (this._dragShellDecoupled && this._dragShellWorld) {
         this.pos.x = this._dragShellWorld.x;
