@@ -25,6 +25,8 @@
   const canvas = document.getElementById("petCanvas");
   const stage = document.getElementById("stage");
   const stageMain = document.getElementById("stageMain");
+  /** 画布命中区：mouseup 仅在此区域内才 preventDefault，避免「拖完释在侧栏」吃掉层切换等 click */
+  const petHost = stageMain || stage;
   const formLabel = document.getElementById("formLabel");
   const hint = document.getElementById("hint");
   const toastEl = document.getElementById("toast");
@@ -58,6 +60,15 @@
 
   const params = new URL(location.href).searchParams;
   const devHud = params.get("dev") === "1";
+  const mobilePerfRaw = (params.get("mobilePerf") || "").trim().toLowerCase();
+  const embeddedMobilePerfFromUrl =
+    mobilePerfRaw === "1" ||
+    mobilePerfRaw === "true" ||
+    params.get("embedded") === "1"
+      ? true
+      : mobilePerfRaw === "0" || mobilePerfRaw === "false"
+        ? false
+        : undefined;
   const skipIntro = params.get("skipIntro") === "1" || params.get("pet") === "1";
   const urlForm = params.get("form");
   const urlMacroStr = (params.get("macroText") || params.get("mega") || "").trim();
@@ -150,6 +161,7 @@
     appRoot.dataset.uiArc =
       p.uiArcMode === "presentation" ? "presentation" : "standby";
     syncMotionStyleRail(p);
+    syncSandPlowRail(p);
   }
 
   function syncMotionStyleRail(p) {
@@ -159,6 +171,14 @@
     document.querySelectorAll('[data-action="setMotionStyle"]').forEach((btn) => {
       const m = btn.dataset.motion;
       const on = m === cur;
+      btn.classList.toggle("rail-tool--active", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+
+  function syncSandPlowRail(p) {
+    document.querySelectorAll('[data-action="sandPlow"]').forEach((btn) => {
+      const on = !!(p && p.sandPlowMode);
       btn.classList.toggle("rail-tool--active", on);
       btn.setAttribute("aria-pressed", on ? "true" : "false");
     });
@@ -182,10 +202,12 @@
     macroFitMode: macroFitFromUrl,
     megaLayoutScale: megaLayoutScaleFromUrl,
     showPlayfieldGuide: devHud,
+    embeddedMobilePerf: embeddedMobilePerfFromUrl,
     onFormChange(key) {
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
       syncUiMode();
       syncMotionStyleRail(pet);
+      syncSandPlowRail(pet);
     },
     onUiArcModeChange() {
       syncRailUiArcClass(pet);
@@ -400,6 +422,7 @@
     formLabel.textContent = FORMS[key].label;
     syncUiMode();
     syncMotionStyleRail(pet);
+    syncSandPlowRail(pet);
     if (announce) toast("换形 · " + FORMS[key].label);
   }
 
@@ -410,6 +433,7 @@
       formLabel.textContent = FORMS[key].label;
       syncUiMode();
       syncMotionStyleRail(pet);
+      syncSandPlowRail(pet);
       if (announce) toast("换形中 · " + FORMS[key].label);
       return;
     }
@@ -469,21 +493,27 @@
     exceededDragThreshold = false;
     clearLongPressTimer();
 
-    if (pet.viewMode === "pet" && downZone === "inner") {
+    /** 拨开模式：须在画布任一处能起手拖，否则只会「体内 pending」永远进不了 beginDrag */
+    if (
+      pet.viewMode === "pet" &&
+      (downZone === "inner" || pet.sandPlowMode)
+    ) {
       dragPhase = "pending";
-      longPressTimer = setTimeout(() => {
-        longPressTimer = null;
-        if (
-          !exceededDragThreshold &&
-          pet.viewMode === "pet" &&
-          downZone === "inner" &&
-          pet.scriptLines &&
-          pet.scriptLines.length
-        ) {
-          revertArmOnRelease = true;
-          toast("松手还原文稿");
-        }
-      }, LONG_PRESS_MS);
+      if (downZone === "inner") {
+        longPressTimer = setTimeout(() => {
+          longPressTimer = null;
+          if (
+            !exceededDragThreshold &&
+            pet.viewMode === "pet" &&
+            downZone === "inner" &&
+            pet.scriptLines &&
+            pet.scriptLines.length
+          ) {
+            revertArmOnRelease = true;
+            toast("松手还原文稿");
+          }
+        }, LONG_PRESS_MS);
+      }
     } else if (downZone === "mid") {
       pet.nuisTap();
       pet.pulse(p.x, p.y);
@@ -521,14 +551,30 @@
     if (pet.dragging) pet.dragTo(p.x, p.y);
   }
 
+  function eventTargetInsidePetHost(e) {
+    if (!e || !e.target || !petHost) return false;
+    try {
+      return petHost.contains(e.target);
+    } catch (_) {
+      return false;
+    }
+  }
+
   function onUp(e) {
-    /** 仅在画布交互会话中默认行为：全局 mouseup 若一律 preventDefault，会阻断目标上的 click（侧栏等「点一下」按钮会失效）。 */
+    /** 画布指针会话中仅在 **mouseup 落在画布/stage 内** 时默认阻止，避免拖曳结束在侧栏按钮上释手时 cancel 掉「层」等 click。 */
     const canvasPointerSession =
       downPos != null ||
       dragPhase !== "none" ||
       pet.dragging ||
       revertArmOnRelease;
-    if (e && e.cancelable && canvasPointerSession) e.preventDefault();
+    if (
+      e &&
+      e.cancelable &&
+      canvasPointerSession &&
+      eventTargetInsidePetHost(e)
+    ) {
+      e.preventDefault();
+    }
     const now = performance.now();
     const dt = now - downTime;
     clearLongPressTimer();
@@ -596,7 +642,6 @@
     downZone = "";
   }
 
-  const petHost = stageMain || stage;
   if (petHost) {
     petHost.addEventListener("touchstart", onDown, { passive: false });
     petHost.addEventListener("touchmove", onMove, { passive: false });
@@ -675,9 +720,29 @@
     closeTintPopover();
   });
 
-  // ---------- 侧栏：互动 + 快捷形态 ----------
-  document.querySelectorAll(".rail-tool").forEach((btn) => {
-    btn.addEventListener("click", (ev) => {
+  /** 侧栏操作后是否跑 mask 叠分（较重）：不含已内部重建/多遍叠分的项（如「规整」、巨字重建），避免重复热点 */
+  function railControlNeedsLayoutHard(action) {
+    return (
+      action === "arcMode" ||
+      action === "morph" ||
+      action === "setMotionStyle" ||
+      action === "bodyGlyphEm" ||
+      action === "glyphsJitter" ||
+      action === "silhouetteJitterAmp" ||
+      action === "textureMotion" ||
+      action === "silhouetteMatteUnderlay" ||
+      action === "outlineContourFirst" ||
+      action === "presentationDynamics" ||
+      action === "gridMarch"
+    );
+  }
+
+  // ---------- 侧栏：互动 + 快捷形态（左栏事件委托，closest 到 .rail-tool，减轻 span 内点按与指针目标异常时「层」等失效） ----------
+  const railLeftEl = document.querySelector(".rail.rail-left");
+  if (railLeftEl) {
+    railLeftEl.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".rail-tool[data-action]");
+      if (!btn || !railLeftEl.contains(btn)) return;
       const action = btn.dataset.action;
       if (action === "tint") {
         ev.stopPropagation();
@@ -685,14 +750,16 @@
         if (pop) pop.hidden = !pop.hidden;
         return;
       }
-      if (action === "arcMode") {
-        pet.cycleUiArcMode();
-        const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
-        toast(
-          `层级 · ${lab}（色/速/谐步·廊道/字号/颤/紊/灰底·淡影/内动/规整/墨/浮/波/徙/粒/字比/容纳 分套保留）`
-        );
-        syncMotionStyleRail(pet);
-      } else if (action === "morph") {
+      const layoutHard = railControlNeedsLayoutHard(action);
+      try {
+        if (action === "arcMode") {
+          pet.cycleUiArcMode();
+          const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
+          toast(
+            `层级 · ${lab}（色/速/谐步·廊道/字号/颤/紊/灰底·淡影/内动/规整/墨/浮/波/徙/粒/字比/容纳 分套保留）`
+          );
+          syncMotionStyleRail(pet);
+        } else if (action === "morph") {
         pet.abortFeeding();
         const order = getFormOrderForUiArcMode(pet.uiArcMode);
         const cur = pet.form;
@@ -732,13 +799,13 @@
         if (pet.uiArcMode === "presentation" && motion === "contour_drift") {
           toast("呈现巨字/颜不使用「壳漫游」，已保持谐步（待机层仍可选漫游）");
           syncMotionStyleRail(pet);
-          return;
+        } else {
+          pet.setBodyMotionStyle(motion);
+          const lab =
+            (BODY_MOTION_LABELS && BODY_MOTION_LABELS[motion]) || motion;
+          toast(`走格：${lab}（${arcLayerZh()}）`);
+          syncMotionStyleRail(pet);
         }
-        pet.setBodyMotionStyle(motion);
-        const lab =
-          (BODY_MOTION_LABELS && BODY_MOTION_LABELS[motion]) || motion;
-        toast(`走格：${lab}（${arcLayerZh()}）`);
-        syncMotionStyleRail(pet);
       } else if (action === "bodyGlyphEm") {
         const v = pet.cycleBodyGlyphEmMul();
         toast(
@@ -832,9 +899,25 @@
       } else if (action === "shake") {
         pet.shake();
         toast("抖擞精神");
+      } else if (action === "sandPlow") {
+        const on = pet.cycleSandPlowMode();
+        syncSandPlowRail(pet);
+        toast(
+          on
+            ? `沙拨字：开（${arcLayerZh()}；左栏②首行；画布任一处拖=拨字粒）`
+            : `沙拨字：关（${arcLayerZh()}）`
+        );
+      }
+      } finally {
+        /** 与 pet 内核同一微任务尾部对齐：快照↔应用↔排版（+ 可选叠分），缓解连点参数打架（Pretext：少次、一致口径） */
+        queueMicrotask(() => {
+          if (pet && typeof pet.stabilizeAfterControl === "function") {
+            pet.stabilizeAfterControl({ layoutHard });
+          }
+        });
       }
     });
-  });
+  }
 
   // ---------- 把下面诗笺里的每个字拆成 span ----------
   const feedableNodes = [];

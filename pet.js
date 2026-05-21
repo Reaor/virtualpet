@@ -2842,6 +2842,7 @@
       0.45,
       1.45
     );
+    b.sandPlowMode = !!self.sandPlowMode;
     self._arcPrefs.presentation.presentationMegaLayoutMode =
       normalizeMegaPresentationLayoutMode(self.presentationMegaLayoutMode);
   }
@@ -2889,6 +2890,7 @@
       0.45,
       1.45
     );
+    self.sandPlowMode = !!b.sandPlowMode;
     self.presentationMegaLayoutMode = normalizeMegaPresentationLayoutMode(
       self._arcPrefs.presentation.presentationMegaLayoutMode
     );
@@ -3100,19 +3102,67 @@
     return shadeRgb([248, 250, 255], [195, 205, 235], [95, 115, 175], [18, 22, 38]);
   }
 
+  /**
+   * 嵌入 WebView / 手机浏览器时略降 GPU 与主线程热点（DPR、叠分遍数、粒子上限等）。
+   * `opts.embeddedMobilePerf === true` 强制开；`false` 强制关；缺省按 UA / 指针 / 视口推断。
+   */
+  function inferEmbeddedMobilePerfRelax(opts) {
+    if (opts && opts.embeddedMobilePerf === true) return true;
+    if (opts && opts.embeddedMobilePerf === false) return false;
+    if (typeof window === "undefined" || typeof navigator === "undefined") {
+      return false;
+    }
+    try {
+      if (
+        window.matchMedia &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ) {
+        return true;
+      }
+      if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) {
+        return true;
+      }
+      if (
+        window.matchMedia &&
+        window.matchMedia("(max-device-width: 900px)").matches
+      ) {
+        return true;
+      }
+    } catch (_) {}
+    const ua = navigator.userAgent || "";
+    if (
+      /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(
+        ua
+      )
+    ) {
+      return true;
+    }
+    return false;
+  }
+
   // ---------- Pet 主类 ---------- //
   class Pet {
     constructor(canvas, opts = {}) {
       this.canvas = canvas;
       this.ctx = canvas.getContext("2d");
-      this.DPR = Math.min(window.devicePixelRatio || 1, 3);
+      this._embeddedMobilePerf = inferEmbeddedMobilePerfRelax(opts);
+      const dprCap = this._embeddedMobilePerf ? 2 : 3;
+      this.DPR = Math.min(window.devicePixelRatio || 1, dprCap);
       this._pxScale = this.DPR;
       this.width = 0;
       this.height = 0;
       this.center = { x: 0, y: 0 };
       this.size = 320; // 身体参考尺寸 S
 
-      this.particleCount = opts.particleCount || 160;
+      {
+        const basePc = opts.particleCount != null ? +opts.particleCount : 160;
+        if (this._embeddedMobilePerf) {
+          const scaled = Math.round(basePc * 0.72);
+          this.particleCount = clamp(scaled, 60, 200);
+        } else {
+          this.particleCount = clamp(Math.round(basePc), 48, 400);
+        }
+      }
       this.pool = (opts.pool || DEFAULT_POOL).slice();
       this.eatenChars = []; // 吞下的字，会混入 pool
       /** 多次「写入躯体」累积队列，轮换贴到更多粒子上 */
@@ -3344,6 +3394,7 @@
           macroFitMode: "shrink",
           megaLayoutScale: 1,
           silhouetteJitterAmpMul: 1,
+          sandPlowMode: false,
         },
         presentation: {
           glyphMotionSpeed: _sp0,
@@ -3367,6 +3418,8 @@
           /** 巨字串在呈现层如何铺排（与「容纳」字串截断/双行独立） */
           presentationMegaLayoutMode: "fit_canvas",
           silhouetteJitterAmpMul: 1,
+          /** 拨开模式：拖画布时只拨体内字粒，整体身位不跟拖（分套） */
+          sandPlowMode: false,
         },
       };
       if (opts.outlineContourFirst === false) {
@@ -3519,7 +3572,8 @@
       w = Math.max(64, w);
       h = Math.max(64, h);
 
-      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      const dprCap = this._embeddedMobilePerf ? 2 : 3;
+      const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
       const bw = Math.max(1, Math.round(w * dpr));
       const bh = Math.max(1, Math.round(h * dpr));
 
@@ -3679,7 +3733,8 @@
           this.gridCell,
           suggestOpts
         );
-        want = clamp(Math.round(want * mul), 26, 255);
+        const maxMegaP = this._embeddedMobilePerf ? 200 : 255;
+        want = clamp(Math.round(want * mul), 26, maxMegaP);
         if (
           this.viewMode === "pet" &&
           this.uiArcMode === "presentation"
@@ -3692,7 +3747,7 @@
             mpProbe,
             this.gridCell || 12
           );
-          want = clamp(Math.min(want, capP), 26, 255);
+          want = clamp(Math.min(want, capP), 26, maxMegaP);
         }
         if (want !== this.glyphs.length) {
           this.particleCount = want;
@@ -3871,9 +3926,14 @@
         g.wtgy = 0;
         const ph = (g.patrolSeed || 0) * 13.7 + i * 1.73;
         const lagBase =
-          silMk && !g.faceRole
-            ? 0.9 + (Math.sin(ph * 1.1) * 0.5 + 0.5) * 0.1
-            : 0.86 + (Math.sin(ph * 1.1) * 0.5 + 0.5) * 0.2;
+          silMk &&
+          !g.faceRole &&
+          isPresentationSilhouetteHarm(this) &&
+          !this.presentationGlyphDynamics
+            ? 0.96
+            : silMk && !g.faceRole
+              ? 0.9 + (Math.sin(ph * 1.1) * 0.5 + 0.5) * 0.1
+              : 0.86 + (Math.sin(ph * 1.1) * 0.5 + 0.5) * 0.2;
         g.lagK = g.faceRole ? lagBase * 0.52 : lagBase;
         g.lagX = bx;
         g.lagY = by;
@@ -3964,7 +4024,8 @@
           this._arcPrefs.presentation.presentationGlyphDynamics = false;
           applyArcVisualPrefsToPet(this);
         }
-        for (let si = 0; si < 10; si++) {
+        const settlePasses = this._embeddedMobilePerf ? 6 : 10;
+        for (let si = 0; si < settlePasses; si++) {
           this._separateOverlappingGridGlyphs();
         }
         const nowMs =
@@ -4469,20 +4530,25 @@
       const kaoMask = useMask && String(this.form || "").startsWith("kao_");
       const rMax = mega ? 90 : kaoMask ? 52 : useMask ? 40 : 22;
       const silMask = isMaskBackedMegaKao(this);
-      const passes =
-        presDense
-          ? decoupDrag
-            ? 16
-            : this.presentationGlyphDynamics
-              ? 12
-              : 18
-          : usesMaskSnakeStream(this) && silMask
-            ? 7
-            : mega
-              ? 4
-              : useMask
-                ? 3
-                : 1;
+      const relaxM = this._embeddedMobilePerf ? 0.68 : 1;
+      const passes = Math.max(
+        1,
+        Math.round(
+          (presDense
+            ? decoupDrag
+              ? 16
+              : this.presentationGlyphDynamics
+                ? 12
+                : 15
+            : usesMaskSnakeStream(this) && silMask
+              ? 7
+              : mega
+                ? 4
+                : useMask
+                  ? 3
+                  : 1) * relaxM
+        )
+      );
       const key = (gx, gy) => `${gx},${gy}`;
 
       for (let pass = 0; pass < passes; pass++) {
@@ -5475,6 +5541,7 @@
     }
 
     _applyGridTypography() {
+      this._presSilUniformBodyPx = null;
       if (!this.gridUnity) {
         for (let i = 0; i < this.glyphs.length; i++) {
           this.glyphs[i].targetRot = rand(-0.18, 0.18);
@@ -5529,6 +5596,15 @@
           }
         }
         this._applyBodyGlyphEmMulToGlyphs();
+        if (
+          isPresentationSilhouetteHarm(this) &&
+          isMaskBackedMegaKao(this)
+        ) {
+          const g0 = this.glyphs.find((gg) => !gg.faceRole);
+          if (g0 && g0.size != null && !Number.isNaN(+g0.size)) {
+            this._presSilUniformBodyPx = +g0.size;
+          }
+        }
         return;
       }
       const emMin = Math.max(8, this.gridCell * 0.68);
@@ -6219,6 +6295,9 @@
     beginDrag(x, y) {
       if (this.viewMode !== "pet") return;
       this.dragging = true;
+      this._sandPlowDrag = false;
+      this._sandPointer = null;
+      this._sandPrevPtr = null;
       this.dragOffset.x = this.pos.x - x;
       this.dragOffset.y = this.pos.y - y;
       this._dragResidualLx = 0;
@@ -6230,6 +6309,26 @@
       this._dragShellWorld = { x: this.pos.x, y: this.pos.y };
       this._dragPrevPos = { x: this.pos.x, y: this.pos.y };
       this.dragVel = { x: 0, y: 0 };
+      if (
+        this.sandPlowMode &&
+        this.gridMarch &&
+        this.gridSnapping &&
+        !isMotionLayoutLockedForm(this.form)
+      ) {
+        this._sandPlowDrag = true;
+        this._dragShellDecoupled = false;
+        const b = this._playBounds();
+        const pin = Math.max(4, (this.gridCell || 12) * 0.35);
+        this._sandPointer = {
+          x: clamp(x, b.minX + pin, b.maxX - pin),
+          y: clamp(y, b.minY + pin, b.maxY - pin),
+        };
+        this._sandPrevPtr = {
+          x: this._sandPointer.x,
+          y: this._sandPointer.y,
+        };
+        this.dragVel = { x: 0, y: 0 };
+      }
       if (this._dragShellDecoupled) {
         this.vel.x = 0;
         this.vel.y = 0;
@@ -6244,6 +6343,33 @@
       if (!this.dragging) return;
       const b = this._playBounds();
       const r = this._bodyClampRadius();
+      if (this._sandPlowDrag) {
+        const pin = Math.max(4, (this.gridCell || 12) * 0.35);
+        const px = clamp(x, b.minX + pin, b.maxX - pin);
+        const py = clamp(y, b.minY + pin, b.maxY - pin);
+        const nowMs =
+          typeof performance !== "undefined" ? performance.now() : Date.now();
+        if (this._sandPrevPtr) {
+          this.dragVel.x = px - this._sandPrevPtr.x;
+          this.dragVel.y = py - this._sandPrevPtr.y;
+          this._sandPrevPtr.x = px;
+          this._sandPrevPtr.y = py;
+        }
+        this._sandPointer = { x: px, y: py };
+        if (nowMs - this._lastWallFxAt > 72) {
+          let wnx = 0;
+          let wny = 0;
+          if (x < b.minX + pin + 0.5) wnx = 1;
+          else if (x > b.maxX - pin - 0.5) wnx = -1;
+          if (y < b.minY + pin + 0.5) wny = 1;
+          else if (y > b.maxY - pin - 0.5) wny = -1;
+          if (wnx !== 0 || wny !== 0) {
+            this._lastWallFxAt = nowMs;
+            this._wallShatter(wnx, wny);
+          }
+        }
+        return;
+      }
       const wantX = x + this.dragOffset.x;
       const wantY = y + this.dragOffset.y;
       const nx = clamp(wantX, b.minX + r, b.maxX - r);
@@ -6294,6 +6420,9 @@
       const pending = this._pendingScriptReturn;
       this._pendingScriptReturn = false;
       this.dragging = false;
+      this._sandPlowDrag = false;
+      this._sandPointer = null;
+      this._sandPrevPtr = null;
       this._dragPrevPos = null;
       if (this._dragShellDecoupled && this._dragShellWorld) {
         this.pos.x = this._dragShellWorld.x;
@@ -6614,7 +6743,7 @@
           const sp = 1 - Math.exp(-rate * dt);
           g.lagX = lerp(g.lagX, bx, sp);
           g.lagY = lerp(g.lagY, by, sp);
-          if (this.dragging) {
+          if (this.dragging && !this._sandPlowDrag) {
             const imp = 0.022 * g.lagK * (g.faceRole ? 0.35 : 1);
             g.lagX += dvx * imp;
             g.lagY += dvy * imp;
@@ -6689,6 +6818,8 @@
               )
             );
         const crispMotion = isGridLayoutImmutableForm(this.form);
+        const _sandPlayBounds =
+          this.viewMode === "pet" ? this._playBounds() : null;
 
         if (snakeStream) {
           for (const gg of this.glyphs) {
@@ -6936,6 +7067,95 @@
             wx += rx;
             wy += ry;
           }
+          if (_sandPlayBounds && !g.faceRole && !mT && !useSnakeCell) {
+            const glyphInteriorSleep =
+              presSilHarm && presGlyphSleep && silMaskPet;
+            if (
+              !glyphInteriorSleep &&
+              this._sandPlowDrag &&
+              this._sandPointer
+            ) {
+              const spx = this._sandPointer.x;
+              const spy = this._sandPointer.y;
+              const dx = wx - spx;
+              const dy = wy - spy;
+              const d2 = dx * dx + dy * dy;
+              const R = cell * (silMaskPet ? 4.45 : 6.2);
+              if (d2 > 0.2 && d2 < R * R) {
+                const d = Math.sqrt(d2);
+                const inv = 1 / d;
+                const edge = 1 - d / R;
+                const dtBoost = clamp(dt * 62, 0.62, 2.4);
+                const radial =
+                  edge *
+                  edge *
+                  cell *
+                  1.42 *
+                  dtBoost *
+                  (silMaskPet ? 0.82 : 1);
+                wx += dx * inv * radial;
+                wy += dy * inv * radial;
+                const tvx = this.dragVel.x;
+                const tvy = this.dragVel.y;
+                const tl = Math.hypot(tvx, tvy);
+                if (tl > 0.32) {
+                  const streak =
+                    edge *
+                    edge *
+                    cell *
+                    0.52 *
+                    dtBoost *
+                    Math.min(tl / 9.5, 1.95);
+                  const tx = tvx / tl;
+                  const ty = tvy / tl;
+                  const px = -ty;
+                  const py = tx;
+                  const alt = gi & 1 ? 1 : -1;
+                  wx += px * streak * alt;
+                  wy += py * streak * alt * 0.86;
+                }
+              }
+            }
+            if (!glyphInteriorSleep) {
+              const band = cell * 1.48;
+              const ib = _sandPlayBounds;
+              const mx0 = ib.minX + band;
+              const mx1 = ib.maxX - band;
+              const my0 = ib.minY + band;
+              const my1 = ib.maxY - band;
+              let pen = 0;
+              if (wx < mx0) pen = Math.max(pen, mx0 - wx);
+              else if (wx > mx1) pen = Math.max(pen, wx - mx1);
+              if (wy < my0) pen = Math.max(pen, my0 - wy);
+              else if (wy > my1) pen = Math.max(pen, wy - my1);
+              if (pen > cell * 0.08 && (g._edgeSandCd || 0) <= 0) {
+                let ix = bx - wx;
+                let iy = by - wy;
+                const il = Math.hypot(ix, iy) || 1;
+                ix /= il;
+                iy /= il;
+                const kick =
+                  cell *
+                  (0.92 + Math.random() * 1.02) *
+                  clamp(pen / (cell * 0.85), 0.45, 2.1);
+                const tNeed = 0.35 + Math.random() * 0.12;
+                if ((g._tapScatterT || 0) < tNeed) {
+                  g._tapScatterT = tNeed;
+                  g._tapScatterT0 = tNeed;
+                }
+                g._tapScatterOX =
+                  (g._tapScatterOX || 0) * 0.32 +
+                  ix * kick +
+                  rand(-cell * 0.34, cell * 0.34);
+                g._tapScatterOY =
+                  (g._tapScatterOY || 0) * 0.32 +
+                  iy * kick +
+                  rand(-cell * 0.34, cell * 0.34);
+                g._edgeSandCd = 0.095 + Math.random() * 0.085;
+              }
+            }
+            if ((g._edgeSandCd || 0) > 0) g._edgeSandCd -= dt;
+          }
           if (g._tapScatterT > 0) {
             const t0 = g._tapScatterT0 || 0.38;
             const f = clamp(g._tapScatterT / t0, 0, 1);
@@ -7020,6 +7240,52 @@
             );
             tgx = sn.gx;
             tgy = sn.gy;
+          }
+
+          if (
+            this._sandPlowDrag &&
+            this._sandPointer &&
+            !mT &&
+            !useSnakeCell &&
+            !g.faceRole &&
+            !(presSilHarm && presGlyphSleep && silMaskPet)
+          ) {
+            const spx = this._sandPointer.x;
+            const spy = this._sandPointer.y;
+            const sdx = wx - spx;
+            const sdy = wy - spy;
+            const sdist = Math.hypot(sdx, sdy);
+            const R0 = cell * (silMaskPet ? 6.9 : 9.8);
+            if (sdist > cell * 0.2 && sdist < R0) {
+              const inv = 1 / sdist;
+              const nx = sdx * inv;
+              const ny = sdy * inv;
+              const edge = 1 - sdist / R0;
+              const dragSp = Math.hypot(this.dragVel.x, this.dragVel.y);
+              const push =
+                edge * edge * (2.95 + Math.min(dragSp * 0.065, 1.15));
+              let kx = Math.trunc(nx * push);
+              let ky = Math.trunc(ny * push);
+              kx = clamp(kx, -3, 3);
+              ky = clamp(ky, -3, 3);
+              if (kx !== 0 || ky !== 0) {
+                tgx += kx;
+                tgy += ky;
+                if (silMaskPet) {
+                  const snK = this._nearestWalkableMarchCell(
+                    tgx,
+                    tgy,
+                    bx,
+                    by,
+                    cos,
+                    sin,
+                    flip
+                  );
+                  tgx = snK.gx;
+                  tgy = snK.gy;
+                }
+              }
+            }
           }
 
           const presSleepLock =
@@ -7142,10 +7408,14 @@
               flip
             );
           }
-          /** 呈现剪影：每帧必跑第一遍叠分；第二遍隔帧（关内动/开内动同策略），减轻主线程卡顿仍靠 passes 内收敛 */
+          /** 呈现剪影：每帧必跑第一遍叠分；关内动时每帧双遍；开内动时隔帧（移动端隔三帧）第二遍 */
           this._sepAltFrame = (this._sepAltFrame || 0) + 1;
           const sepSecondPass =
-            !presSilHarm || (this._sepAltFrame & 1) === 1;
+            !presSilHarm ||
+            presGlyphSleep ||
+            (this._embeddedMobilePerf
+              ? this._sepAltFrame % 3 === 0
+              : (this._sepAltFrame & 1) === 1);
           if (sepSecondPass) {
             this._separateOverlappingGridGlyphs();
           }
@@ -7381,8 +7651,8 @@
         ctx.fillRect(0, 0, W, H);
         const skipDecorGrid =
           this.viewMode === "pet" &&
-          isPresentationSilhouetteHarm(this) &&
-          this.glyphs.length > 108;
+          (this._embeddedMobilePerf ||
+            (isPresentationSilhouetteHarm(this) && this.glyphs.length > 108));
         if (!isMotionLayoutLockedForm(this.form) && !skipDecorGrid) {
           ctx.save();
           ctx.strokeStyle = "rgba(0, 0, 0, 0.04)";
@@ -7410,18 +7680,20 @@
         ctx.fillStyle = sky;
         ctx.fillRect(0, 0, W, H);
 
-        ctx.save();
-        ctx.strokeStyle = "rgba(160, 190, 255, 0.04)";
-        ctx.lineWidth = 1;
-        const step = 28;
-        const off = (t * 12) % step;
-        for (let x = -H; x < W + H; x += step) {
-          ctx.beginPath();
-          ctx.moveTo(x + off, 0);
-          ctx.lineTo(x + off - H * 0.6, H);
-          ctx.stroke();
+        if (!(this._embeddedMobilePerf && this.viewMode === "pet")) {
+          ctx.save();
+          ctx.strokeStyle = "rgba(160, 190, 255, 0.04)";
+          ctx.lineWidth = 1;
+          const step = 28;
+          const off = (t * 12) % step;
+          for (let x = -H; x < W + H; x += step) {
+            ctx.beginPath();
+            ctx.moveTo(x + off, 0);
+            ctx.lineTo(x + off - H * 0.6, H);
+            ctx.stroke();
+          }
+          ctx.restore();
         }
-        ctx.restore();
       }
 
       if (this.showPlayfieldGuide && this.viewMode === "pet") {
@@ -7529,6 +7801,9 @@
         this.rotation
       );
 
+      /** 呈现剪影躯体：本帧共用的整数 px 字号，避免逐字 round 造成大小不一 */
+      this._presSilUniformPxInt = null;
+
       const drawGlyph = (g, opts) => {
         const crispForm = isGridLayoutImmutableForm(this.form);
         const edge = g.edge;
@@ -7557,7 +7832,16 @@
           crispForm &&
           isMaskBackedMegaKao(this) &&
           !g.faceRole;
-        const baseSize = g.size * this.scale * (opts.sizeMul || 1);
+        const uniformBodyPx =
+          megaSilPres &&
+          this._presSilUniformBodyPx != null &&
+          !Number.isNaN(+this._presSilUniformBodyPx)
+            ? +this._presSilUniformBodyPx
+            : null;
+        const baseSize =
+          (uniformBodyPx != null ? uniformBodyPx : g.size) *
+          this.scale *
+          (opts.sizeMul || 1);
         let size = baseSize * (megaSilPres ? 1 : roleMul);
         if (this.gridUnity && this.gridCell) {
           let cap = this.gridCell * (crispForm ? 0.92 : 0.88) * this.scale;
@@ -7575,31 +7859,49 @@
         if (size < 7.5) size = 7.5;
         if (this.gridUnity) size = Math.max(size, 8.5);
         const flashW = opts.flashWeight != null ? opts.flashWeight : 0.5;
-        const flashBoost = silDraw
-          ? 1
-          : 1 + Math.min(flash, 0.52) * flashW * 0.42;
+        const flashBoost =
+          megaSilPres || silDraw
+            ? 1
+            : 1 + Math.min(flash, 0.52) * flashW * 0.42;
         const edgeAlpha = megaSilPres
-          ? lerp(0.995, 0.9, edge)
+          ? 1
           : crispForm
             ? lerp(0.99, 0.92, edge)
             : lerp(0.94, 0.42, edge);
-        const glowMul = g.faceRole ? 1 : this._glowAlphaMul(g, t);
+        const glowMul =
+          g.faceRole || megaSilPres ? 1 : this._glowAlphaMul(g, t);
         const presBodyAlphaMul =
           isPresentationSilhouetteHarm(this) &&
           !this.presentationGlyphDynamics &&
           !g.faceRole
             ? 0.74
             : 1;
+        const ga = g.alpha == null || Number.isNaN(+g.alpha) ? 1 : +g.alpha;
+        const glyphAlpha =
+          megaSilPres && !this.presentationGlyphDynamics
+            ? clamp(ga, 0.9, 1)
+            : ga;
         const alpha =
           (opts.alphaMul != null ? opts.alphaMul : 1) *
           presBodyAlphaMul *
           flashBoost *
           edgeAlpha *
-          g.alpha *
+          glyphAlpha *
           glowMul;
         const fontMain =
           '"LXGW WenKai","LXGW WenKai Screen","Noto Serif SC","Noto Sans SC",serif';
-        const pxInt = Math.max(8, Math.round(size));
+        let pxInt = Math.max(8, Math.round(size));
+        if (
+          megaSilPres &&
+          uniformBodyPx != null &&
+          !emojiLike &&
+          this.gridUnity
+        ) {
+          if (this._presSilUniformPxInt == null) {
+            this._presSilUniformPxInt = pxInt;
+          }
+          pxInt = this._presSilUniformPxInt;
+        }
         const szLabel =
           crispForm || this.gridUnity ? `${pxInt}px` : `${(Math.round(size * 10) / 10).toFixed(1)}px`;
         const fontPrefix = emojiLike ? "" : "600 ";
@@ -7626,9 +7928,13 @@
           const br = parseInt(this.bodyTintHex.slice(1, 3), 16);
           const bge = parseInt(this.bodyTintHex.slice(3, 5), 16);
           const bb = parseInt(this.bodyTintHex.slice(5, 7), 16);
-          const ek = light
-            ? lerp(0.5, 1, edge)
-            : lerp(0.42, 1, 1 - edge * 0.65);
+          const ek = megaSilPres
+            ? light
+              ? 0.88
+              : 0.82
+            : light
+              ? lerp(0.5, 1, edge)
+              : lerp(0.42, 1, 1 - edge * 0.65);
           fillStyle = `rgba(${clamp(Math.round(br * ek), 0, 255)},${clamp(
             Math.round(bge * ek),
             0,
@@ -7641,19 +7947,21 @@
           const bx0 = this.pos.x;
           const Sref = Math.max(this.size * 0.48, 105);
           let u = 0.5;
-          if (cm === 1) {
-            const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
-            u = clamp(ny * 0.32 + breath * 0.68, 0, 1);
-          } else if (cm === 2) {
-            const d = clamp(Math.hypot(g.x - bx0, g.y - by0) / Sref, 0, 1);
-            u = clamp(d * 0.42 + breath * 0.58, 0, 1);
-          } else if (cm === 3) {
-            const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
-            u = clamp(
-              ny * 0.35 + breath * 0.65 + Math.sin(t * 2.05 + (g.depth || 0)) * 0.2,
-              0,
-              1
-            );
+          if (!(megaSilPres && !this.presentationGlyphDynamics)) {
+            if (cm === 1) {
+              const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
+              u = clamp(ny * 0.32 + breath * 0.68, 0, 1);
+            } else if (cm === 2) {
+              const d = clamp(Math.hypot(g.x - bx0, g.y - by0) / Sref, 0, 1);
+              u = clamp(d * 0.42 + breath * 0.58, 0, 1);
+            } else if (cm === 3) {
+              const ny = clamp((g.y - by0) / Sref + 0.5, 0, 1);
+              u = clamp(
+                ny * 0.35 + breath * 0.65 + Math.sin(t * 2.05 + (g.depth || 0)) * 0.2,
+                0,
+                1
+              );
+            }
           }
           if (light) {
             const inkR = Math.round(lerp(6, 152, u));
@@ -7667,8 +7975,12 @@
             fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
           }
         } else if (opts.cel === false) {
-          const pulse = Math.sin(t * 2.25 + (g.depth || 0) * 2.8) * 0.1;
-          const edgeUse = clamp(edge + pulse, 0, 1);
+          const pulse = megaSilPres
+            ? 0
+            : Math.sin(t * 2.25 + (g.depth || 0) * 2.8) * 0.1;
+          const edgeUse = megaSilPres
+            ? 0.54
+            : clamp(edge + pulse, 0, 1);
           if (light) {
             const inkR = Math.round(lerp(22, 108, edgeUse));
             const inkG = Math.round(lerp(24, 118, edgeUse));
@@ -7681,13 +7993,29 @@
             fillStyle = `rgba(${inkR},${inkG},${inkB},${alpha})`;
           }
         } else {
-          const cel = celRgbFromGlyph(g, light, t, this._fluidPhase || 0);
+          const celGn = megaSilPres
+            ? Object.assign({}, g, {
+                edge: 0.5,
+                tx: 0,
+                ty: 0,
+                patrolSeed: 0,
+              })
+            : g;
+          const celT =
+            megaSilPres && !this.presentationGlyphDynamics ? 0 : t;
+          const cel = celRgbFromGlyph(
+            celGn,
+            light,
+            celT,
+            this._fluidPhase || 0
+          );
           const [or, og, ob] = cel.outlineRgb;
           const outlineA = alpha * (0.5 + cel.edgeMul * 0.38);
           const px = this._pxScale || 1;
           const useCelHalo =
             !light &&
             !g.faceRole &&
+            !megaSilPres &&
             cel.edgeMul > 0.38;
           if (useCelHalo) {
             outlinePass = {
@@ -7932,6 +8260,48 @@
       this.digestText(lines.join(""));
     }
 
+    /**
+     * 侧栏或脚本改完偏好后调用：**快照当前活属性 → 写回当前层级桶 → 再应用**，并重算格点字号；
+     * 可选对 mask 巨字/颜跑两遍叠分，缓解连点后参数漂移、叠字、字身歪斜残留。
+     * @param {{ layoutHard?: boolean }} [opts] layoutHard=true 时在格迈+贴格下额外叠分（较重）
+     */
+    stabilizeAfterControl(opts) {
+      const layoutHard = !!(opts && opts.layoutHard);
+      snapshotArcVisualPrefs(this);
+      applyArcVisualPrefsToPet(this);
+      if (this.viewMode !== "pet" || !this.glyphs || !this.glyphs.length) return;
+      this._snapSilhouetteBodyUprightIfStill();
+      if (!this.gridUnity) return;
+      this._applyGridTypography();
+      if (
+        layoutHard &&
+        this.gridMarch &&
+        this.gridSnapping &&
+        isMaskBackedMegaKao(this) &&
+        this.glyphs.length > 1
+      ) {
+        this._separateOverlappingGridGlyphs();
+        if (!this._embeddedMobilePerf) {
+          this._separateOverlappingGridGlyphs();
+        }
+      }
+    }
+
+    /** 呈现剪影且关内动：字身立即扶正，避免 `rot` 慢跟随造成「整片歪」 */
+    _snapSilhouetteBodyUprightIfStill() {
+      if (
+        !isPresentationSilhouetteHarm(this) ||
+        !isMaskBackedMegaKao(this) ||
+        this.presentationGlyphDynamics
+      ) {
+        return;
+      }
+      for (const g of this.glyphs) {
+        if (g.faceRole) continue;
+        g.rot = 0;
+      }
+    }
+
     /** 浮光：浓淡律动乘在透明度上（0=关） */
     _glowAlphaMul(g, t) {
       const gm = this.glowMode | 0;
@@ -8070,6 +8440,13 @@
       return this.silhouetteGlyphJitter;
     }
 
+    /** 侧栏「拨」：拨开模式 — 拖画布时只拨体内字粒，身位不跟拖；近边轻散再向心聚（分套） */
+    cycleSandPlowMode() {
+      this.sandPlowMode = !this.sandPlowMode;
+      snapshotArcVisualPrefs(this);
+      return this.sandPlowMode;
+    }
+
     /** 侧栏「整块灰底」：mask 静态垫底（分套；与「淡影」二选一强度链） */
     cycleSilhouetteMatteUnderlay() {
       const b = this._arcPrefs[this.uiArcMode];
@@ -8125,6 +8502,9 @@
         this._applyGridTypography();
         if (this.gridMarch && this.gridSnapping && this.glyphs && this.glyphs.length) {
           this._separateOverlappingGridGlyphs();
+          if (!this._embeddedMobilePerf) {
+            this._separateOverlappingGridGlyphs();
+          }
         }
         const nowMs =
           typeof performance !== "undefined" ? performance.now() : Date.now();

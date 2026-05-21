@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.35.8" />
+  <meta name="ziling-build" content="3.35.14" />
   <title>字灵 · 开发者页控制台</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.35.8" />
+  <link rel="stylesheet" href="./styles.css?v=3.35.14" />
 </head>
 <body>
   <div class="app" data-ui-arc="standby">
@@ -47,9 +47,12 @@
           </div>
           <div class="rail-section">
             <div class="rail-section-head">
-              <div class="rail-section-title">② 格点 · 走格 · 字号</div>
-              <p class="rail-section-hint">谐步=一字一格；徙=追格快慢；与「速」分工不同</p>
+              <div class="rail-section-title">② 格点 · 走格 · 沙拨 · 字号</div>
+              <p class="rail-section-hint">沙拨在下列首行；谐步=一字一格；徙=追格快慢</p>
             </div>
+            <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="沙拨互动">
+              <button type="button" class="rail-tool rail-tool--stack rail-tool-span2 rail-tool--sand-plow" id="sandPlowBtn" data-action="sandPlow" title="【沙拨字】开：字灵模式下在画布任一处按下再拖，只拨体内字粒、整体不跟拖（须走格）；贴活动区边缘会轻散再向心聚。关：恢复整体拖曳。"><span class="rail-tool-k">沙拨字</span><span class="rail-tool-hint">开：拖画布=拨沙 · 关：拖整体</span></button>
+            </nav>
             <nav class="rail-tools rail-tools-motion" role="toolbar" aria-label="走格范式（巨字/颜 mask 内）">
               <button type="button" class="rail-tool rail-tool--stack" data-action="setMotionStyle" data-motion="harmonic" title="【谐步】离散格 ±1 曼哈顿步进，一字一格（呈现推荐）。「颤」只影响亚像素绘移，不再关掉谐步。"><span class="rail-tool-k">谐步</span><span class="rail-tool-hint">格±1</span></button>
               <button type="button" class="rail-tool rail-tool--stack" data-action="setMotionStyle" data-motion="snake_stream" title="【廊道】可走格走廊排序，一队字沿轨滑移；开「内动」时观感更明显。"><span class="rail-tool-k">廊道</span><span class="rail-tool-hint">沿轨滑</span></button>
@@ -126,7 +129,7 @@
         <div class="stage-main" id="stageMain" aria-hidden="false">
           <canvas id="petCanvas" aria-label="字灵画布"></canvas>
           <div class="form-label" id="formLabel">软团</div>
-          <div class="hint" id="hint">点页眉 <strong>?</strong> 入门 · 侧栏按钮<strong>悬停</strong>可看长说明 · <strong>规整</strong>后先静再节律换位（轻淡）· 呈现巨字/颜拖曳<strong>剪影跟手、松手才落锚</strong> · 关「内动」<strong>锁格真静</strong>（叠分仍解共格）· <strong>排布 / 颤幅</strong> · 构建 <strong>3.35.8</strong> · URL <code>?macroFit=</code> <code>?megaScale=</code> 等见 PLAN / HANDOFF</div>
+          <div class="hint" id="hint">点页眉 <strong>?</strong> 入门 · 侧栏②首行 <strong>沙拨字</strong> · 侧栏按钮<strong>悬停</strong>可看长说明 · <strong>规整</strong>后先静再节律换位（轻淡）· 呈现巨字/颜拖曳<strong>剪影跟手、松手才落锚</strong> · 关「内动」<strong>锁格真静</strong>（叠分仍解共格）· 构建 <strong>3.35.14</strong> · 手机/WebView 自动<strong>降载</strong>（亦可 <code>?mobilePerf=0</code> 对照桌面）· URL <code>?macroFit=</code> <code>?megaScale=</code> 等见 PLAN / HANDOFF</div>
         </div>
       </section>
 
@@ -264,6 +267,12 @@
           </ol>
         </section>
         <section class="help-dialog-section">
+          <h3 class="help-dialog-h3">沙拨字（拨沙 / 贴边散）</h3>
+          <p class="help-dialog-p">
+            左栏<strong>第②区最上一行</strong>点<strong>「沙拨字」</strong>打开后：在字灵画布<strong>任意位置</strong>按下再拖，会像划过沙子一样<strong>推开体内字粒</strong>，<strong>整体身位不跟拖</strong>（须为走格形态）。关「沙拨字」后恢复为拖移整体。字粒靠近活动区边缘时会<strong>轻散再向心聚回</strong>。若侧栏未刷新，请<strong>强刷</strong>（无痕或清缓存）并看页眉构建号。
+          </p>
+        </section>
+        <section class="help-dialog-section">
           <h3 class="help-dialog-h3">回稿（还原文稿）</h3>
           <p class="help-dialog-p">
             在字灵<strong>核心区</strong>长按约 <strong>0.58 秒</strong>至 Toast 提示 → <strong>松手</strong>即回文稿（移动超过约 <strong>8px</strong> 视为拖拽并取消回稿）。也可随时点右侧<strong>「回」</strong>。
@@ -323,11 +332,11 @@
     </div>
   </div>
 
-  <script src="./js/ziling/play-bounds.js?v=3.35.8"></script>
-  <script src="./js/ziling/shape-field.js?v=3.35.8"></script>
-  <script src="./js/ziling/matrix-bridge.js?v=3.35.8"></script>
-  <script src="./js/ziling/shape-consumer.js?v=3.35.8"></script>
-  <script src="./pet.js?v=3.35.8"></script>
-  <script src="./app.js?v=3.35.8"></script>
+  <script src="./js/ziling/play-bounds.js?v=3.35.14"></script>
+  <script src="./js/ziling/shape-field.js?v=3.35.14"></script>
+  <script src="./js/ziling/matrix-bridge.js?v=3.35.14"></script>
+  <script src="./js/ziling/shape-consumer.js?v=3.35.14"></script>
+  <script src="./pet.js?v=3.35.14"></script>
+  <script src="./app.js?v=3.35.14"></script>
 </body>
 </html>
