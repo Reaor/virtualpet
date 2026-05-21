@@ -65,7 +65,7 @@
 
 ---
 
-## 5. 顺滑感与 Pretext：性能与「有序」节拍（3.35.8–3.35.10）
+## 5. 顺滑感与 Pretext：性能与「有序」节拍（3.35.8–3.35.11）
 
 Pretext 类工具的「丝滑」多来自 **少做无效工作** 与 **稳定的时间片语义**；字灵在 **mask 巨字/颜** 下，主线程热点常在 **`_separateOverlappingGridGlyphs`（多 pass × 全量 Map）** 与 **`fillText` 粒子绘制**。
 
@@ -76,6 +76,8 @@ Pretext 类工具的「丝滑」多来自 **少做无效工作** 与 **稳定的
 - **mask 剪影** 的 `_ensemblePhase` 增量去掉轻微 `sin(t)` 调制，节拍更恒定；`crispMotion` / crisp 流体 **去相关幅**略收，观感更接近「齐舞」式有序弱变。
 
 验收：肉眼帧时间与 `?dev=1` 画布右上 **upd** 分段；若 `upd` 仍高，下一步应剖 `rasterizeMask` / 粒子上限而非再叠随机谐波。
+
+**3.35.11 补充**：嵌入 **Android WebView / 移动 Safari** 时自动 **`_embeddedMobilePerf`**：先减 **像素缓冲分辨率（DPR cap）** 与 **每帧叠分/装饰绘制**，再动粒子规模；与 Pretext「少做无效工作」同向。桌面强制对照可 **`?mobilePerf=0`**。
 
 **3.35.10 补充**：侧栏每次点击后在 **同一微任务尾部** 调用 `stabilizeAfterControl`：**`snapshotArcVisualPrefs` → `applyArcVisualPrefsToPet` → `_applyGridTypography`**，必要时再叠分 —— 对应 Pretext 的 **测量/排版与绘制少次、同口径**；避免「只写了桶、忘了写活属性」或反之的双轨漂移。
 

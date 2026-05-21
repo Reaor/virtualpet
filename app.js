@@ -60,6 +60,15 @@
 
   const params = new URL(location.href).searchParams;
   const devHud = params.get("dev") === "1";
+  const mobilePerfRaw = (params.get("mobilePerf") || "").trim().toLowerCase();
+  const embeddedMobilePerfFromUrl =
+    mobilePerfRaw === "1" ||
+    mobilePerfRaw === "true" ||
+    params.get("embedded") === "1"
+      ? true
+      : mobilePerfRaw === "0" || mobilePerfRaw === "false"
+        ? false
+        : undefined;
   const skipIntro = params.get("skipIntro") === "1" || params.get("pet") === "1";
   const urlForm = params.get("form");
   const urlMacroStr = (params.get("macroText") || params.get("mega") || "").trim();
@@ -184,6 +193,7 @@
     macroFitMode: macroFitFromUrl,
     megaLayoutScale: megaLayoutScaleFromUrl,
     showPlayfieldGuide: devHud,
+    embeddedMobilePerf: embeddedMobilePerfFromUrl,
     onFormChange(key) {
       if (FORMS[key] && formLabel) formLabel.textContent = FORMS[key].label;
       syncUiMode();

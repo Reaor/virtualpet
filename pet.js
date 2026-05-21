@@ -3100,19 +3100,67 @@
     return shadeRgb([248, 250, 255], [195, 205, 235], [95, 115, 175], [18, 22, 38]);
   }
 
+  /**
+   * 嵌入 WebView / 手机浏览器时略降 GPU 与主线程热点（DPR、叠分遍数、粒子上限等）。
+   * `opts.embeddedMobilePerf === true` 强制开；`false` 强制关；缺省按 UA / 指针 / 视口推断。
+   */
+  function inferEmbeddedMobilePerfRelax(opts) {
+    if (opts && opts.embeddedMobilePerf === true) return true;
+    if (opts && opts.embeddedMobilePerf === false) return false;
+    if (typeof window === "undefined" || typeof navigator === "undefined") {
+      return false;
+    }
+    try {
+      if (
+        window.matchMedia &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ) {
+        return true;
+      }
+      if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) {
+        return true;
+      }
+      if (
+        window.matchMedia &&
+        window.matchMedia("(max-device-width: 900px)").matches
+      ) {
+        return true;
+      }
+    } catch (_) {}
+    const ua = navigator.userAgent || "";
+    if (
+      /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(
+        ua
+      )
+    ) {
+      return true;
+    }
+    return false;
+  }
+
   // ---------- Pet 主类 ---------- //
   class Pet {
     constructor(canvas, opts = {}) {
       this.canvas = canvas;
       this.ctx = canvas.getContext("2d");
-      this.DPR = Math.min(window.devicePixelRatio || 1, 3);
+      this._embeddedMobilePerf = inferEmbeddedMobilePerfRelax(opts);
+      const dprCap = this._embeddedMobilePerf ? 2 : 3;
+      this.DPR = Math.min(window.devicePixelRatio || 1, dprCap);
       this._pxScale = this.DPR;
       this.width = 0;
       this.height = 0;
       this.center = { x: 0, y: 0 };
       this.size = 320; // 身体参考尺寸 S
 
-      this.particleCount = opts.particleCount || 160;
+      {
+        const basePc = opts.particleCount != null ? +opts.particleCount : 160;
+        if (this._embeddedMobilePerf) {
+          const scaled = Math.round(basePc * 0.72);
+          this.particleCount = clamp(scaled, 60, 200);
+        } else {
+          this.particleCount = clamp(Math.round(basePc), 48, 400);
+        }
+      }
       this.pool = (opts.pool || DEFAULT_POOL).slice();
       this.eatenChars = []; // 吞下的字，会混入 pool
       /** 多次「写入躯体」累积队列，轮换贴到更多粒子上 */
@@ -3519,7 +3567,8 @@
       w = Math.max(64, w);
       h = Math.max(64, h);
 
-      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      const dprCap = this._embeddedMobilePerf ? 2 : 3;
+      const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
       const bw = Math.max(1, Math.round(w * dpr));
       const bh = Math.max(1, Math.round(h * dpr));
 
@@ -3679,7 +3728,8 @@
           this.gridCell,
           suggestOpts
         );
-        want = clamp(Math.round(want * mul), 26, 255);
+        const maxMegaP = this._embeddedMobilePerf ? 200 : 255;
+        want = clamp(Math.round(want * mul), 26, maxMegaP);
         if (
           this.viewMode === "pet" &&
           this.uiArcMode === "presentation"
@@ -3692,7 +3742,7 @@
             mpProbe,
             this.gridCell || 12
           );
-          want = clamp(Math.min(want, capP), 26, 255);
+          want = clamp(Math.min(want, capP), 26, maxMegaP);
         }
         if (want !== this.glyphs.length) {
           this.particleCount = want;
@@ -3969,7 +4019,8 @@
           this._arcPrefs.presentation.presentationGlyphDynamics = false;
           applyArcVisualPrefsToPet(this);
         }
-        for (let si = 0; si < 10; si++) {
+        const settlePasses = this._embeddedMobilePerf ? 6 : 10;
+        for (let si = 0; si < settlePasses; si++) {
           this._separateOverlappingGridGlyphs();
         }
         const nowMs =
@@ -4474,20 +4525,25 @@
       const kaoMask = useMask && String(this.form || "").startsWith("kao_");
       const rMax = mega ? 90 : kaoMask ? 52 : useMask ? 40 : 22;
       const silMask = isMaskBackedMegaKao(this);
-      const passes =
-        presDense
-          ? decoupDrag
-            ? 16
-            : this.presentationGlyphDynamics
-              ? 12
-              : 15
-          : usesMaskSnakeStream(this) && silMask
-            ? 7
-            : mega
-              ? 4
-              : useMask
-                ? 3
-                : 1;
+      const relaxM = this._embeddedMobilePerf ? 0.68 : 1;
+      const passes = Math.max(
+        1,
+        Math.round(
+          (presDense
+            ? decoupDrag
+              ? 16
+              : this.presentationGlyphDynamics
+                ? 12
+                : 15
+            : usesMaskSnakeStream(this) && silMask
+              ? 7
+              : mega
+                ? 4
+                : useMask
+                  ? 3
+                  : 1) * relaxM
+        )
+      );
       const key = (gx, gy) => `${gx},${gy}`;
 
       for (let pass = 0; pass < passes; pass++) {
@@ -7157,12 +7213,14 @@
               flip
             );
           }
-          /** 呈现剪影：每帧必跑第一遍叠分；关内动时每帧双遍；开内动时隔帧第二遍，减轻卡顿 */
+          /** 呈现剪影：每帧必跑第一遍叠分；关内动时每帧双遍；开内动时隔帧（移动端隔三帧）第二遍 */
           this._sepAltFrame = (this._sepAltFrame || 0) + 1;
           const sepSecondPass =
             !presSilHarm ||
             presGlyphSleep ||
-            (this._sepAltFrame & 1) === 1;
+            (this._embeddedMobilePerf
+              ? this._sepAltFrame % 3 === 0
+              : (this._sepAltFrame & 1) === 1);
           if (sepSecondPass) {
             this._separateOverlappingGridGlyphs();
           }
@@ -7398,8 +7456,8 @@
         ctx.fillRect(0, 0, W, H);
         const skipDecorGrid =
           this.viewMode === "pet" &&
-          isPresentationSilhouetteHarm(this) &&
-          this.glyphs.length > 108;
+          (this._embeddedMobilePerf ||
+            (isPresentationSilhouetteHarm(this) && this.glyphs.length > 108));
         if (!isMotionLayoutLockedForm(this.form) && !skipDecorGrid) {
           ctx.save();
           ctx.strokeStyle = "rgba(0, 0, 0, 0.04)";
@@ -7427,18 +7485,20 @@
         ctx.fillStyle = sky;
         ctx.fillRect(0, 0, W, H);
 
-        ctx.save();
-        ctx.strokeStyle = "rgba(160, 190, 255, 0.04)";
-        ctx.lineWidth = 1;
-        const step = 28;
-        const off = (t * 12) % step;
-        for (let x = -H; x < W + H; x += step) {
-          ctx.beginPath();
-          ctx.moveTo(x + off, 0);
-          ctx.lineTo(x + off - H * 0.6, H);
-          ctx.stroke();
+        if (!(this._embeddedMobilePerf && this.viewMode === "pet")) {
+          ctx.save();
+          ctx.strokeStyle = "rgba(160, 190, 255, 0.04)";
+          ctx.lineWidth = 1;
+          const step = 28;
+          const off = (t * 12) % step;
+          for (let x = -H; x < W + H; x += step) {
+            ctx.beginPath();
+            ctx.moveTo(x + off, 0);
+            ctx.lineTo(x + off - H * 0.6, H);
+            ctx.stroke();
+          }
+          ctx.restore();
         }
-        ctx.restore();
       }
 
       if (this.showPlayfieldGuide && this.viewMode === "pet") {
@@ -8026,7 +8086,9 @@
         this.glyphs.length > 1
       ) {
         this._separateOverlappingGridGlyphs();
-        this._separateOverlappingGridGlyphs();
+        if (!this._embeddedMobilePerf) {
+          this._separateOverlappingGridGlyphs();
+        }
       }
     }
 
@@ -8238,7 +8300,9 @@
         this._applyGridTypography();
         if (this.gridMarch && this.gridSnapping && this.glyphs && this.glyphs.length) {
           this._separateOverlappingGridGlyphs();
-          this._separateOverlappingGridGlyphs();
+          if (!this._embeddedMobilePerf) {
+            this._separateOverlappingGridGlyphs();
+          }
         }
         const nowMs =
           typeof performance !== "undefined" ? performance.now() : Date.now();
