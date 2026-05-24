@@ -59,7 +59,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ### 3.3 分层视觉偏好 `_arcPrefs`
 
-- 键：`standby` / `presentation`，各自存 **速、色、墨、浮、波、徙、粒、走格、颤、紊、整块灰底、淡影、字内动、macroFitMode、megaLayoutScale** 等（侧栏易读名；代码字段仍为 `bodyMotionStyle` / `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationGlyphDynamics`）。
+- 键：`standby` / `presentation`，各自存 **色、墨、浮、波、粒、走格、颤、紊、整块灰底、淡影、字内动、macroFitMode、megaLayoutScale** 等（侧栏易读名；代码字段仍为 `bodyMotionStyle` / `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationGlyphDynamics`）。**`glyphMotionSpeed` / `gridMarchSpeed`** 字段仍存在于对象中，但 **`snapshotArcVisualPrefs` / `applyArcVisualPrefsToPet` 覆写为全模态统一常量**（见 `pet.js` `FIXED_*`）。
 - 切换「层」时 `applyArcVisualPrefsToPet` / `snapshotArcVisualPrefs` 读写当前套。
 
 ### 3.4 「动」`presentationGlyphDynamics`
@@ -80,12 +80,12 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 | `bodyMotionStyle` | `harmonic` / `snake_stream` / `contour_drift`（mask 躯体轨） |
 | `textureMotionMode` | `spring_flow` / `adjacent_swap`（与轨正交的纹理体动） |
 | `_silDrawOx/_silDrawOy` | 亚格绘制偏移；由「颤」`silhouetteGlyphJitter` 控制 |
-| `motionTimeBlend` | 「速」与层内核 `timeScale` 的凸组合，避免呈现层「速」完全失灵 |
+| `motionTimeBlend` | 固定低速基 `gms0` 与层内核 `timeScale` 的凸组合，避免呈现层节拍被压到「几乎不动」 |
 | `mergePresentationSilhouetteMotion` | **仅** `isPresentationSilhouetteHarm` 时在 DISPLAY 内核上再压低 |
 
 ### 4.1 呈现层剪影格移
 
-- `stepBudget`：在 `presSilHarm` 下固定为 **1**（每帧每字最多一格曼哈顿），减轻叠乱。
+- `stepBudget`：在 `presSilHarm` 下固定为 **1**（每帧每字最多一格曼哈顿），减轻叠乱；**其他格迈路径** 封顶 **2** 格/帧（**3.35.21**），减轻大嘴帧间隔下的跳格闪烁。
 - `_separateOverlappingGridGlyphs`：呈现剪影下优先 **正交邻格** 疏散，遍数 **12**（`presDense`）。
 
 ### 4.2 待机层 mask（巨字 / 颜）
@@ -116,7 +116,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 3. **少重叠**：叠分多遍、正交邻优先；结构性上限 `fillCount`（呈现截断约 **0.82×** 可走格估计，**3.33.4**）。
 4. **少双轮廓**：字粒 + 整块灰 mask 不要叠（动/廓 分工）。
 5. **呈现层稳定**：不要被 idle 自动换形拉回待机；`pickBiasedForm` 必须尊重 `uiArcMode`。
-6. **层级分套记忆**：色速走格颤紊灰底淡影字内动波徙粒字比容纳等分待机/呈现。
+6. **层级分套记忆**：色、走格、颤、紊、灰底、淡影、字内动、波、粒、字比、容纳等分待机/呈现（体内节拍与沿格追赶为 **全模态常量**，见 `pet.js`）。
 7. **性能**：离屏 canvas、`willReadFrequently`、重载时跳过装饰格线、减少无效 `separate` 调用等。
 8. **巨字排版**：缩放下限与 `gridCell` 关联；容纳 `shrink/truncate/wrap2`；**呈现层**不叠整块灰轮廓底；**待机**「整块灰底」强垫底与「淡影」弱垫底二选一链（**3.34.2** 起灰底/淡影控件仅待机侧栏）。
 
@@ -192,10 +192,10 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 | | 变 | `morph` | 当前层内换形 |
 | | 觅 | `feed` | 觅食 |
 | | 墨 / 颜 / 浮 | `ink` / `tint` / `glow` | 墨色循环 / 色盘 / 浮光循环 |
-| | 速 / 眠 / 抖 | `speed` / `sleep` / `shake` | 速度挡 / sleep 模式 / 抖擞 |
+| | 眠 / 抖 | `sleep` / `shake` | sleep 模式 / 抖擞 |
 | ② 格点 · 走格范式 · 躯体字号 | 谐步 / 廊道 / 漫游 | `setMotionStyle` + `data-motion` | `setBodyMotionStyle`；呈现仅 `harmonic`/`snake_stream`，`contour_drift` 回落谐步；**漫游** 按钮 `ui-arc-standby-only` |
 | | 字号 / 颤 / 颤幅 / 紊 | `bodyGlyphEm` / `glyphsJitter` / `silhouetteJitterAmp` / `textureMotion` | `cycleBodyGlyphEmMul` → `_applyGridTypography`；颤；**颤幅** `cycleSilhouetteJitterAmpMul`（绘移 cap）；纹理体动 |
-| | 波 / 徙 / 粒 | `fluid` / `gridMarch` / `megaPack` | 流体强度 / 格移倍率 / 巨字粒数 |
+| | 波 / 粒 | `fluid` / `megaPack` | 流体强度 / 巨字粒数（**体内节拍与格移** 为 `pet.js` 常量，无侧栏挡位） |
 | ③ 巨字/颜 · 垫底（待机）· 动静 | 整块灰底 / 淡影（待机） / 内动 | `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationDynamics` | **灰底/淡影**：`ui-arc-standby-only`+`display:contents`，仅待机层。**内动**：呈现体内动；关=锁格真静（叠分仍解共格）；**关→开** `_glyphFlash` |
 | | 规整 | `silhouetteCalm` | `applyPresentationSilhouetteHarmonicCalm` |
 | ④ 呈现层 · 巨字排版 | 字比 / 容纳 / 排布 | `megaScale` / `macroFit` / `megaPresentLayout` | `megaLayoutScale` / `macroFitMode` / **`cyclePresentationMegaLayoutMode`**（拼满画布 ↔ 逐字轮换） |

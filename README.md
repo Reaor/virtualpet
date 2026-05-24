@@ -138,7 +138,7 @@ webView.loadUrl("file:///android_asset/pet/index.html");
 | 粒子数量（性能/密度） | `app.js` 里 `new Pet(canvas, { particleCount: 150 })` |
 | 默认字池 | `pet.js` 里的 `DEFAULT_POOL` |
 | 换形时间间隔 | `app.js` 最后 `setInterval(..., 11000)` |
-| 纵横格走位 | `pet.js` 默认 `gridMarch`：每字沿曼哈顿路径（先横或先纵）逐格移向目标，类「舞蹈队形」；`gridMarchSpeed` 控制格/秒 |
+| 纵横格走位 | `pet.js` 默认 `gridMarch`：每字沿曼哈顿路径（先横或先纵）逐格移向目标，类「舞蹈队形」；沿格追赶标度为 **`FIXED_GRID_MARCH_SPEED` 常量**（侧栏已无「徙」挡位） |
 | 新增形态 | `pet.js` 的 `FORMS` |
 | 新增表情 | `pet.js` 的 `EXPRESSIONS` 及渲染分支 |
 | 觅食路径 | `app.js` 的 `triggerFeeding` |

@@ -732,8 +732,7 @@
       action === "textureMotion" ||
       action === "silhouetteMatteUnderlay" ||
       action === "outlineContourFirst" ||
-      action === "presentationDynamics" ||
-      action === "gridMarch"
+      action === "presentationDynamics"
     );
   }
 
@@ -756,7 +755,7 @@
           pet.cycleUiArcMode();
           const lab = pet.uiArcMode === "presentation" ? "呈现" : "待机";
           toast(
-            `层级 · ${lab}（色/速/谐步·廊道/字号/颤/紊/灰底·淡影/内动/规整/墨/浮/波/徙/粒/字比/容纳 分套保留）`
+            `层级 · ${lab}（色/谐步·廊道/字号/颤/紊/灰底·淡影/内动/规整/墨/浮/波/粒/字比/容纳 分套保留）`
           );
           syncMotionStyleRail(pet);
         } else if (action === "morph") {
@@ -789,11 +788,6 @@
           "心跳",
         ];
         toast((gl[pet.glowMode | 0] || "浮光") + `（${arcLayerZh()}）`);
-      } else if (action === "speed") {
-        const v = pet.cycleGlyphMotionSpeed();
-        toast(
-          `运动 ×${v.toFixed(2)}（${arcLayerZh()}；调制节拍/格移/流体相位，与「徙」格移倍率独立）`
-        );
       } else if (action === "setMotionStyle") {
         const motion = btn.dataset.motion;
         if (pet.uiArcMode === "presentation" && motion === "contour_drift") {
@@ -882,9 +876,6 @@
       } else if (action === "fluid") {
         const v = pet.cycleArcFluidStrength();
         toast(`波纹强度 ×${v.toFixed(2)}（${arcLayerZh()}）`);
-      } else if (action === "gridMarch") {
-        const v = pet.cycleArcGridMarchSpeed();
-        toast(`格移速度 ×${v.toFixed(2)}（${arcLayerZh()}）`);
       } else if (action === "megaPack") {
         const m = pet.cycleArcMegaParticleMul();
         toast(`巨字粒数 ×${m.toFixed(2)}（${arcLayerZh()}；已巨字则重建）`);

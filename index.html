@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#f2f2f7" />
-  <meta name="ziling-build" content="3.35.20" />
+  <meta name="ziling-build" content="3.35.21" />
   <title>字灵 · 开发者页控制台</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css" />
-  <link rel="stylesheet" href="./styles.css?v=3.35.20" />
+  <link rel="stylesheet" href="./styles.css?v=3.35.21" />
 </head>
 <body>
   <div class="app" data-ui-arc="standby">
@@ -40,7 +40,6 @@
               <button type="button" class="rail-tool rail-tool--stack" data-action="ink" title="【墨】躯体墨色场：在几种水墨渐变模式间循环（当前层记忆）。"><span class="rail-tool-k">墨</span><span class="rail-tool-hint">墨色场</span></button>
               <button type="button" class="rail-tool rail-tool--stack" data-action="tint" title="【颜】打开色盘，设置小字颜色（写入当前层偏好）。"><span class="rail-tool-k">颜</span><span class="rail-tool-hint">字色盘</span></button>
               <button type="button" class="rail-tool rail-tool--stack" data-action="glow" title="【浮】浮光律动：边缘闪光等发光模式循环（当前层记忆）。"><span class="rail-tool-k">浮</span><span class="rail-tool-hint">边缘光</span></button>
-              <button type="button" class="rail-tool rail-tool--stack" data-action="speed" title="【速】体内运动总闸门：调制谐波节拍、格移追赶感、流体相位；与「徙」倍率不同，且受层级 calm 曲线影响。"><span class="rail-tool-k">速</span><span class="rail-tool-hint">体内节拍</span></button>
               <button type="button" class="rail-tool rail-tool--stack" data-action="sleep" title="【眠】小憩：整体略缩，巡逻/流体/格移明显压低，便于辨形与减少躁动。"><span class="rail-tool-k">眠</span><span class="rail-tool-hint">整体静</span></button>
               <button type="button" class="rail-tool rail-tool--stack" data-action="shake" title="【抖】抖擞：短时激发散开与表情，用于打破沉闷。"><span class="rail-tool-k">抖</span><span class="rail-tool-hint">散开一下</span></button>
             </nav>
@@ -48,7 +47,7 @@
           <div class="rail-section">
             <div class="rail-section-head">
               <div class="rail-section-title">② 格点 · 走格 · 沙拨 · 字号</div>
-              <p class="rail-section-hint">沙拨在下列首行；谐步=一字一格；徙=追格快慢</p>
+              <p class="rail-section-hint">沙拨在下列首行；谐步=一字一格；沿格节拍已统一低速（见 DESIGN）</p>
             </div>
             <nav class="rail-tools rail-tools-grid" role="toolbar" aria-label="沙拨互动">
               <button type="button" class="rail-tool rail-tool--stack rail-tool-span2 rail-tool--sand-plow" id="sandPlowBtn" data-action="sandPlow" title="【沙拨字】开：字灵模式下在画布任一处按下再拖，只拨体内字粒、整体不跟拖（须走格）；贴活动区边缘会轻散再向心聚。关：恢复整体拖曳。"><span class="rail-tool-k">沙拨字</span><span class="rail-tool-hint">开：拖画布=拨沙 · 关：拖整体</span></button>
@@ -64,7 +63,6 @@
               <button type="button" class="rail-tool rail-tool--stack" data-action="silhouetteJitterAmp" title="【颤幅】亚格颤动画位移幅度挡（须开「颤」才有绘移；当前层记忆）。"><span class="rail-tool-k">颤幅</span><span class="rail-tool-hint">颤强度</span></button>
               <button type="button" class="rail-tool rail-tool--stack" data-action="textureMotion" title="【紊】纹理体动：流=弹簧式纹理相位；序=芯层邻格换位（巨字/颜 mask 或格移关闭时序不生效）。"><span class="rail-tool-k">紊</span><span class="rail-tool-hint">纹理动</span></button>
               <button type="button" class="rail-tool rail-tool--stack" data-action="fluid" title="【波】液体波纹强度：影响非 mask 或 mask 内允许的相位摆动（当前层记忆）。"><span class="rail-tool-k">波</span><span class="rail-tool-hint">流体幅</span></button>
-              <button type="button" class="rail-tool rail-tool--stack" data-action="gridMarch" title="【徙】格点迁移速度倍率：字粒沿格追赶布局锚点的快慢（当前层记忆）。"><span class="rail-tool-k">徙</span><span class="rail-tool-hint">追格速</span></button>
               <button type="button" class="rail-tool rail-tool--stack" data-action="megaPack" title="【粒】巨字/颜粒子数倍率：在巨字或颜形态下点按后重建粒子规模（当前层记忆）。"><span class="rail-tool-k">粒</span><span class="rail-tool-hint">粒子数</span></button>
             </nav>
           </div>
@@ -129,7 +127,7 @@
         <div class="stage-main" id="stageMain" aria-hidden="false">
           <canvas id="petCanvas" aria-label="字灵画布"></canvas>
           <div class="form-label" id="formLabel">软团</div>
-          <div class="hint" id="hint">点页眉 <strong>?</strong> 入门 · 侧栏②首行 <strong>沙拨字</strong> · 关沙拨拖整体<strong>顶边</strong>时躯体字粒<strong>沿边顺滑摊开</strong>（轻算力、少叠分二遍） · 侧栏按钮<strong>悬停</strong>可看长说明 · <strong>规整</strong>后先静再节律换位（轻淡）· 呈现巨字/颜拖曳<strong>剪影跟手、松手才落锚</strong> · 关「内动」<strong>锁格真静</strong>（叠分仍解共格）· 构建 <strong>3.35.20</strong> · 手机/WebView 自动<strong>降载</strong>（亦可 <code>?mobilePerf=0</code> 对照桌面）· URL <code>?macroFit=</code> <code>?megaScale=</code> 等见 PLAN / HANDOFF</div>
+          <div class="hint" id="hint">点页眉 <strong>?</strong> 入门 · 侧栏②首行 <strong>沙拨字</strong> · 关沙拨拖整体<strong>顶边</strong>时躯体字粒<strong>沿边顺滑摊开</strong>（轻算力、少叠分二遍） · 侧栏按钮<strong>悬停</strong>可看长说明 · <strong>规整</strong>后先静再节律换位（轻淡）· 呈现巨字/颜拖曳<strong>剪影跟手、松手才落锚</strong> · 关「内动」<strong>锁格真静</strong>（叠分仍解共格）· 构建 <strong>3.35.21</strong> · 手机/WebView 自动<strong>降载</strong>（亦可 <code>?mobilePerf=0</code> 对照桌面）· URL <code>?macroFit=</code> <code>?megaScale=</code> 等见 PLAN / HANDOFF</div>
         </div>
       </section>
 
@@ -263,7 +261,7 @@
           <ol class="help-dialog-ol">
             <li>底部输入文稿 → 右侧点<strong>「呈」</strong>，画布出现与输入行序一致的字列（一格一字）。</li>
             <li>点<strong>「灵」</strong>或<strong>双击</strong>文稿区 → 化为字灵。</li>
-            <li>左侧<strong>「层」</strong>在<strong>待机</strong>（数学曲线、软团）与<strong>呈现</strong>（巨字、计时、颜文字）之间切换；色、速、走格、灰底/淡影/内动等<strong>分套记忆</strong>。</li>
+            <li>左侧<strong>「层」</strong>在<strong>待机</strong>（数学曲线、软团）与<strong>呈现</strong>（巨字、计时、颜文字）之间切换；色、走格、灰底/淡影/内动等<strong>分套记忆</strong>（体内节拍与沿格追赶已统一为低速常量）。</li>
           </ol>
         </section>
         <section class="help-dialog-section">
@@ -332,11 +330,11 @@
     </div>
   </div>
 
-  <script src="./js/ziling/play-bounds.js?v=3.35.20"></script>
-  <script src="./js/ziling/shape-field.js?v=3.35.20"></script>
-  <script src="./js/ziling/matrix-bridge.js?v=3.35.20"></script>
-  <script src="./js/ziling/shape-consumer.js?v=3.35.20"></script>
-  <script src="./pet.js?v=3.35.20"></script>
-  <script src="./app.js?v=3.35.20"></script>
+  <script src="./js/ziling/play-bounds.js?v=3.35.21"></script>
+  <script src="./js/ziling/shape-field.js?v=3.35.21"></script>
+  <script src="./js/ziling/matrix-bridge.js?v=3.35.21"></script>
+  <script src="./js/ziling/shape-consumer.js?v=3.35.21"></script>
+  <script src="./pet.js?v=3.35.21"></script>
+  <script src="./app.js?v=3.35.21"></script>
 </body>
 </html>
