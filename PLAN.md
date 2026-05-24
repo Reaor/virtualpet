@@ -1,7 +1,7 @@
 # 字灵（Zì Líng）产品计划书
 
 > 对照需求逐项落地；完成项打勾，未做或部分完成写明阻塞与下一步。  
-> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.35.20** 起）。
+> **当前构建**：见 `index.html` 中 `ziling-build`（与页头 `buildStamp` 一致；近期为 **3.35.21** 起）。
 > **接手说明**：`HANDOFF.md`（架构、常见坑、需求归纳、**侧栏 title 与区块**；**非**完整对话逐字存档）。  
 > **产品设计书**：`DESIGN.md`（自上而下原则与矛盾处理规则；后续指示应写入该文件）。
 
@@ -24,7 +24,7 @@
 
 > 非排期承诺；用于避免零散优化失焦。**验收真源仍以 `DESIGN.md` 为准。**
 
-1. **关内动下「速」的可感度**（`mergePresentationSilhouetteMotion` / `presSleep` 与 `timeScale`）：与 `DESIGN` §2.5「统一节拍」对齐，用可复现步骤 + 期望体感写回子项后收口。  
+1. ~~**关内动下「速」的可感度**~~（**3.35.21 起**：侧栏「速」已移除，体内节拍与格移为 **`pet.js` 固定常量**；`mergePresentationSilhouetteMotion` 仍管层级幅速，与 `motionTimeBlend` 组合不变。）
 2. **规整后谐步观感**（`strictSilGrid`、亚格颤 lerp、生命周期 α 限幅）：关内动静态时的「匀」与阅读负担；建议用截图/录屏约定「合格 / 仍部分」。  
 3. **格路径平滑（非 mask 形态）**：`gridCellMotionEase` 与弯折质量；`DESIGN` 已列 B-spline 为长期项——单独作 **P2**，不与呈现层辨形抢同一迭代。
 

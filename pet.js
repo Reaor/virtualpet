@@ -181,6 +181,13 @@
   const rand = (a, b) => a + Math.random() * (b - a);
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+  /**
+   * 体内节拍与沿格追赶（原侧栏「速」「徙」）：全模态统一为低速常量，
+   * 便于看清沿格轨迹；`_arcPrefs` 仍存字段但快照/应用时覆写为下列值。
+   */
+  const FIXED_GLYPH_MOTION_SPEED = 0.44;
+  const FIXED_GRID_MARCH_SPEED = 0.9;
+
   function hashShuffle(arr, seed) {
     // 稳定伪随机洗牌：换形时若粒子数不变，字序不乱窜
     const a = arr.slice();
@@ -2780,9 +2787,9 @@
   }
 
   /**
-   * 层级 `mk.timeScale`（待机 1、呈现压低、剪影再压低）与侧栏「速」`gms0` 的组合：
-   * 旧实现用 `gms = gms0 * timeScale`，在呈现+剪影下 timeScale 可至 ~0.14，导致节拍/格移/流体相位几乎不随「速」变化。
-   * 这里用 **凸组合** 保留「层越冷静越快不起来」的趋势，但为 `gms0` 留出下限通道，使速键始终可感知。
+   * 层级 `mk.timeScale`（待机 1、呈现压低、剪影再压低）与体内节拍基 `gms0` 的组合：
+   * 旧实现用 `gms = gms0 * timeScale`，在呈现+剪影下 timeScale 可至 ~0.14，节拍易过平。
+   * 这里用 **凸组合** 保留「层越冷静越快不起来」的趋势，并为低速基线留出通道，避免完全凝滞。
    */
   function motionTimeBlend(mkTimeScale) {
     const ts = clamp(mkTimeScale != null ? +mkTimeScale : 1, 0.12, 1);
@@ -2799,7 +2806,7 @@
 
   function snapshotArcVisualPrefs(self) {
     const b = self._arcPrefs[self.uiArcMode];
-    b.glyphMotionSpeed = clamp(self.glyphMotionSpeed, 0.25, 2.5);
+    b.glyphMotionSpeed = FIXED_GLYPH_MOTION_SPEED;
     b.bodyTintHex = self.bodyTintHex;
     b.glowMode = self.glowMode | 0;
     b.bodyColorMode = self.bodyColorMode | 0;
@@ -2808,11 +2815,7 @@
       0,
       0.55
     );
-    b.gridMarchSpeed = clamp(
-      self.gridMarchSpeed != null ? +self.gridMarchSpeed : 2,
-      0.85,
-      3.6
-    );
+    b.gridMarchSpeed = FIXED_GRID_MARCH_SPEED;
     b.megaParticleMul = clamp(
       b.megaParticleMul != null ? +b.megaParticleMul : 1,
       0.72,
@@ -2849,7 +2852,7 @@
 
   function applyArcVisualPrefsToPet(self) {
     const b = self._arcPrefs[self.uiArcMode];
-    self.glyphMotionSpeed = clamp(b.glyphMotionSpeed, 0.25, 2.5);
+    self.glyphMotionSpeed = FIXED_GLYPH_MOTION_SPEED;
     self.bodyTintHex = b.bodyTintHex;
     self.glowMode = b.glowMode | 0;
     self.bodyColorMode = b.bodyColorMode | 0;
@@ -2858,11 +2861,7 @@
       0,
       0.55
     );
-    self.gridMarchSpeed = clamp(
-      b.gridMarchSpeed != null ? +b.gridMarchSpeed : 2,
-      0.85,
-      3.6
-    );
+    self.gridMarchSpeed = FIXED_GRID_MARCH_SPEED;
     self.bodyMotionStyle = normalizeBodyMotionStyle(b.bodyMotionStyle);
     self.silhouetteGlyphJitter = !!b.glyphsJitter;
     self.silhouetteMatteUnderlay = !!b.silhouetteMatteUnderlay;
@@ -3289,15 +3288,12 @@
       this._fluidPhase = 0;
       /** 沿格子纵横**各自**平滑走位（曼哈顿路径），队形变换感 */
       this.gridMarch = opts.gridMarch !== false;
-      /** 沿格线移动速度（格/秒） */
-      this.gridMarchSpeed = opts.gridMarchSpeed != null ? opts.gridMarchSpeed : 2;
+      /** 沿格线追赶布局锚点的标度（侧栏「徙」已移除；全模态统一常量） */
+      this.gridMarchSpeed = FIXED_GRID_MARCH_SPEED;
       /** 格移后 `g.x/y` 向 `(mgx,mgy)*cell` 平滑贴靠，减轻一步一格的锯齿感（计划 P2）；`false` 关闭 */
       this.gridCellMotionEase = opts.gridCellMotionEase !== false;
-      /** 每字体内运动总倍率（格移、波纹、巡逻） */
-      this.glyphMotionSpeed =
-        opts.glyphMotionSpeed != null
-          ? clamp(+opts.glyphMotionSpeed, 0.25, 2.5)
-          : 1;
+      /** 每字体内运动总倍率（格移、波纹、巡逻）；侧栏「速」已移除，统一常量 */
+      this.glyphMotionSpeed = FIXED_GLYPH_MOTION_SPEED;
       /** 吞字后对形态的偏好（多字命中同一形会提高概率） */
       this.formDigestBias = {};
       this.formDigestBiasDecay = 0.12; // per second
@@ -3369,21 +3365,13 @@
         opts.initialForm && isDisplayPresentationForm(opts.initialForm)
           ? opts.initialForm
           : "mega";
-      const _sp0 = clamp(
-        this.glyphMotionSpeed != null ? this.glyphMotionSpeed : 1,
-        0.25,
-        2.5
-      );
+      const _sp0 = FIXED_GLYPH_MOTION_SPEED;
       const _fs0 = clamp(
         this.fluidStrength != null ? +this.fluidStrength : 0.2,
         0,
         0.55
       );
-      const _gm0 = clamp(
-        this.gridMarchSpeed != null ? +this.gridMarchSpeed : 2,
-        0.85,
-        3.6
-      );
+      const _gm0 = FIXED_GRID_MARCH_SPEED;
       const _tex0 = normalizeTextureMotionMode(opts.textureMotionMode);
       this._arcPrefs = {
         standby: {
@@ -6555,11 +6543,7 @@
 
     _update(dt, now) {
       const t = now / 1000;
-      const gms0 = clamp(
-        this.glyphMotionSpeed != null ? this.glyphMotionSpeed : 1,
-        0.25,
-        2.5
-      );
+      const gms0 = FIXED_GLYPH_MOTION_SPEED;
       const mk = mergePresentationSilhouetteMotion(
         this,
         getMotionProfileKernelsForPet(this)
@@ -6889,18 +6873,19 @@
           (this._sleepMotionMul || 1);
         /** 呈现层剪影：每字每帧最多迈一格（匀速曼哈顿），避免多步追赶造成叠乱 */
         const rawMarchSteps = Math.round(
-          (this.gridMarchSpeed || 2) *
+          (this.gridMarchSpeed || FIXED_GRID_MARCH_SPEED) *
             marchGms *
             dt *
-            6 *
+            5 *
             (this._sleepMotionMul || 1)
         );
+        /** 非呈现剪影谐步时亦封顶每帧迈格数，避免大嘴 dt 或旧高速档造成「闪烁」跳格 */
         const stepBudget = presSilHarm
           ? 1
           : Math.max(
               1,
               Math.min(
-                silMaskPet ? 4 : 6,
+                2,
                 rawMarchSteps
               )
             );
@@ -6921,7 +6906,7 @@
           this._snakePhase +=
             dt *
             (0.28 + 0.46 * gms0) *
-            (0.4 + 0.36 * clamp(this.gridMarchSpeed || 2, 0.85, 3.6)) *
+            (0.4 + 0.36 * clamp(this.gridMarchSpeed || FIXED_GRID_MARCH_SPEED, 0.55, 3.6)) *
             (contourStatic ? 0.42 : 1) *
             (this._sleepMotionMul || 1) *
             snakeVisMul;
@@ -8707,23 +8692,9 @@
       return this.snakePathVariant;
     }
 
-    /** 侧栏「速」：循环体内运动速度挡位 */
+    /** 体内节拍已固定为常量（原侧栏「速」）；保留 API 以免旧调用抛错 */
     cycleGlyphMotionSpeed() {
-      const tiers = [0.4, 0.65, 1, 1.45, 1.9, 2.35];
-      let i = tiers.indexOf(this.glyphMotionSpeed);
-      if (i < 0) {
-        let best = 0;
-        let bd = Infinity;
-        for (let k = 0; k < tiers.length; k++) {
-          const d = Math.abs(tiers[k] - (this.glyphMotionSpeed || 1));
-          if (d < bd) {
-            bd = d;
-            best = k;
-          }
-        }
-        i = best;
-      }
-      this.glyphMotionSpeed = tiers[(i + 1) % tiers.length];
+      this.glyphMotionSpeed = FIXED_GLYPH_MOTION_SPEED;
       snapshotArcVisualPrefs(this);
       return this.glyphMotionSpeed;
     }
@@ -8739,7 +8710,7 @@
       snapshotArcVisualPrefs(this);
     }
 
-    /** 当前层：液体波纹强度（与速/墨等分套记忆） */
+    /** 当前层：液体波纹强度（与墨等分套记忆） */
     cycleArcFluidStrength() {
       const tiers = [0, 0.06, 0.12, 0.18, 0.25, 0.34, 0.44];
       const cur = clamp(this.fluidStrength != null ? +this.fluidStrength : 0.2, 0, 0.55);
@@ -8761,28 +8732,9 @@
       return this.fluidStrength;
     }
 
-    /** 当前层：格点沿路径移动速度 */
+    /** 沿格追赶已固定为常量（原侧栏「徙」）；保留 API 以免旧调用抛错 */
     cycleArcGridMarchSpeed() {
-      const tiers = [1.1, 1.45, 1.85, 2.25, 2.75, 3.2];
-      const cur = clamp(
-        this.gridMarchSpeed != null ? +this.gridMarchSpeed : 2,
-        0.85,
-        3.6
-      );
-      let i = tiers.findIndex((t) => Math.abs(t - cur) < 0.11);
-      if (i < 0) {
-        let best = 0;
-        let bd = Infinity;
-        for (let k = 0; k < tiers.length; k++) {
-          const d = Math.abs(tiers[k] - cur);
-          if (d < bd) {
-            bd = d;
-            best = k;
-          }
-        }
-        i = best;
-      }
-      this.gridMarchSpeed = clamp(tiers[(i + 1) % tiers.length], 0.85, 3.6);
+      this.gridMarchSpeed = FIXED_GRID_MARCH_SPEED;
       snapshotArcVisualPrefs(this);
       return this.gridMarchSpeed;
     }
@@ -8817,7 +8769,7 @@
     }
 
     /**
-     * 侧栏「待机 / 呈现」层级：决定运动内核与独立一套色·速·墨·浮光参数。
+     * 侧栏「待机 / 呈现」层级：决定运动内核与独立一套色·墨·浮光等参数（体内节拍/格移已统一常量）。
      * @param {boolean} [silent] 为 true 时不触发 onUiArcModeChange
      */
     setUiArcMode(mode, silent) {
