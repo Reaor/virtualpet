@@ -3311,6 +3311,9 @@
       this._dragWallMegaEntryDone = false;
       /** 沙拨 + 巨字：手指贴上活动区边时只触发一次墙散，移开边后复位 */
       this._sandMegaWallShattered = false;
+      /** 拖整体贴边：挤压方向（世界坐标、指向场内），供橡皮泥式切向散开 */
+      this._dragWallPinNx = 0;
+      this._dragWallPinNy = 0;
       /** 活动区外壁「碰壁」绘图层脉冲 0..1（与 `_wallShatter`、沙拨贴边联动） */
       this._boundsWallPulse = 0;
 
@@ -6292,7 +6295,7 @@
       );
     }
 
-    /** 拖整体时持续顶边：非巨字用弱撞散脉冲 + 缓聚；巨字/颜 mask 仅首次贴边一次撞散（禁高频抖） */
+    /** 拖整体贴边：橡皮泥式挤压（切向顺滑散开），不再用 `_wallShatter` 模拟碰撞 */
     _tickDragWallPhysics(dt, now) {
       if (this.viewMode !== "pet" || !this.dragging || this._sandPlowDrag) {
         if (!this.dragging) {
@@ -6300,6 +6303,8 @@
           this._wallRegroupK = 0;
           this._dragWallPulseAcc = 0;
           this._dragWallMegaEntryDone = false;
+          this._dragWallPinNx = 0;
+          this._dragWallPinNy = 0;
         }
         return;
       }
@@ -6327,6 +6332,8 @@
         this._wallRegroupK = Math.max(0, (this._wallRegroupK || 0) - dt * 1.35);
         this._dragWallPulseAcc = 0;
         this._dragWallMegaEntryDone = false;
+        this._dragWallPinNx = 0;
+        this._dragWallPinNy = 0;
         return;
       }
 
@@ -6343,34 +6350,27 @@
         wnx /= nlen;
         wny /= nlen;
       } else {
-        wnx = rand(-0.4, 0.4);
-        wny = rand(-0.4, 0.4);
+        wnx = 0;
+        wny = 0;
       }
+      this._dragWallPinNx = wnx;
+      this._dragWallPinNy = wny;
 
-      const megaWall = isMaskBackedMegaKao(this);
-      if (megaWall) {
-        if (!this._dragWallMegaEntryDone) {
-          this._dragWallMegaEntryDone = true;
-          this._wallShatter(wnx, wny, { edgeEntry: true });
-        }
+      if (!this._dragWallMegaEntryDone) {
+        this._dragWallMegaEntryDone = true;
+        this._glyphFlash = Math.min(
+          0.42,
+          (this._glyphFlash || 0) + 0.085
+        );
         this._boundsWallPulse = Math.min(
           1,
-          (this._boundsWallPulse || 0) + dt * 0.38
+          (this._boundsWallPulse || 0) + 0.26
         );
-        return;
       }
-
-      const spd = Math.hypot(this.dragVel.x, this.dragVel.y);
-      this._dragWallPulseAcc += dt * (0.95 + Math.min(spd * 0.1, 3.2));
-      const interval = 0.11;
-      if (
-        this._dragWallPulseAcc >= interval &&
-        now - (this._lastDragWallPulseAt || 0) > 52
-      ) {
-        this._dragWallPulseAcc -= interval * 0.5;
-        this._lastDragWallPulseAt = now;
-        this._wallShatter(wnx, wny, { pulse: true });
-      }
+      this._boundsWallPulse = Math.min(
+        1,
+        (this._boundsWallPulse || 0) + dt * 0.3
+      );
     }
 
     _applyPlayfieldBounds(dt, now) {
@@ -6397,10 +6397,17 @@
       const hit = PB.resolve(this.pos, this.vel, b, r, 0.38, 155);
       if (hit && now - this._lastWallFxAt > 55) {
         this._lastWallFxAt = now;
-        this._wallShatter(hit.nx, hit.ny);
+        this._boundsWallPulse = Math.min(
+          1,
+          (this._boundsWallPulse || 0) + 0.34
+        );
+        this._glyphFlash = Math.min(
+          0.38,
+          (this._glyphFlash || 0) + 0.07
+        );
         const tx = -hit.ny;
         const ty = hit.nx;
-        const sk = 28 * (0.85 + Math.random() * 0.55);
+        const sk = 18 * (0.85 + Math.random() * 0.35);
         this.vel.x += tx * sk * dt;
         this.vel.y += ty * sk * dt;
       }
@@ -6455,6 +6462,8 @@
       this._lastDragWallPulseAt = 0;
       this._dragWallMegaEntryDone = false;
       this._sandMegaWallShattered = false;
+      this._dragWallPinNx = 0;
+      this._dragWallPinNy = 0;
       this.dragOffset.x = this.pos.x - x;
       this.dragOffset.y = this.pos.y - y;
       this._dragResidualLx = 0;
@@ -6526,7 +6535,10 @@
           if (!this._sandMegaWallShattered) {
             this._sandMegaWallShattered = true;
             this._lastWallFxAt = nowMs;
-            this._wallShatter(wnx, wny, { edgeEntry: true });
+            this._boundsWallPulse = Math.min(
+              1,
+              (this._boundsWallPulse || 0) + 0.3
+            );
           }
         } else if (nowMs - this._lastWallFxAt > 72) {
           this._lastWallFxAt = nowMs;
@@ -6540,19 +6552,6 @@
       const wantY = y + this.dragOffset.y;
       const nx = clamp(wantX, b.minX + r, b.maxX - r);
       const ny = clamp(wantY, b.minY + r, b.maxY - r);
-      const nowMs = typeof performance !== "undefined" ? performance.now() : Date.now();
-      if (!isMaskBackedMegaKao(this) && nowMs - this._lastWallFxAt > 70) {
-        let wnx = 0;
-        let wny = 0;
-        if (wantX < b.minX + r - 0.5) wnx = 1;
-        else if (wantX > b.maxX - r + 0.5) wnx = -1;
-        if (wantY < b.minY + r - 0.5) wny = 1;
-        else if (wantY > b.maxY - r + 0.5) wny = -1;
-        if (wnx !== 0 || wny !== 0) {
-          this._lastWallFxAt = nowMs;
-          this._wallShatter(wnx, wny);
-        }
-      }
       if (this._dragPrevPos) {
         this.dragVel.x = nx - this._dragPrevPos.x;
         this.dragVel.y = ny - this._dragPrevPos.y;
@@ -6599,6 +6598,8 @@
       this._lastDragWallPulseAt = 0;
       this._dragWallMegaEntryDone = false;
       this._sandMegaWallShattered = false;
+      this._dragWallPinNx = 0;
+      this._dragWallPinNy = 0;
       this._dragPrevPos = null;
       if (this._dragShellDecoupled && this._dragShellWorld) {
         this.pos.x = this._dragShellWorld.x;
@@ -7242,6 +7243,34 @@
               wy += Math.cos(ny + g.depth * 1.5) * waveAmpEff * 0.48;
             }
           }
+          if (
+            !useSnakeCell &&
+            this.dragging &&
+            !this._sandPlowDrag &&
+            this._dragWallPinned &&
+            (this._dragWallPinNx !== 0 || this._dragWallPinNy !== 0) &&
+            !mT &&
+            !g.faceRole &&
+            !(presSilHarm && presGlyphSleep && silMaskPet)
+          ) {
+            const wnx = this._dragWallPinNx;
+            const wny = this._dragWallPinNy;
+            const px = wx - bx;
+            const py = wy - by;
+            const tangx = -wny;
+            const tangy = wnx;
+            const span = Math.max(this.size * 0.42, cell * 10);
+            const vn = (px * tangx + py * tangy) / span;
+            const un = (px * wnx + py * wny) / span;
+            const wallBias = clamp(-un, 0, 2.4);
+            const rk = clamp(this._wallRegroupK || 0, 0, 1.15);
+            const amp = cell * rk * (0.4 + 0.48 * wallBias);
+            wx += tangx * vn * amp;
+            wy += tangy * vn * amp * 0.92;
+            const bulge = cell * rk * 0.085 * wallBias;
+            wx += wnx * bulge;
+            wy += wny * bulge;
+          }
           if (!useSnakeCell) {
             const rx = rumble ? Math.sin(t * 26 + g.depth * 15) * rumble : 0;
             const ry = rumble ? Math.cos(t * 24 + g.depth * 13) * rumble : 0;
@@ -7340,6 +7369,13 @@
               if (wy < my0) pen = Math.max(pen, my0 - wy);
               else if (wy > my1) pen = Math.max(pen, wy - my1);
               if (pen > cell * 0.08 && (g._edgeSandCd || 0) <= 0) {
+                if (
+                  this.dragging &&
+                  this._dragWallPinned &&
+                  !this._sandPlowDrag
+                ) {
+                  /* 拖整体贴边：不用随机缘踢，改由贴边挤压场顺滑散开 */
+                } else {
                 let ix = bx - wx;
                 let iy = by - wy;
                 const il = Math.hypot(ix, iy) || 1;
@@ -7369,6 +7405,7 @@
                 g._impactOx = (g._impactOx || 0) * 0.34 + ix * iKick;
                 g._impactOy = (g._impactOy || 0) * 0.34 + iy * iKick;
                 g._edgeSandCd = 0.095 + Math.random() * 0.085;
+                }
               }
             }
             if ((g._edgeSandCd || 0) > 0) g._edgeSandCd -= dt;
@@ -7469,6 +7506,7 @@
             (this._wallRegroupK || 0) > 0.05 &&
             this.dragging &&
             !this._sandPlowDrag &&
+            !this._dragWallPinned &&
             !mT &&
             !useSnakeCell &&
             !g.faceRole &&
