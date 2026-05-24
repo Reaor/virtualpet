@@ -461,7 +461,7 @@
   /** 是否已超过拖动阈值：超过则取消「松手回稿」意图 */
   let exceededDragThreshold = false;
   const LONG_PRESS_MS = 580;
-  const DRAG_THRESHOLD = 8;
+  const DRAG_THRESHOLD = 5;
 
   function clearLongPressTimer() {
     if (longPressTimer) {

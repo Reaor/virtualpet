@@ -191,7 +191,7 @@
    * 曼哈顿迈格与层 `timeScale` / `marchGms` **解耦**：用累积器得到稳定「格/秒」，
    * 全字同帧共享同一 `stepBudget`，避免 dt 抖动与倍率叠加造成的忽快忽慢、跳格闪烁。
    */
-  const GRID_MARCH_CELLS_PER_SEC = 5.2;
+  const GRID_MARCH_CELLS_PER_SEC = 5.65;
   const GRID_MARCH_MAX_STEPS_PER_FRAME = 3;
 
   function hashShuffle(arr, seed) {
@@ -6333,8 +6333,13 @@
         return;
       }
 
+      const wallRegroupRate =
+        isPresentationSilhouetteHarm(this) &&
+        this.presentationGlyphDynamics
+          ? 0.35
+          : 0.26;
       this._wallRegroupK = clamp(
-        (this._wallRegroupK || 0) + dt * 0.26,
+        (this._wallRegroupK || 0) + dt * wallRegroupRate,
         0,
         1
       );
@@ -6533,8 +6538,8 @@
         const dwy = ny - pty;
         const dlx = (dwx * cos + dwy * sin) / Math.max(cell, 1);
         const dly = (-dwx * sin + dwy * cos) / Math.max(cell, 1);
-        this._dragResidualLx = (this._dragResidualLx || 0) - dlx * 0.58;
-        this._dragResidualLy = (this._dragResidualLy || 0) - dly * 0.58;
+        this._dragResidualLx = (this._dragResidualLx || 0) - dlx * 0.44;
+        this._dragResidualLy = (this._dragResidualLy || 0) - dly * 0.44;
         const cap = 13;
         this._dragResidualLx = clamp(this._dragResidualLx, -cap, cap);
         this._dragResidualLy = clamp(this._dragResidualLy, -cap, cap);
@@ -6655,7 +6660,7 @@
         : 1;
       const ensBoost =
         ensBoostCore *
-        (presSilHarm && this.presentationGlyphDynamics ? 0.55 : 1);
+        (presSilHarm && this.presentationGlyphDynamics ? 0.64 : 1);
       this._ensemblePhase +=
         dt *
         (silMaskPet
@@ -6933,19 +6938,12 @@
 
       if (this.gridMarch && this.gridSnapping) {
         const accMul =
-          (this._sleepMotionMul || 1) * (contourStatic ? 0.58 : 1);
+          (this._sleepMotionMul || 1) * (contourStatic ? 0.66 : 1);
         this._gridMarchFrameAcc += dt * GRID_MARCH_CELLS_PER_SEC * accMul;
-        let stepBudget = 0;
-        if (presSilHarm) {
-          if (this._gridMarchFrameAcc >= 1) {
-            stepBudget = 1;
-            this._gridMarchFrameAcc -= 1;
-          }
-        } else {
-          const s0 = Math.floor(this._gridMarchFrameAcc);
-          stepBudget = Math.min(GRID_MARCH_MAX_STEPS_PER_FRAME, s0);
-          this._gridMarchFrameAcc -= stepBudget;
-        }
+        /** 呈现剪影曾与待机分支分叉为「acc≥1 才迈 1 格」，易积压后整帧齐跳（闪现）；与待机相同分数累积扣减，帧 cap 仍限突进格数 */
+        const s0 = Math.floor(this._gridMarchFrameAcc);
+        const stepBudget = Math.min(GRID_MARCH_MAX_STEPS_PER_FRAME, s0);
+        this._gridMarchFrameAcc -= stepBudget;
         const crispMotion = isGridLayoutImmutableForm(this.form);
         const _sandPlayBounds =
           this.viewMode === "pet" ? this._playBounds() : null;
@@ -7225,11 +7223,17 @@
             const rk0 = clamp(this._wallRegroupK || 0, 0, 1);
             const rk = rk0 * rk0 * (3 - 2 * rk0);
             const vnS = Math.tanh(vn * 1.02);
+            const clayMul =
+              presSilHarm && !presGlyphSleep && silMaskPet ? 1.32 : 1;
             const amp =
-              cell * rk * (0.32 + 0.38 * wallBias) * (0.88 + 0.12 * vnS * vnS);
+              cell *
+              rk *
+              (0.32 + 0.38 * wallBias) *
+              (0.88 + 0.12 * vnS * vnS) *
+              clayMul;
             wx += tangx * vnS * amp;
             wy += tangy * vnS * amp * 0.93;
-            const bulge = cell * rk * 0.062 * wallBias;
+            const bulge = cell * rk * 0.062 * wallBias * clayMul;
             wx += wnx * bulge;
             wy += wny * bulge;
           }
@@ -7619,7 +7623,11 @@
               : (this._sepAltFrame & 1) === 1);
           const sepSecondPass =
             sepSecondPassBase &&
-            !(this.dragging && !this._sandPlowDrag) &&
+            !(
+              this.dragging &&
+              !this._sandPlowDrag &&
+              !this._dragShellDecoupled
+            ) &&
             !this.morphGlyphToTarget;
           if (sepSecondPass) {
             this._separateOverlappingGridGlyphs();
