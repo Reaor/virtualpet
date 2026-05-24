@@ -4519,8 +4519,6 @@
 
     /**
      * 格点 march 后若多粒落在同一 (mgx,mgy)，将后续粒子螺旋挪到最近空位，减轻字体重叠。
-     */
-    /**
      * @param {{ maxPasses?: number }} [opts] 限制遍数（生命周期 / 换形尾部等轻量补跑，避免与主循环全量叠分重复打满）
      */
     _separateOverlappingGridGlyphs(opts) {
