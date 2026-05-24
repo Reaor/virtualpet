@@ -22,5 +22,6 @@
   DESIGN.md              产品意图与变更摘要
   PLAN.md                需求对照与版本号
   HANDOFF.md             接手说明 + §12 控件映射（改侧栏必同步 title 与表）
-  docs/AI_CONTINUITY.md  后续 AI：美观/流畅/创新原则、检阅与嵌入目标、接手顺序
+  docs/CONTEXT_ARCHIVE.md 用户声音、会话时间线、开放题（新会话建议首读）
+  docs/AI_CONTINUITY.md   原则、检阅/嵌入目标、接手顺序
   docs/IMPROVEMENTS.md   按构建检阅改进

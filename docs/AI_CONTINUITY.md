@@ -1,7 +1,8 @@
 # 字灵 · 后续 AI 接手延续说明
 
 > **读者**：后续接手的 AI 或工程师。  
-> **与 `HANDOFF.md` 的关系**：`HANDOFF.md` 偏 **机制与坑位**（状态机、字段、易混点）；本文偏 **产品原则、当前局面、优先级语言**，并与人类已确认的表述对齐。
+> **与 `HANDOFF.md` 的关系**：`HANDOFF.md` 偏 **机制与坑位**（状态机、字段、易混点）；本文偏 **产品原则、当前局面、优先级语言**，并与人类已确认的表述对齐。  
+> **与 `docs/CONTEXT_ARCHIVE.md` 的关系**：档案偏 **用户原声归纳、多轮会话时间线、开放题与 PR 线索**；想理解「人类要什么、历史上吵过什么」时 **先读档案，再读本文**。
 
 ---
 
@@ -22,7 +23,7 @@
 ## 2. 当前工程形态（事实摘要）
 
 - **技术栈**：零依赖、无构建、无 npm、**纯静态** `index.html` + `styles.css` + `app.js` + `pet.js` + `js/ziling/*.js`。无自动化测试与 linter。
-- **权威版本号**：`index.html` 中 **`meta ziling-build`** 与资源 **`?v=`**（与页眉 `buildStamp` 一致）。撰写本文时主文档构建为 **3.35.25**；若不一致，以仓库内 `index.html` 为准。
+- **权威版本号**：`index.html` 中 **`meta ziling-build`** 与资源 **`?v=`**（与页眉 `buildStamp` 一致）。以仓库内 **`index.html` 为准**；全量上下文档案见 **`docs/CONTEXT_ARCHIVE.md`** 顶部元数据。
 - **检阅改进索引**：`docs/IMPROVEMENTS.md`（按构建倒序，便于 diff 行为）。
 - **产品设计真源**：`DESIGN.md`（与早期描述冲突时以 DESIGN 为准）。
 - **需求对照**：`PLAN.md`。
@@ -53,18 +54,19 @@
 ### 4.3 格迈与叠分（易改易炸）
 
 - **`_gridMarchFrameAcc` + `GRID_MARCH_CELLS_PER_SEC`**：全字共享 `stepBudget`；呈现剪影与待机 **同一套扣减逻辑**（3.35.25 起，避免积压后齐跳）。
-- **解耦拖**（` _dragShellDecoupled`）：剪影跟手、松手落锚；叠分第二遍 **不可**在解耦拖时误关（3.35.25 已修条件）。
+- **解耦拖**（`_dragShellDecoupled`）：剪影跟手、松手落锚；叠分第二遍 **不可**在解耦拖时误关（3.35.25 已修条件）。
 - **改常数前**：读 `HANDOFF.md` §4.1 与 `IMPROVEMENTS` 对应行，避免回归「闪现 / 叠字 / 待机被呈现逻辑误伤」类历史问题。
 
 ---
 
 ## 5. 建议的接手顺序（新会话第一步）
 
-1. 读 **`AGENTS.md`**（如何跑、缓存、`?dev=1`、嵌入参数）。  
-2. 读 **`HANDOFF.md` §1–6**（状态机、呈现条件、运动表）。  
-3. 扫 **`docs/IMPROVEMENTS.md`** 顶部数行（当前构建最近在改什么）。  
-4. 若改行为或视觉，核对 **`DESIGN.md`** 变更表是否需追加一行。  
-5. 改侧栏：同步 **`index.html` 的 `title` / 分区文案** 与 `HANDOFF.md` §12（若有控件映射表）。
+1. 读 **`docs/CONTEXT_ARCHIVE.md`**（用户声音、会话时间线、开放题、PR/分支线索）。  
+2. 读 **`AGENTS.md`**（如何跑、缓存、`?dev=1`、嵌入参数）。  
+3. 读 **`HANDOFF.md` §1–6**（状态机、呈现条件、运动表）。  
+4. 扫 **`docs/IMPROVEMENTS.md`** 顶部数行（当前构建最近在改什么）。  
+5. 若改行为或视觉，核对 **`DESIGN.md`** 变更表是否需追加一行。  
+6. 改侧栏：同步 **`index.html` 的 `title` / 分区文案** 与 `HANDOFF.md` §12（若有控件映射表）。
 
 ---
 
@@ -82,12 +84,13 @@
 ## 7. 文档索引（复制给新会话）
 
 ```text
-AGENTS.md              运行、缓存、嵌入、?dev=1
-HANDOFF.md             状态机、坑、格迈/叠分细节、侧栏映射
-DESIGN.md              产品原则与变更摘要
-PLAN.md                需求与版本
-docs/IMPROVEMENTS.md    按构建检阅
-docs/AI_CONTINUITY.md   本文：原则 + 局面 + 接手顺序
+docs/CONTEXT_ARCHIVE.md  用户声音、会话归纳、开放题（建议首读）
+docs/AI_CONTINUITY.md     本文：原则 + 局面 + 接手顺序
+AGENTS.md                 运行、缓存、嵌入、?dev=1
+HANDOFF.md                状态机、坑、格迈/叠分细节、侧栏映射
+DESIGN.md                 产品原则与变更摘要
+PLAN.md                   需求与版本
+docs/IMPROVEMENTS.md      按构建检阅
 ```
 
 修改行为或用户可见说明后：** bump `ziling-build` 与 `?v=`**（`index.html`），并在 `IMPROVEMENTS.md` / `DESIGN.md` 按惯例补一行，便于人类检阅与回滚对比。
