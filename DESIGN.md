@@ -105,7 +105,7 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.35.14**：**沙拨字入口外显**：左栏 **② 区首行整宽**「沙拨字」+ 样式 `rail-tool--sand-plow`；`?` 入门增加 **沙拨** 专节；**格点级推开**（`tgx/tgy` 整数偏移 + mask 再走 `_nearestWalkableMarchCell`）补足原先仅亚格 `wx` 位移易被 `round` 吃掉的问题；`wx` 径向/切向略加强。 |
+| 最新 | **3.35.20**：**性能**：拖整体（非沙拨）时 **跳过剪影叠分第二遍**；去掉拖曳 **`dragTo` 周期性 `_wallShatter`** 与沙拨手指贴边 **`_wallShatter`**；贴边 **跳过随机缘 `_tapScatter`**；非拖碰壁 **不再全字 `_wallShatter`**，仅轻闪光 + 切向滑速。**边界**：`_tickDragWallPhysics` + 格迈前 **平滑法向 + smoothstep 强度 + tanh 切向摊开**（橡皮泥感，无全粒子随机撞散）；贴边略 **压低 rumble**。 |
 | 先前 | **3.35.13**：**拨开模式可起手**：`app.js` 在 `sandPlowMode` 下将 `dragPhase=pending` 扩至**画布任一处按下**（原先仅 `downZone===inner` 才进入 `beginDrag`，体外拖曳永远不生效）；侧栏「拨」后 **`syncSandPlowRail`**；`pet.js` 略**加大拨开半径/径向与切向强度**、贴边散略易触发。 |
 | 先前 | **3.35.12**：**拨开模式**（侧栏「拨」）：`sandPlowMode` 写入 `_arcPrefs` 分套；开时 `beginDrag` / `dragTo` 走 **`_sandPlowDrag`**（指针更新 `dragVel`、**不挪** `pos` / 剪影解耦拖）；格迈前对 `wx,wy` 注入 **径向拨开 + 切向 streak**；活动区缘 **带冷却** 的 `_tapScatter` 推向 **躯壳中心** 以聚回框内；缘上拖指针仍触发 **`_wallShatter`**。`app.js`：`syncSandPlowRail`。 |
 | 先前 | **3.35.11**：**移动 / WebView**：`inferEmbeddedMobilePerfRelax` → `_embeddedMobilePerf`：画布 **DPR 上限 2**、粒子 **×0.72**（cap 200）、巨字 want **cap 200**、`_separateOverlappingGridGlyphs` **passes×0.68**、呈现开内动时 **第二遍叠分每 3 帧**、初 settle **6**、宠物模式 **减浅色格线 / 暗色斜线底纹**；`stabilizeAfterControl` / **规整** 在移动端 **单次叠分**。`app.js` 传 **`embeddedMobilePerf`**（**`?mobilePerf=1|0`**、**`?embedded=1`**）。 |

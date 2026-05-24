@@ -3243,6 +3243,16 @@
       this._devResizeLastMs = 0;
       this.dragging = false;
       this.dragOffset = { x: 0, y: 0 };
+      /** 拖整体：意图位置 vs 夹紧后位置（贴边橡皮泥挤压） */
+      this._dragLastWant = null;
+      this._dragLastClamp = null;
+      this._dragWallPinned = false;
+      this._wallRegroupK = 0;
+      this._dragWallPinNx = 0;
+      this._dragWallPinNy = 0;
+      this._dragWallPinNxSm = 0;
+      this._dragWallPinNySm = 0;
+      this._dragWallMegaEntryDone = false;
       /** 呈现巨字排版：拼满画布（分行+自动缩） / 逐字轮换 */
       this.presentationMegaLayoutMode = "fit_canvas";
       this._megaSeqIdx = 0;
@@ -6224,6 +6234,84 @@
       this._glyphFlash = Math.min(0.52, (this._glyphFlash || 0) + 0.24);
     }
 
+    /**
+     * 拖整体顶边：轻量「橡皮泥」挤压（不跑 `_wallShatter` 全字粒循环，省卡顿）。
+     */
+    _tickDragWallPhysics(dt, now) {
+      if (this.viewMode !== "pet" || !this.dragging || this._sandPlowDrag) {
+        if (!this.dragging) {
+          this._dragWallPinned = false;
+          this._wallRegroupK = 0;
+          this._dragWallPinNx = 0;
+          this._dragWallPinNy = 0;
+          this._dragWallPinNxSm = 0;
+          this._dragWallPinNySm = 0;
+          this._dragWallMegaEntryDone = false;
+        }
+        return;
+      }
+      if (!this.gridMarch || !this.gridSnapping) return;
+      if (isMotionLayoutLockedForm(this.form)) return;
+
+      const w = this._dragLastWant;
+      if (!w) return;
+
+      const b = this._playBounds();
+      const r = this._bodyClampRadius();
+      const minX = b.minX + r;
+      const maxX = b.maxX - r;
+      const minY = b.minY + r;
+      const maxY = b.maxY - r;
+      const pinL = w.x < minX;
+      const pinR = w.x > maxX;
+      const pinT = w.y < minY;
+      const pinB = w.y > maxY;
+      const pinned = pinL || pinR || pinT || pinB;
+      this._dragWallPinned = pinned;
+
+      if (!pinned) {
+        this._wallRegroupK = Math.max(0, (this._wallRegroupK || 0) - dt * 1.1);
+        const sr = 1 - Math.exp(-16 * dt);
+        this._dragWallPinNxSm = lerp(this._dragWallPinNxSm || 0, 0, sr);
+        this._dragWallPinNySm = lerp(this._dragWallPinNySm || 0, 0, sr);
+        this._dragWallMegaEntryDone = false;
+        this._dragWallPinNx = 0;
+        this._dragWallPinNy = 0;
+        return;
+      }
+
+      this._wallRegroupK = clamp(
+        (this._wallRegroupK || 0) + dt * 0.26,
+        0,
+        1
+      );
+
+      let wnx = pinL ? 1 : pinR ? -1 : 0;
+      let wny = pinT ? 1 : pinB ? -1 : 0;
+      const nlen = Math.hypot(wnx, wny);
+      if (nlen > 1e-4) {
+        wnx /= nlen;
+        wny /= nlen;
+      } else {
+        wnx = 0;
+        wny = 0;
+      }
+      this._dragWallPinNx = wnx;
+      this._dragWallPinNy = wny;
+
+      const sn = 1 - Math.exp(-14 * dt);
+      this._dragWallPinNxSm = lerp(this._dragWallPinNxSm || 0, wnx, sn);
+      this._dragWallPinNySm = lerp(this._dragWallPinNySm || 0, wny, sn);
+
+      if (!this._dragWallMegaEntryDone) {
+        this._dragWallMegaEntryDone = true;
+        this._glyphFlash = Math.min(
+          0.34,
+          (this._glyphFlash || 0) + 0.05
+        );
+      }
+    }
+
     _applyPlayfieldBounds(dt, now) {
       const b = this._playBounds();
       const r = this._bodyClampRadius();
@@ -6248,10 +6336,13 @@
       const hit = PB.resolve(this.pos, this.vel, b, r, 0.38, 155);
       if (hit && now - this._lastWallFxAt > 55) {
         this._lastWallFxAt = now;
-        this._wallShatter(hit.nx, hit.ny);
+        this._glyphFlash = Math.min(
+          0.36,
+          (this._glyphFlash || 0) + 0.09
+        );
         const tx = -hit.ny;
         const ty = hit.nx;
-        const sk = 28 * (0.85 + Math.random() * 0.55);
+        const sk = 18 * (0.85 + Math.random() * 0.35);
         this.vel.x += tx * sk * dt;
         this.vel.y += ty * sk * dt;
       }
@@ -6298,6 +6389,15 @@
       this._sandPlowDrag = false;
       this._sandPointer = null;
       this._sandPrevPtr = null;
+      this._dragLastWant = null;
+      this._dragLastClamp = null;
+      this._dragWallPinned = false;
+      this._wallRegroupK = 0;
+      this._dragWallPinNx = 0;
+      this._dragWallPinNy = 0;
+      this._dragWallPinNxSm = 0;
+      this._dragWallPinNySm = 0;
+      this._dragWallMegaEntryDone = false;
       this.dragOffset.x = this.pos.x - x;
       this.dragOffset.y = this.pos.y - y;
       this._dragResidualLx = 0;
@@ -6347,8 +6447,6 @@
         const pin = Math.max(4, (this.gridCell || 12) * 0.35);
         const px = clamp(x, b.minX + pin, b.maxX - pin);
         const py = clamp(y, b.minY + pin, b.maxY - pin);
-        const nowMs =
-          typeof performance !== "undefined" ? performance.now() : Date.now();
         if (this._sandPrevPtr) {
           this.dragVel.x = px - this._sandPrevPtr.x;
           this.dragVel.y = py - this._sandPrevPtr.y;
@@ -6356,37 +6454,14 @@
           this._sandPrevPtr.y = py;
         }
         this._sandPointer = { x: px, y: py };
-        if (nowMs - this._lastWallFxAt > 72) {
-          let wnx = 0;
-          let wny = 0;
-          if (x < b.minX + pin + 0.5) wnx = 1;
-          else if (x > b.maxX - pin - 0.5) wnx = -1;
-          if (y < b.minY + pin + 0.5) wny = 1;
-          else if (y > b.maxY - pin - 0.5) wny = -1;
-          if (wnx !== 0 || wny !== 0) {
-            this._lastWallFxAt = nowMs;
-            this._wallShatter(wnx, wny);
-          }
-        }
+        this._dragLastWant = null;
+        this._dragLastClamp = null;
         return;
       }
       const wantX = x + this.dragOffset.x;
       const wantY = y + this.dragOffset.y;
       const nx = clamp(wantX, b.minX + r, b.maxX - r);
       const ny = clamp(wantY, b.minY + r, b.maxY - r);
-      const nowMs = typeof performance !== "undefined" ? performance.now() : Date.now();
-      if (nowMs - this._lastWallFxAt > 70) {
-        let wnx = 0;
-        let wny = 0;
-        if (wantX < b.minX + r - 0.5) wnx = 1;
-        else if (wantX > b.maxX - r + 0.5) wnx = -1;
-        if (wantY < b.minY + r - 0.5) wny = 1;
-        else if (wantY > b.maxY - r + 0.5) wny = -1;
-        if (wnx !== 0 || wny !== 0) {
-          this._lastWallFxAt = nowMs;
-          this._wallShatter(wnx, wny);
-        }
-      }
       if (this._dragPrevPos) {
         this.dragVel.x = nx - this._dragPrevPos.x;
         this.dragVel.y = ny - this._dragPrevPos.y;
@@ -6415,6 +6490,8 @@
         this.pos.y = ny;
         this._dragShellWorld = null;
       }
+      this._dragLastWant = { x: wantX, y: wantY };
+      this._dragLastClamp = { x: nx, y: ny };
     }
     endDrag() {
       const pending = this._pendingScriptReturn;
@@ -6423,6 +6500,15 @@
       this._sandPlowDrag = false;
       this._sandPointer = null;
       this._sandPrevPtr = null;
+      this._dragLastWant = null;
+      this._dragLastClamp = null;
+      this._dragWallPinned = false;
+      this._wallRegroupK = 0;
+      this._dragWallPinNx = 0;
+      this._dragWallPinNy = 0;
+      this._dragWallPinNxSm = 0;
+      this._dragWallPinNySm = 0;
+      this._dragWallMegaEntryDone = false;
       this._dragPrevPos = null;
       if (this._dragShellDecoupled && this._dragShellWorld) {
         this.pos.x = this._dragShellWorld.x;
@@ -6625,6 +6711,7 @@
         this.pos.y += this.vel.y * dt;
       }
       this._applyPlayfieldBounds(dt, now);
+      this._tickDragWallPhysics(dt, now);
 
       if (
         this.form === "clock" &&
@@ -7061,9 +7148,59 @@
               wy += Math.cos(ny + g.depth * 1.5) * waveAmpEff * 0.48;
             }
           }
+          if (
+            !useSnakeCell &&
+            this.dragging &&
+            !this._sandPlowDrag &&
+            this._dragWallPinned &&
+            (Math.abs(this._dragWallPinNxSm || 0) > 0.02 ||
+              Math.abs(this._dragWallPinNySm || 0) > 0.02) &&
+            !mT &&
+            !g.faceRole &&
+            !(presSilHarm && presGlyphSleep && silMaskPet)
+          ) {
+            let wnx = this._dragWallPinNxSm || 0;
+            let wny = this._dragWallPinNySm || 0;
+            const sl = Math.hypot(wnx, wny);
+            if (sl > 1e-4) {
+              wnx /= sl;
+              wny /= sl;
+            } else {
+              wnx = 0;
+              wny = 0;
+            }
+            const px = wx - bx;
+            const py = wy - by;
+            const tangx = -wny;
+            const tangy = wnx;
+            const span = Math.max(this.size * 0.42, cell * 10);
+            const vn = (px * tangx + py * tangy) / span;
+            const un = (px * wnx + py * wny) / span;
+            const wallBias = clamp(-un, 0, 2.35);
+            const rk0 = clamp(this._wallRegroupK || 0, 0, 1);
+            const rk = rk0 * rk0 * (3 - 2 * rk0);
+            const vnS = Math.tanh(vn * 1.02);
+            const amp =
+              cell * rk * (0.32 + 0.38 * wallBias) * (0.88 + 0.12 * vnS * vnS);
+            wx += tangx * vnS * amp;
+            wy += tangy * vnS * amp * 0.93;
+            const bulge = cell * rk * 0.062 * wallBias;
+            wx += wnx * bulge;
+            wy += wny * bulge;
+          }
           if (!useSnakeCell) {
-            const rx = rumble ? Math.sin(t * 26 + g.depth * 15) * rumble : 0;
-            const ry = rumble ? Math.cos(t * 24 + g.depth * 13) * rumble : 0;
+            const pinRub =
+              this.dragging &&
+              !this._sandPlowDrag &&
+              this._dragWallPinned
+                ? 0.22
+                : 1;
+            const rx = rumble
+              ? Math.sin(t * 26 + g.depth * 15) * rumble * pinRub
+              : 0;
+            const ry = rumble
+              ? Math.cos(t * 24 + g.depth * 13) * rumble * pinRub
+              : 0;
             wx += rx;
             wy += ry;
           }
@@ -7129,6 +7266,13 @@
               if (wy < my0) pen = Math.max(pen, my0 - wy);
               else if (wy > my1) pen = Math.max(pen, wy - my1);
               if (pen > cell * 0.08 && (g._edgeSandCd || 0) <= 0) {
+                if (
+                  this.dragging &&
+                  this._dragWallPinned &&
+                  !this._sandPlowDrag
+                ) {
+                  /* 拖整体贴边：由挤压场摊开，跳过随机缘踢以省算力、减噪 */
+                } else {
                 let ix = bx - wx;
                 let iy = by - wy;
                 const il = Math.hypot(ix, iy) || 1;
@@ -7152,6 +7296,7 @@
                   iy * kick +
                   rand(-cell * 0.34, cell * 0.34);
                 g._edgeSandCd = 0.095 + Math.random() * 0.085;
+                }
               }
             }
             if ((g._edgeSandCd || 0) > 0) g._edgeSandCd -= dt;
@@ -7410,12 +7555,14 @@
           }
           /** 呈现剪影：每帧必跑第一遍叠分；关内动时每帧双遍；开内动时隔帧（移动端隔三帧）第二遍 */
           this._sepAltFrame = (this._sepAltFrame || 0) + 1;
-          const sepSecondPass =
+          const sepSecondPassBase =
             !presSilHarm ||
             presGlyphSleep ||
             (this._embeddedMobilePerf
               ? this._sepAltFrame % 3 === 0
               : (this._sepAltFrame & 1) === 1);
+          const sepSecondPass =
+            sepSecondPassBase && !(this.dragging && !this._sandPlowDrag);
           if (sepSecondPass) {
             this._separateOverlappingGridGlyphs();
           }
