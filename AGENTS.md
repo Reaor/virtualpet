@@ -25,7 +25,7 @@ Then open `http://localhost:8765/index.html` in a browser.
 
 ### Notes
 
-- 产品交互与视觉真源见根目录 **`DESIGN.md`**（与早期「宣纸主视觉」类描述矛盾时，以 **DESIGN** 为准：`AGENTS.md` 仅描述工程形态）。**按构建检阅改进**：`docs/IMPROVEMENTS.md`。
+- 产品交互与视觉真源见根目录 **`DESIGN.md`**（与早期「宣纸主视觉」类描述矛盾时，以 **DESIGN** 为准：`AGENTS.md` 仅描述工程形态）。**按构建检阅改进**：`docs/IMPROVEMENTS.md`。**后续 AI 接手原则与局面**：`docs/AI_CONTINUITY.md`。
 - The page loads the **LXGW WenKai** web font from `cdn.jsdelivr.net`. Internet access is required for the intended look; without it, the browser falls back to system serif fonts (still functional).
 - `?dev=1`：活动区虚线（pet）；画布**右上**显示 **上一帧** `_loop` 的 `frame` 总耗时（指数平滑 **~ms**）、`_update` / `_render` 分段时间、最近一次 **`_resize`**（ms），以及换形后的 **`setForm`** 分段与 `suggestMemo` 条数。
 - **嵌入 WebView / 手机**：`pet.js` 在 **粗指针、窄视口、常见移动 UA、`prefers-reduced-motion`** 下自动启用 **`_embeddedMobilePerf`**（略降 DPR 上限、叠分遍数、粒子规模、装饰栅格与暗色斜线底纹）。`new Pet(canvas, { embeddedMobilePerf: true|false })` 可强制覆盖；URL **`?mobilePerf=1`** / **`?mobilePerf=0`** 或 **`?embedded=1`** 传给 `app.js` 中的 `Pet` 构造选项。若在宿主里**连点**改偏好，请用 **`pet.scheduleStabilizeAfterControl({ layoutHard })`**（合并为尾部一次 `snapshot→apply→_applyGridTypography`），勿在循环里直接多次调用 `stabilizeAfterControl`。
