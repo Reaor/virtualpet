@@ -900,12 +900,14 @@
         );
       }
       } finally {
-        /** 与 pet 内核同一微任务尾部对齐：快照↔应用↔排版（+ 可选叠分），缓解连点参数打架（Pretext：少次、一致口径） */
-        queueMicrotask(() => {
-          if (pet && typeof pet.stabilizeAfterControl === "function") {
+        /** 尾部一次对齐：连点合并为单次 stabilize（见 `Pet.scheduleStabilizeAfterControl`） */
+        if (pet && typeof pet.scheduleStabilizeAfterControl === "function") {
+          pet.scheduleStabilizeAfterControl({ layoutHard });
+        } else if (pet && typeof pet.stabilizeAfterControl === "function") {
+          queueMicrotask(() => {
             pet.stabilizeAfterControl({ layoutHard });
-          }
-        });
+          });
+        }
       }
     });
   }

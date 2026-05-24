@@ -60,7 +60,8 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 ### 3.3 分层视觉偏好 `_arcPrefs`
 
 - 键：`standby` / `presentation`，各自存 **色、墨、浮、波、粒、走格、颤、紊、整块灰底、淡影、字内动、macroFitMode、megaLayoutScale** 等（侧栏易读名；代码字段仍为 `bodyMotionStyle` / `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationGlyphDynamics`）。**`glyphMotionSpeed` / `gridMarchSpeed`** 字段仍存在于对象中，但 **`snapshotArcVisualPrefs` / `applyArcVisualPrefsToPet` 覆写为全模态统一常量**（见 `pet.js` `FIXED_*`）。
-- 切换「层」时 `applyArcVisualPrefsToPet` / `snapshotArcVisualPrefs` 读写当前套。
+- 切换「层」时 `applyArcVisualPrefsToPet` / `snapshotArcVisualPrefs` 读写当前套。  
+- **连点 / 嵌入**：`app.js` 左栏 `finally` 调 **`Pet.scheduleStabilizeAfterControl`**（合并同一 tick 内多次调用，尾部只跑一次 `stabilizeAfterControl`；`layoutHard` 按 OR 合并）。
 
 ### 3.4 「动」`presentationGlyphDynamics`
 
@@ -85,7 +86,8 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ### 4.1 呈现层剪影格移
 
-- `stepBudget`：在 `presSilHarm` 下固定为 **1**（每帧每字最多一格曼哈顿），减轻叠乱；**其他格迈路径** 封顶 **2** 格/帧（**3.35.21**），减轻大嘴帧间隔下的跳格闪烁。
+- `stepBudget`：在 `presSilHarm` 下 **≤1** / 帧；其它路径由 **`GRID_MARCH_CELLS_PER_SEC` 累积器**（`_gridMarchFrameAcc`）产生 **0～3** 的共享预算（**3.35.22**）。换形中叠分 **passes** 封顶、暂缓蛇道重建与剪影第二遍叠分。
+- **3.35.24**：`_separateOverlappingGridGlyphs({ maxPasses })` 供生命周期后 / 换形尾 **轻量补跑**；`_finishMorph` 末尾 **解共格 + enforce**；减轻叠字与 α 闪现。
 - `_separateOverlappingGridGlyphs`：呈现剪影下优先 **正交邻格** 疏散，遍数 **12**（`presDense`）。
 
 ### 4.2 待机层 mask（巨字 / 颜）

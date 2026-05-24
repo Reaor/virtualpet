@@ -76,7 +76,7 @@
 | `snake_stream` | 流线蛇行 | mask 内可走格排成走廊 `_snakeWalkPath`（默认 **螺旋**：质心 + **切比雪夫环** + 极角，由心向外「挤满」感；可选 **弓字** `snakePathVariant=zigzag`）。每帧对目标路径索引做 **去重**，避免多字抢同一格。字列沿走廊 **递进**；**淡色折线**按 `_snakeSlot` 序连接。 |
 | `contour_drift` | 轮廓游走 | 在剪影内 **恢复格子游走**（`allowGridWander`），`marchPref` 按深度交替；与谐波可同时存在，偏 **探索性**，略增叠字风险，由叠分与低速格迈兜底。 |
 
-**体内节拍与格移**：`glyphMotionSpeed` / `gridMarchSpeed` 在 `_arcPrefs` 中仍占位，但 **快照与应用时覆写为常量**（约 **0.44** / **0.9**），曼哈顿追赶 **`stepBudget`** 非呈现剪影谐步时亦 **封顶为每帧 2 格**，减轻跳格闪烁。
+**体内节拍与格移**：`glyphMotionSpeed` / `gridMarchSpeed` 在 `_arcPrefs` 中仍占位，快照/应用时覆写为常量（约 **0.5** / **0.9**）。曼哈顿迈格与层 `timeScale` **解耦**：`_gridMarchFrameAcc` 按 **`GRID_MARCH_CELLS_PER_SEC`**（约 **5.2 格/秒**）累积，全字本帧共享同一 **`stepBudget`**（呈现剪影谐步仍 **≤1** / 帧，其它 **≤3**），避免 `marchGms×dt` 取整造成的忽快忽慢；**开 `gridMarch` 时关格间 `gridCellMotionEase`**，字心始终落在格心，保持纵横观感。换形中叠分 **passes 封顶 3**、暂缓蛇道重建与剪影第二遍叠分以减负。
 **URL**：`?motionStyle=snake_stream` / `?bodyMotion=…`（须为 `BODY_MOTION_STYLES` 之一）；`?snakePath=spiral`（默认）或 `zigzag`；`?glyphsJitter=1`（或 `silhouetteJitter`）预开亚格颤抖。运行时 `setSnakePathVariant` 可切换并强制重建走廊。
 
 ### 2.7 迭代审视：负优化风险与创新研究
@@ -105,7 +105,10 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.35.21**：**运动可读性**：移除侧栏 **「速」「徙」**；`pet.js` 以 **`FIXED_GLYPH_MOTION_SPEED` / `FIXED_GRID_MARCH_SPEED`** 统一待机/呈现/文稿/巨字颜 mask 下体内节拍与沿格追赶；曼哈顿 **`rawMarchSteps`** 系数 **6→5**，非呈现剪影谐步 **`stepBudget` 封顶 2 格/帧**（呈现剪影谐步仍为每字每帧最多 1 格）。`cycleGlyphMotionSpeed` / `cycleArcGridMarchSpeed` 保留为幂等 API。 |
+| 最新 | **3.35.24**：**剪影叠字与闪现**：`_separateOverlappingGridGlyphs` 支持 **`{ maxPasses }`** 轻量补跑；**`_finishMorph`** 尾部 **`_resolveUniqueLocalGrid`** + 叠分（cap 12）+ **`_enforceMaskBackedGlyphWalkable`** + 再叠分（cap 5）；**生命周期**后补 **maxPasses 4** 叠分；生命周期 **α 每帧限幅**收紧、淡出重生 **从更低 α 起步**；`spd` 改用 **`FIXED_GLYPH_MOTION_SPEED`**；换形中叠分上限 **3→6**。检阅索引见 **`docs/IMPROVEMENTS.md`**。 |
+| 先前 | **3.35.23**：**连点不卡（嵌入向）**：`Pet.scheduleStabilizeAfterControl` 合并同一 tick 内多次尾部 **`stabilizeAfterControl`**（`layoutHard` OR 合并）；`app.js` 左栏 `finally` 改调该方法。轻点 **`scatterTapBurst`** 在字粒数大时 **步长采样**（cap≈72 / 移动 40），避免每次点击全量 O(N)。 |
+| 先前 | **3.35.22**：**匀速纵横 + 减负**：曼哈顿迈格改为 **`_gridMarchFrameAcc` + `GRID_MARCH_CELLS_PER_SEC`**（与 `marchGms` 解耦），全字同帧共享 `stepBudget`；**格移开时禁用格间 ease**（免格心对角飘移）。**换形**：叠分遍数封顶、**不换蛇道**、剪影**跳过第二遍叠分**；`FIXED_GLYPH_MOTION_SPEED` **0.5**。 |
+| 先前 | **3.35.21**：**运动可读性**：移除侧栏 **「速」「徙」**；`pet.js` 以 **`FIXED_GLYPH_MOTION_SPEED` / `FIXED_GRID_MARCH_SPEED`** 统一待机/呈现/文稿/巨字颜 mask 下体内节拍与沿格追赶；曼哈顿 **`rawMarchSteps`** 系数 **6→5**，非呈现剪影谐步 **`stepBudget` 封顶 2 格/帧**（呈现剪影谐步仍为每字每帧最多 1 格）。`cycleGlyphMotionSpeed` / `cycleArcGridMarchSpeed` 保留为幂等 API。 |
 | 先前 | **3.35.20**：**性能**：拖整体（非沙拨）时 **跳过剪影叠分第二遍**；去掉拖曳 **`dragTo` 周期性 `_wallShatter`** 与沙拨手指贴边 **`_wallShatter`**；贴边 **跳过随机缘 `_tapScatter`**；非拖碰壁 **不再全字 `_wallShatter`**，仅轻闪光 + 切向滑速。**边界**：`_tickDragWallPhysics` + 格迈前 **平滑法向 + smoothstep 强度 + tanh 切向摊开**（橡皮泥感，无全粒子随机撞散）；贴边略 **压低 rumble**。 |
 | 先前 | **3.35.13**：**拨开模式可起手**：`app.js` 在 `sandPlowMode` 下将 `dragPhase=pending` 扩至**画布任一处按下**（原先仅 `downZone===inner` 才进入 `beginDrag`，体外拖曳永远不生效）；侧栏「拨」后 **`syncSandPlowRail`**；`pet.js` 略**加大拨开半径/径向与切向强度**、贴边散略易触发。 |
 | 先前 | **3.35.12**：**拨开模式**（侧栏「拨」）：`sandPlowMode` 写入 `_arcPrefs` 分套；开时 `beginDrag` / `dragTo` 走 **`_sandPlowDrag`**（指针更新 `dragVel`、**不挪** `pos` / 剪影解耦拖）；格迈前对 `wx,wy` 注入 **径向拨开 + 切向 streak**；活动区缘 **带冷却** 的 `_tapScatter` 推向 **躯壳中心** 以聚回框内；缘上拖指针仍触发 **`_wallShatter`**。`app.js`：`syncSandPlowRail`。 |
