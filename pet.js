@@ -182,11 +182,17 @@
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
   /**
-   * 体内节拍与沿格追赶（原侧栏「速」「徙」）：全模态统一为低速常量，
-   * 便于看清沿格轨迹；`_arcPrefs` 仍存字段但快照/应用时覆写为下列值。
+   * 体内节拍与沿格追赶（原侧栏「速」「徙」）：全模态统一常量；
+   * `_arcPrefs` 仍存字段但快照/应用时覆写为下列值。
    */
-  const FIXED_GLYPH_MOTION_SPEED = 0.44;
+  const FIXED_GLYPH_MOTION_SPEED = 0.5;
   const FIXED_GRID_MARCH_SPEED = 0.9;
+  /**
+   * 曼哈顿迈格与层 `timeScale` / `marchGms` **解耦**：用累积器得到稳定「格/秒」，
+   * 全字同帧共享同一 `stepBudget`，避免 dt 抖动与倍率叠加造成的忽快忽慢、跳格闪烁。
+   */
+  const GRID_MARCH_CELLS_PER_SEC = 5.2;
+  const GRID_MARCH_MAX_STEPS_PER_FRAME = 3;
 
   function hashShuffle(arr, seed) {
     // 稳定伪随机洗牌：换形时若粒子数不变，字序不乱窜
@@ -3491,6 +3497,8 @@
       this.morphApplyIdx = 0;
       this.morphStepAcc = 0;
       this._morphQueued = null;
+      /** 见 `_update` 格迈：与 `marchGms` 解耦的匀速预算（格/秒 → floor 为每字本帧步数） */
+      this._gridMarchFrameAcc = 0;
 
       /** 浅色画布（与 App 式浅 UI 搭配） */
       this.lightCanvas = opts.lightCanvas !== false;
@@ -3681,6 +3689,7 @@
       let perfLayout1 = 0;
       if (this.morphGlyphToTarget) this._cancelMorph(false);
       const prevForm = this.form;
+      if (name !== prevForm) this._gridMarchFrameAcc = 0;
       const S = this.size;
       let megaResolvedCache = null;
       if (name === "script") {
@@ -4529,7 +4538,7 @@
       const rMax = mega ? 90 : kaoMask ? 52 : useMask ? 40 : 22;
       const silMask = isMaskBackedMegaKao(this);
       const relaxM = this._embeddedMobilePerf ? 0.68 : 1;
-      const passes = Math.max(
+      let passes = Math.max(
         1,
         Math.round(
           (presDense
@@ -4547,6 +4556,9 @@
                   : 1) * relaxM
         )
       );
+      if (this.morphGlyphToTarget) {
+        passes = Math.max(1, Math.min(passes, 3));
+      }
       const key = (gx, gy) => `${gx},${gy}`;
 
       for (let pass = 0; pass < passes; pass++) {
@@ -5374,6 +5386,7 @@
     }
 
     _cancelMorph(emit) {
+      this._gridMarchFrameAcc = 0;
       this.morphToKey = null;
       this.morphFinalMeta = null;
       this.morphGlyphToTarget = null;
@@ -5403,6 +5416,7 @@
       this.morphApplyQueue = null;
       this.morphApplyIdx = 0;
       this.morphStepAcc = 0;
+      this._gridMarchFrameAcc = 0;
       return true;
     }
 
@@ -5453,6 +5467,7 @@
       this.morphApplyQueue = null;
       this.morphApplyIdx = 0;
       this.morphStepAcc = 0;
+      this._gridMarchFrameAcc = 0;
 
       this._applyGridTypography();
       if (this.formData && this.formData.charPalette) {
@@ -6867,28 +6882,20 @@
       }
 
       if (this.gridMarch && this.gridSnapping) {
-        const marchGms =
-          (gms * 0.55 + gms0 * 0.45) *
-          (contourStatic ? 0.5 : 1) *
-          (this._sleepMotionMul || 1);
-        /** 呈现层剪影：每字每帧最多迈一格（匀速曼哈顿），避免多步追赶造成叠乱 */
-        const rawMarchSteps = Math.round(
-          (this.gridMarchSpeed || FIXED_GRID_MARCH_SPEED) *
-            marchGms *
-            dt *
-            5 *
-            (this._sleepMotionMul || 1)
-        );
-        /** 非呈现剪影谐步时亦封顶每帧迈格数，避免大嘴 dt 或旧高速档造成「闪烁」跳格 */
-        const stepBudget = presSilHarm
-          ? 1
-          : Math.max(
-              1,
-              Math.min(
-                2,
-                rawMarchSteps
-              )
-            );
+        const accMul =
+          (this._sleepMotionMul || 1) * (contourStatic ? 0.58 : 1);
+        this._gridMarchFrameAcc += dt * GRID_MARCH_CELLS_PER_SEC * accMul;
+        let stepBudget = 0;
+        if (presSilHarm) {
+          if (this._gridMarchFrameAcc >= 1) {
+            stepBudget = 1;
+            this._gridMarchFrameAcc -= 1;
+          }
+        } else {
+          const s0 = Math.floor(this._gridMarchFrameAcc);
+          stepBudget = Math.min(GRID_MARCH_MAX_STEPS_PER_FRAME, s0);
+          this._gridMarchFrameAcc -= stepBudget;
+        }
         const crispMotion = isGridLayoutImmutableForm(this.form);
         const _sandPlayBounds =
           this.viewMode === "pet" ? this._playBounds() : null;
@@ -6897,7 +6904,10 @@
           for (const gg of this.glyphs) {
             delete gg._snakeResolvedIdx;
           }
-          if (t - (this._snakePathT || 0) > 0.72) {
+          if (
+            t - (this._snakePathT || 0) > 0.72 &&
+            !this.morphGlyphToTarget
+          ) {
             this._rebuildMaskSnakeWalkPath(bx, by, cos, sin, flip);
             this._snakePathT = t;
           }
@@ -7459,9 +7469,12 @@
 
           const tgtX = g.mgx * cell;
           const tgtY = g.mgy * cell;
-          /** mask 巨字/颜：禁用格间绘制 ease，否则对角插值会把字粒画出笔画轮廓外（辨形破坏） */
+          /** 开格移时禁用格间 ease，避免字心在格与格之间对角飘移（破坏纵横观感） */
           const useEase =
-            this.gridCellMotionEase && !mT && !silMaskPet;
+            this.gridCellMotionEase &&
+            !mT &&
+            !silMaskPet &&
+            !(this.gridMarch && this.gridSnapping);
           if (useEase) {
             const gEase = clamp(gms0, 0.35, 2.5);
             const rate =
@@ -7547,7 +7560,9 @@
               ? this._sepAltFrame % 3 === 0
               : (this._sepAltFrame & 1) === 1);
           const sepSecondPass =
-            sepSecondPassBase && !(this.dragging && !this._sandPlowDrag);
+            sepSecondPassBase &&
+            !(this.dragging && !this._sandPlowDrag) &&
+            !this.morphGlyphToTarget;
           if (sepSecondPass) {
             this._separateOverlappingGridGlyphs();
           }
