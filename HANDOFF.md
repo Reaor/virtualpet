@@ -87,6 +87,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 ### 4.1 呈现层剪影格移
 
 - `stepBudget`：在 `presSilHarm` 下 **≤1** / 帧；其它路径由 **`GRID_MARCH_CELLS_PER_SEC` 累积器**（`_gridMarchFrameAcc`）产生 **0～3** 的共享预算（**3.35.22**）。换形中叠分 **passes** 封顶、暂缓蛇道重建与剪影第二遍叠分。
+- **3.35.24**：`_separateOverlappingGridGlyphs({ maxPasses })` 供生命周期后 / 换形尾 **轻量补跑**；`_finishMorph` 末尾 **解共格 + enforce**；减轻叠字与 α 闪现。
 - `_separateOverlappingGridGlyphs`：呈现剪影下优先 **正交邻格** 疏散，遍数 **12**（`presDense`）。
 
 ### 4.2 待机层 mask（巨字 / 颜）

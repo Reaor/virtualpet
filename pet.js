@@ -4520,9 +4520,14 @@
     /**
      * 格点 march 后若多粒落在同一 (mgx,mgy)，将后续粒子螺旋挪到最近空位，减轻字体重叠。
      */
-    _separateOverlappingGridGlyphs() {
+    /**
+     * @param {{ maxPasses?: number }} [opts] 限制遍数（生命周期 / 换形尾部等轻量补跑，避免与主循环全量叠分重复打满）
+     */
+    _separateOverlappingGridGlyphs(opts) {
       if (!this.gridSnapping || !this.gridMarch) return;
       if (this.form === "script") return;
+      const capPasses =
+        opts && opts.maxPasses != null ? +opts.maxPasses : null;
       const presDense = isPresentationSilhouetteHarm(this);
       const decoupDrag =
         this.dragging &&
@@ -4562,7 +4567,10 @@
         )
       );
       if (this.morphGlyphToTarget) {
-        passes = Math.max(1, Math.min(passes, 3));
+        passes = Math.max(1, Math.min(passes, 6));
+      }
+      if (capPasses != null && capPasses > 0) {
+        passes = Math.max(1, Math.min(passes, capPasses));
       }
       const key = (gx, gy) => `${gx},${gy}`;
 
@@ -4999,11 +5007,7 @@
     _updatePresentationSilhouetteGlyphLifecycle(dt, bx, by, cos, sin, flip) {
       if (!isPresentationSilhouetteHarm(this)) return;
       if (!this._maskPack || !this._maskPack.grid) return;
-      const spd = clamp(
-        this.glyphMotionSpeed != null ? this.glyphMotionSpeed : 1,
-        0.25,
-        2.5
-      );
+      const spd = FIXED_GLYPH_MOTION_SPEED;
       /** 轮廓难辨 / 越界时：略快淡出；合法区内：慢淡入减轻闪现与叠乱感 */
       const presSleep = !this.presentationGlyphDynamics;
       const fadeOut =
@@ -5037,7 +5041,8 @@
           if (a > tgt) a = tgt;
         }
         let aNext = clamp(a, 0, 1);
-        const maxStep = (presSleep ? 0.28 : 1.12) * dt;
+        /** 呈现剪影：α 每帧限幅，减轻关内动时「一帧跳亮」的闪现感 */
+        const maxStep = (presSleep ? 0.2 : 0.34) * dt;
         if (aNext - prevA > maxStep) aNext = prevA + maxStep;
         if (prevA - aNext > maxStep) aNext = prevA - maxStep;
         g.alpha = aNext;
@@ -5058,10 +5063,11 @@
           }
           const presL = isPresentationSilhouetteHarm(this);
           const sleepFade = presL && !this.presentationGlyphDynamics;
+          /** 重生：从更低 α 起步，再由 fadeIn 渐亮，避免单帧跳变 */
           g.alpha = clamp(
-            g._megaBaseAlpha * (sleepFade ? 0.36 : presL ? 0.32 : 0.48),
-            sleepFade ? 0.22 : presL ? 0.08 : 0.14,
-            sleepFade ? 0.42 : presL ? 0.36 : 0.5
+            g._megaBaseAlpha * (sleepFade ? 0.16 : presL ? 0.12 : 0.28),
+            sleepFade ? 0.05 : presL ? 0.03 : 0.1,
+            sleepFade ? 0.16 : presL ? 0.14 : 0.26
           );
           g._megaOutsideAcc = 0;
           g.wgx = 0;
@@ -5464,6 +5470,28 @@
         g.y = g.mgy * step;
         g.vx = 0;
         g.vy = 0;
+      }
+
+      /** 换形落格：解共格 + 可走格夹紧，减轻尾帧叠字与 mask 外闪现 */
+      if (this.gridSnapping) {
+        this._resolveUniqueLocalGrid();
+      }
+      if (
+        this.gridMarch &&
+        this.gridSnapping &&
+        isMaskBackedMegaKao(this) &&
+        this.glyphs.length > 1
+      ) {
+        this._separateOverlappingGridGlyphs({ maxPasses: 12 });
+        const shell = this._bodyWorldForShell();
+        this._enforceMaskBackedGlyphWalkable(
+          shell.x,
+          shell.y,
+          c,
+          s,
+          this.facingFlip || 1
+        );
+        this._separateOverlappingGridGlyphs({ maxPasses: 5 });
       }
 
       this.morphGlyphToTarget = null;
@@ -7574,6 +7602,14 @@
               sin,
               flip
             );
+            if (
+              this.gridMarch &&
+              this.gridSnapping &&
+              this.glyphs &&
+              this.glyphs.length > 1
+            ) {
+              this._separateOverlappingGridGlyphs({ maxPasses: 4 });
+            }
           }
           /** 呈现剪影：每帧必跑第一遍叠分；关内动时每帧双遍；开内动时隔帧（移动端隔三帧）第二遍 */
           this._sepAltFrame = (this._sepAltFrame || 0) + 1;
