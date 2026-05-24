@@ -3314,6 +3314,9 @@
       /** 拖整体贴边：挤压方向（世界坐标、指向场内），供橡皮泥式切向散开 */
       this._dragWallPinNx = 0;
       this._dragWallPinNy = 0;
+      /** 贴边法向平滑（避免角上瞬时跳向，位移更丝滑） */
+      this._dragWallPinNxSm = 0;
+      this._dragWallPinNySm = 0;
       /** 活动区外壁「碰壁」绘图层脉冲 0..1（与 `_wallShatter`、沙拨贴边联动） */
       this._boundsWallPulse = 0;
 
@@ -6305,6 +6308,8 @@
           this._dragWallMegaEntryDone = false;
           this._dragWallPinNx = 0;
           this._dragWallPinNy = 0;
+          this._dragWallPinNxSm = 0;
+          this._dragWallPinNySm = 0;
         }
         return;
       }
@@ -6329,7 +6334,10 @@
       this._dragWallPinned = pinned;
 
       if (!pinned) {
-        this._wallRegroupK = Math.max(0, (this._wallRegroupK || 0) - dt * 1.35);
+        this._wallRegroupK = Math.max(0, (this._wallRegroupK || 0) - dt * 1.05);
+        const sr = 1 - Math.exp(-17 * dt);
+        this._dragWallPinNxSm = lerp(this._dragWallPinNxSm || 0, 0, sr);
+        this._dragWallPinNySm = lerp(this._dragWallPinNySm || 0, 0, sr);
         this._dragWallPulseAcc = 0;
         this._dragWallMegaEntryDone = false;
         this._dragWallPinNx = 0;
@@ -6338,9 +6346,9 @@
       }
 
       this._wallRegroupK = clamp(
-        (this._wallRegroupK || 0) + dt * 0.38,
+        (this._wallRegroupK || 0) + dt * 0.28,
         0,
-        1.05
+        1
       );
 
       let wnx = pinL ? 1 : pinR ? -1 : 0;
@@ -6356,20 +6364,24 @@
       this._dragWallPinNx = wnx;
       this._dragWallPinNy = wny;
 
+      const sn = 1 - Math.exp(-15 * dt);
+      this._dragWallPinNxSm = lerp(this._dragWallPinNxSm || 0, wnx, sn);
+      this._dragWallPinNySm = lerp(this._dragWallPinNySm || 0, wny, sn);
+
       if (!this._dragWallMegaEntryDone) {
         this._dragWallMegaEntryDone = true;
         this._glyphFlash = Math.min(
-          0.42,
-          (this._glyphFlash || 0) + 0.085
+          0.38,
+          (this._glyphFlash || 0) + 0.052
         );
         this._boundsWallPulse = Math.min(
           1,
-          (this._boundsWallPulse || 0) + 0.26
+          (this._boundsWallPulse || 0) + 0.16
         );
       }
       this._boundsWallPulse = Math.min(
         1,
-        (this._boundsWallPulse || 0) + dt * 0.3
+        (this._boundsWallPulse || 0) + dt * 0.2
       );
     }
 
@@ -6464,6 +6476,8 @@
       this._sandMegaWallShattered = false;
       this._dragWallPinNx = 0;
       this._dragWallPinNy = 0;
+      this._dragWallPinNxSm = 0;
+      this._dragWallPinNySm = 0;
       this.dragOffset.x = this.pos.x - x;
       this.dragOffset.y = this.pos.y - y;
       this._dragResidualLx = 0;
@@ -6600,6 +6614,8 @@
       this._sandMegaWallShattered = false;
       this._dragWallPinNx = 0;
       this._dragWallPinNy = 0;
+      this._dragWallPinNxSm = 0;
+      this._dragWallPinNySm = 0;
       this._dragPrevPos = null;
       if (this._dragShellDecoupled && this._dragShellWorld) {
         this.pos.x = this._dragShellWorld.x;
@@ -6862,7 +6878,7 @@
       }
       this._rumbleAmp = Math.max(0, (this._rumbleAmp || 0) - 1.8 * dt);
       this._glyphFlash = Math.max(0, (this._glyphFlash || 0) - 2.2 * dt);
-      this._boundsWallPulse = Math.max(0, (this._boundsWallPulse || 0) - 2.45 * dt);
+      this._boundsWallPulse = Math.max(0, (this._boundsWallPulse || 0) - 1.85 * dt);
       for (const g of this.glyphs) {
         if (g._impactT > 0) g._impactT -= dt * 2.85;
       }
@@ -7248,13 +7264,22 @@
             this.dragging &&
             !this._sandPlowDrag &&
             this._dragWallPinned &&
-            (this._dragWallPinNx !== 0 || this._dragWallPinNy !== 0) &&
+            (Math.abs(this._dragWallPinNxSm || 0) > 0.02 ||
+              Math.abs(this._dragWallPinNySm || 0) > 0.02) &&
             !mT &&
             !g.faceRole &&
             !(presSilHarm && presGlyphSleep && silMaskPet)
           ) {
-            const wnx = this._dragWallPinNx;
-            const wny = this._dragWallPinNy;
+            let wnx = this._dragWallPinNxSm || 0;
+            let wny = this._dragWallPinNySm || 0;
+            const sl = Math.hypot(wnx, wny);
+            if (sl > 1e-4) {
+              wnx /= sl;
+              wny /= sl;
+            } else {
+              wnx = 0;
+              wny = 0;
+            }
             const px = wx - bx;
             const py = wy - by;
             const tangx = -wny;
@@ -7262,18 +7287,31 @@
             const span = Math.max(this.size * 0.42, cell * 10);
             const vn = (px * tangx + py * tangy) / span;
             const un = (px * wnx + py * wny) / span;
-            const wallBias = clamp(-un, 0, 2.4);
-            const rk = clamp(this._wallRegroupK || 0, 0, 1.15);
-            const amp = cell * rk * (0.4 + 0.48 * wallBias);
-            wx += tangx * vn * amp;
-            wy += tangy * vn * amp * 0.92;
-            const bulge = cell * rk * 0.085 * wallBias;
+            const wallBias = clamp(-un, 0, 2.35);
+            const rk0 = clamp(this._wallRegroupK || 0, 0, 1);
+            const rk = rk0 * rk0 * (3 - 2 * rk0);
+            const vnS = Math.tanh(vn * 1.02);
+            const amp =
+              cell * rk * (0.34 + 0.4 * wallBias) * (0.88 + 0.12 * vnS * vnS);
+            wx += tangx * vnS * amp;
+            wy += tangy * vnS * amp * 0.93;
+            const bulge = cell * rk * 0.068 * wallBias;
             wx += wnx * bulge;
             wy += wny * bulge;
           }
           if (!useSnakeCell) {
-            const rx = rumble ? Math.sin(t * 26 + g.depth * 15) * rumble : 0;
-            const ry = rumble ? Math.cos(t * 24 + g.depth * 13) * rumble : 0;
+            const pinRub =
+              this.dragging &&
+              !this._sandPlowDrag &&
+              this._dragWallPinned
+                ? 0.2
+                : 1;
+            const rx = rumble
+              ? Math.sin(t * 26 + g.depth * 15) * rumble * pinRub
+              : 0;
+            const ry = rumble
+              ? Math.cos(t * 24 + g.depth * 13) * rumble * pinRub
+              : 0;
             wx += rx;
             wy += ry;
           }
@@ -8029,27 +8067,29 @@
             sandEdgeFx = clamp(dm / (cell0 * 3.1), 0, 1);
           }
         }
-        const stress = Math.max(pulseFx, sandEdgeFx * 0.78);
-        if (stress > 0.035) {
+        const stress0 = Math.max(pulseFx, sandEdgeFx * 0.78);
+        const stress =
+          stress0 * stress0 * (3 - 2 * stress0);
+        if (stress > 0.028) {
           const rwf = bfx.maxX - bfx.minX;
           const rhf = bfx.maxY - bfx.minY;
-          const a0 = stress * (light ? 0.13 : 0.19);
-          const spread = 8 + stress * 26;
+          const a0 = stress * (light ? 0.1 : 0.15);
+          const spread = 6 + stress * 22;
           ctx.save();
-          ctx.lineWidth = 1.1 + stress * 4;
+          ctx.lineWidth = 0.85 + stress * 3.2;
           ctx.strokeStyle = light
             ? `rgba(0, 95, 210, ${a0})`
             : `rgba(140, 205, 255, ${a0 * 1.05})`;
           ctx.shadowColor = light
-            ? "rgba(40, 120, 255, 0.14)"
-            : "rgba(90, 170, 255, 0.18)";
+            ? "rgba(40, 120, 255, 0.1)"
+            : "rgba(90, 170, 255, 0.14)";
           ctx.shadowBlur = spread;
           ctx.strokeRect(bfx.minX + 0.5, bfx.minY + 0.5, rwf - 1, rhf - 1);
           ctx.shadowBlur = 0;
           ctx.lineWidth = 1;
           ctx.strokeStyle = light
-            ? `rgba(255, 255, 255, ${a0 * 0.42})`
-            : `rgba(235, 242, 255, ${a0 * 0.28})`;
+            ? `rgba(255, 255, 255, ${a0 * 0.32})`
+            : `rgba(235, 242, 255, ${a0 * 0.22})`;
           ctx.strokeRect(bfx.minX + 1.5, bfx.minY + 1.5, rwf - 3, rhf - 3);
           ctx.restore();
         }
