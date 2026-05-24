@@ -85,6 +85,6 @@ Pretext 类工具的「丝滑」多来自 **少做无效工作** 与 **稳定的
 
 **3.35.11 补充**：嵌入 **Android WebView / 移动 Safari** 时自动 **`_embeddedMobilePerf`**：先减 **像素缓冲分辨率（DPR cap）** 与 **每帧叠分/装饰绘制**，再动粒子规模；与 Pretext「少做无效工作」同向。桌面强制对照可 **`?mobilePerf=0`**。
 
-**3.35.10 补充**：侧栏每次点击后在 **同一微任务尾部** 调用 `stabilizeAfterControl`：**`snapshotArcVisualPrefs` → `applyArcVisualPrefsToPet` → `_applyGridTypography`**，必要时再叠分 —— 对应 Pretext 的 **测量/排版与绘制少次、同口径**；避免「只写了桶、忘了写活属性」或反之的双轨漂移。
+**3.35.23 补充（嵌入 / 连点）**：侧栏 `finally` 改为 **`pet.scheduleStabilizeAfterControl`**：同一宏任务内多次点击只排队 **一个** `queueMicrotask`，尾部 **一次** `snapshot → apply → _applyGridTypography`（`layoutHard` 按 OR 合并）。轻点散开 **`scatterTapBurst`** 在 N 大时 **子集采样**（约 72 / 移动 40），避免连点字灵时全表 O(N) 卡主线程。
 
 **3.35.9 补充**：呈现剪影躯体绘制走 **统一 em → 统一 round(px)**，减少「同形下字大小不一」；墨色 / cel / 浮光 在 `megaSilPres` 关内动路径 **压边缘与相位差** 以减「深浅不一、微乱」。叠分在 **关内动** 恢复 **每帧双遍**（开内动仍隔帧第二遍）——用算力换共格稳定；与 `DESIGN.md` 变更表「3.35.9」一致。

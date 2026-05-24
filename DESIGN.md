@@ -105,7 +105,8 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.35.22**：**匀速纵横 + 减负**：曼哈顿迈格改为 **`_gridMarchFrameAcc` + `GRID_MARCH_CELLS_PER_SEC`**（与 `marchGms` 解耦），全字同帧共享 `stepBudget`；**格移开时禁用格间 ease**（免格心对角飘移）。**换形**：叠分遍数封顶、**不换蛇道**、剪影**跳过第二遍叠分**；`FIXED_GLYPH_MOTION_SPEED` **0.5**。 |
+| 最新 | **3.35.23**：**连点不卡（嵌入向）**：`Pet.scheduleStabilizeAfterControl` 合并同一 tick 内多次尾部 **`stabilizeAfterControl`**（`layoutHard` OR 合并）；`app.js` 左栏 `finally` 改调该方法。轻点 **`scatterTapBurst`** 在字粒数大时 **步长采样**（cap≈72 / 移动 40），避免每次点击全量 O(N)。 |
+| 先前 | **3.35.22**：**匀速纵横 + 减负**：曼哈顿迈格改为 **`_gridMarchFrameAcc` + `GRID_MARCH_CELLS_PER_SEC`**（与 `marchGms` 解耦），全字同帧共享 `stepBudget`；**格移开时禁用格间 ease**（免格心对角飘移）。**换形**：叠分遍数封顶、**不换蛇道**、剪影**跳过第二遍叠分**；`FIXED_GLYPH_MOTION_SPEED` **0.5**。 |
 | 先前 | **3.35.21**：**运动可读性**：移除侧栏 **「速」「徙」**；`pet.js` 以 **`FIXED_GLYPH_MOTION_SPEED` / `FIXED_GRID_MARCH_SPEED`** 统一待机/呈现/文稿/巨字颜 mask 下体内节拍与沿格追赶；曼哈顿 **`rawMarchSteps`** 系数 **6→5**，非呈现剪影谐步 **`stepBudget` 封顶 2 格/帧**（呈现剪影谐步仍为每字每帧最多 1 格）。`cycleGlyphMotionSpeed` / `cycleArcGridMarchSpeed` 保留为幂等 API。 |
 | 先前 | **3.35.20**：**性能**：拖整体（非沙拨）时 **跳过剪影叠分第二遍**；去掉拖曳 **`dragTo` 周期性 `_wallShatter`** 与沙拨手指贴边 **`_wallShatter`**；贴边 **跳过随机缘 `_tapScatter`**；非拖碰壁 **不再全字 `_wallShatter`**，仅轻闪光 + 切向滑速。**边界**：`_tickDragWallPhysics` + 格迈前 **平滑法向 + smoothstep 强度 + tanh 切向摊开**（橡皮泥感，无全粒子随机撞散）；贴边略 **压低 rumble**。 |
 | 先前 | **3.35.13**：**拨开模式可起手**：`app.js` 在 `sandPlowMode` 下将 `dragPhase=pending` 扩至**画布任一处按下**（原先仅 `downZone===inner` 才进入 `beginDrag`，体外拖曳永远不生效）；侧栏「拨」后 **`syncSandPlowRail`**；`pet.js` 略**加大拨开半径/径向与切向强度**、贴边散略易触发。 |

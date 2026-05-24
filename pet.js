@@ -3499,6 +3499,11 @@
       this._morphQueued = null;
       /** 见 `_update` 格迈：与 `marchGms` 解耦的匀速预算（格/秒 → floor 为每字本帧步数） */
       this._gridMarchFrameAcc = 0;
+      /** `scheduleStabilizeAfterControl`：连点侧栏时合并为一次尾部对齐 */
+      this._stabilizeCoalesceScheduled = false;
+      this._stabilizePendingLayoutHard = false;
+      /** `scatterTapBurst` 大步长采样时的相位旋转 */
+      this._scatterTapStrideOff = 0;
 
       /** 浅色画布（与 App 式浅 UI 搭配） */
       this.lightCanvas = opts.lightCanvas !== false;
@@ -5772,8 +5777,10 @@
       }
     }
 
-    /** 轻点：所有形态下小字沿格目标方向短暂散开（华容道位移的可见反馈） */
+    /** 轻点：小字沿格目标方向短暂散开（华容道位移的可见反馈）。大躯体字粒时 **采样** 子集，避免连点 O(N) 卡主线程。 */
     scatterTapBurst() {
+      const glyphs = this.glyphs;
+      if (!glyphs || !glyphs.length) return;
       const cell = this.gridCell || 12;
       const megaCalm = isMaskBackedMegaKao(this);
       const damp = megaCalm
@@ -5783,14 +5790,31 @@
             : 0.06
           : 0.36
         : 1;
-      for (const g of this.glyphs) {
-        if (g.faceRole) continue;
+      const applyOne = (g) => {
         const a = Math.random() * Math.PI * 2;
         const mag = cell * (2.0 + Math.random() * 4.8) * damp;
         g._tapScatterT = 0.42;
         g._tapScatterT0 = 0.42;
         g._tapScatterOX = Math.cos(a) * mag;
         g._tapScatterOY = Math.sin(a) * mag;
+      };
+      const cap = this._embeddedMobilePerf ? 40 : 72;
+      const n = glyphs.length;
+      if (n <= cap) {
+        for (const g of glyphs) {
+          if (!g.faceRole) applyOne(g);
+        }
+        return;
+      }
+      const stride = Math.max(1, Math.ceil(n / cap));
+      let o = (this._scatterTapStrideOff | 0) % stride;
+      this._scatterTapStrideOff = o + 1;
+      let seen = 0;
+      for (let i = o; i < n && seen < cap; i += stride) {
+        const g = glyphs[i];
+        if (g.faceRole) continue;
+        applyOne(g);
+        seen++;
       }
     }
 
@@ -8405,6 +8429,27 @@
         }
       }
       this.digestText(lines.join(""));
+    }
+
+    /**
+     * **合并调度**（嵌入 / 连点）：多次 `scheduleStabilizeAfterControl` 在同一微任务尾部只执行 **一次**
+     * `stabilizeAfterControl`；`layoutHard` 任一为真则最终跑一次叠分。对齐 Pretext：少次、同口径、尾部一次对齐。
+     * @param {{ layoutHard?: boolean }} [opts]
+     */
+    scheduleStabilizeAfterControl(opts) {
+      const lh = !!(opts && opts.layoutHard);
+      this._stabilizePendingLayoutHard = !!(
+        this._stabilizePendingLayoutHard || lh
+      );
+      if (this._stabilizeCoalesceScheduled) return;
+      this._stabilizeCoalesceScheduled = true;
+      const self = this;
+      queueMicrotask(function petStabilizeFlush() {
+        self._stabilizeCoalesceScheduled = false;
+        const runHard = !!self._stabilizePendingLayoutHard;
+        self._stabilizePendingLayoutHard = false;
+        self.stabilizeAfterControl({ layoutHard: runHard });
+      });
     }
 
     /**

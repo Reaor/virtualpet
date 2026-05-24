@@ -60,7 +60,8 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 ### 3.3 分层视觉偏好 `_arcPrefs`
 
 - 键：`standby` / `presentation`，各自存 **色、墨、浮、波、粒、走格、颤、紊、整块灰底、淡影、字内动、macroFitMode、megaLayoutScale** 等（侧栏易读名；代码字段仍为 `bodyMotionStyle` / `silhouetteMatteUnderlay` / `outlineContourFirst` / `presentationGlyphDynamics`）。**`glyphMotionSpeed` / `gridMarchSpeed`** 字段仍存在于对象中，但 **`snapshotArcVisualPrefs` / `applyArcVisualPrefsToPet` 覆写为全模态统一常量**（见 `pet.js` `FIXED_*`）。
-- 切换「层」时 `applyArcVisualPrefsToPet` / `snapshotArcVisualPrefs` 读写当前套。
+- 切换「层」时 `applyArcVisualPrefsToPet` / `snapshotArcVisualPrefs` 读写当前套。  
+- **连点 / 嵌入**：`app.js` 左栏 `finally` 调 **`Pet.scheduleStabilizeAfterControl`**（合并同一 tick 内多次调用，尾部只跑一次 `stabilizeAfterControl`；`layoutHard` 按 OR 合并）。
 
 ### 3.4 「动」`presentationGlyphDynamics`
 
