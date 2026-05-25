@@ -4525,6 +4525,8 @@
     _separateOverlappingGridGlyphs(opts) {
       if (!this.gridSnapping || !this.gridMarch) return;
       if (this.form === "script") return;
+      /** 渐进换形中格距可能与 `gridCell` 暂不一致，叠分按旧 cell 挪位会破坏 morph 收敛 */
+      if (this.morphGlyphToTarget) return;
       const capPasses =
         opts && opts.maxPasses != null ? +opts.maxPasses : null;
       const presDense = isPresentationSilhouetteHarm(this);
@@ -4902,6 +4904,7 @@
      * 淡出后的语义空位：从剪影内部拉一粒向锚点格迈一步（曼哈顿），形成「邻字挪入」感。
      */
     _stepSilhouetteVacancyInpull(t, gms, bx, by, cos, sin, flip) {
+      if (this.morphGlyphToTarget) return;
       if (
         isPresentationSilhouetteHarm(this) &&
         !this.presentationGlyphDynamics
@@ -5412,6 +5415,8 @@
         key: name,
         data,
         megaResolved: megaResolvedCache,
+        /** 渐进换形布局吸附所用的格距；巨字时可能暂大于 `this.gridCell`，须与 march/收尾检测一致 */
+        morphGridCell: step,
         targets: list.map((g) => {
           const txl = g.tx * flip;
           const tyl = g.ty;
@@ -5455,16 +5460,37 @@
       const pack = this._computeMorphGridTargets(name);
       if (!pack) return false;
       this.morphToKey = name;
+      const mcell = pack.morphGridCell || this.gridCell;
       this.morphFinalMeta = {
         data: pack.data,
         key: name,
         megaResolved: pack.megaResolved || null,
+        morphGridCell: mcell,
       };
       this.morphGlyphToTarget = pack.targets;
       this.morphApplyQueue = null;
       this.morphApplyIdx = 0;
       this.morphStepAcc = 0;
       this._gridMarchFrameAcc = 0;
+      /** 目标格距与当前形 `gridCell` 不一致时，必须把 `mgx/mgy` 重绑到同一坐标系，否则 march 与 `_finishMorph` 条件永不成立 */
+      {
+        const bx = this.pos.x;
+        const by = this.pos.y;
+        const rot = this.rotation;
+        const flip = 1;
+        const cos = Math.cos(rot);
+        const sin = Math.sin(rot);
+        for (const g of this.glyphs) {
+          const txl = g.tx * flip;
+          const tyl = g.ty;
+          const wx0 = bx + (txl * cos - tyl * sin);
+          const wy0 = by + (txl * sin + tyl * cos);
+          g.mgx = Math.round(wx0 / mcell);
+          g.mgy = Math.round(wy0 / mcell);
+          g.x = g.mgx * mcell;
+          g.y = g.mgy * mcell;
+        }
+      }
       return true;
     }
 
@@ -6990,6 +7016,13 @@
       this._maybeAdjacentTargetSwap(t);
 
       const cell = this.gridCell;
+      /** 渐进换形目标布局所用的格距（巨字 fit_canvas 等可能与当前形 `gridCell` 不同） */
+      const morphMarchCell =
+        this.morphGlyphToTarget &&
+        this.morphFinalMeta &&
+        this.morphFinalMeta.morphGridCell > 0
+          ? this.morphFinalMeta.morphGridCell
+          : 0;
       const rumble =
         presSilHarm || silMaskPet ? 0 : (this._rumbleAmp || 0) * cell * 0.08;
       const waveAmp = (this.fluidStrength || 0) * cell * 0.09 * mk.ampScale;
@@ -7093,8 +7126,10 @@
         for (let gi = 0; gi < this.glyphs.length; gi++) {
           const g = this.glyphs[gi];
           if (g.mgx == null || g.mgy == null) {
-            g.mgx = Math.round(g.x / cell);
-            g.mgy = Math.round(g.y / cell);
+            const initCell =
+              morphMarchCell > 0 ? morphMarchCell : cell;
+            g.mgx = Math.round(g.x / initCell);
+            g.mgy = Math.round(g.y / initCell);
           }
           if (silMaskPet && !contourDrift) {
             g.marchPref = 0;
@@ -7456,8 +7491,9 @@
           let tgx;
           let tgy;
           if (mT) {
-            tgx = Math.round(mT.twx / cell);
-            tgy = Math.round(mT.twy / cell);
+            const mStep = morphMarchCell > 0 ? morphMarchCell : cell;
+            tgx = Math.round(mT.twx / mStep);
+            tgy = Math.round(mT.twy / mStep);
           } else if (useSnakeCell) {
             tgx = g._snakeMgx;
             tgy = g._snakeMgy;
@@ -7609,8 +7645,9 @@
             }
           }
 
-          const tgtX = g.mgx * cell;
-          const tgtY = g.mgy * cell;
+          const marchCell = mT && morphMarchCell > 0 ? morphMarchCell : cell;
+          const tgtX = g.mgx * marchCell;
+          const tgtY = g.mgy * marchCell;
           /** 开格移时禁用格间 ease，避免字心在格与格之间对角飘移（破坏纵横观感） */
           const useEase =
             this.gridCellMotionEase &&
@@ -7732,11 +7769,15 @@
         if (this.morphGlyphToTarget) {
           let all = true;
           const mt = this.morphGlyphToTarget;
+          const mDone =
+            this.morphFinalMeta && this.morphFinalMeta.morphGridCell > 0
+              ? this.morphFinalMeta.morphGridCell
+              : cell;
           for (let i = 0; i < this.glyphs.length && i < mt.length; i++) {
             const g = this.glyphs[i];
             const tt = mt[i];
-            const egx = Math.round(tt.twx / cell);
-            const egy = Math.round(tt.twy / cell);
+            const egx = Math.round(tt.twx / mDone);
+            const egy = Math.round(tt.twy / mDone);
             if (g.mgx !== egx || g.mgy !== egy) {
               all = false;
               break;
