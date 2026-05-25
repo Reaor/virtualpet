@@ -89,6 +89,7 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 ### 4.1 呈现层剪影格移
 
 - `stepBudget`：**3.35.25** 起呈现剪影与待机 **同一套** `_gridMarchFrameAcc` 累积、`floor` 扣减；**3.35.27** 起呈现 mask 巨字/颜另设 **每帧 cap 1～2 格** + **`presMarchAccMul`**，避免与待机同用 **3 格/帧** 时叠分+march 双峰值。**3.35.25**：解耦拖仍跑剪影叠分第二遍。
+- **3.35.29**：渐进换形 **`morphFinalMeta.morphGridCell`** 与布局吸附步长一致；**`startMorphTo`** 起重绑 **`mgx/mgy`**；march / 完成检测 / **`g.x`** 用同一 morph 格距；换形中 **不跑叠分与剪影空位拉粒**。
 - **3.35.28**：渐进换形 **`_finishMorph`** 须 **`rasterizeMask`**（与 `setForm` 同）；**`_computeMorphGridTargets(mega)`** 临时 **`gridCell` + `megaResolved`**。
 - **3.35.27**：呈现剪影 `_separateOverlappingGridGlyphs` **遍数大降**；格迈 **cap 1～2** + `presMarchAccMul`；生命周期后叠分 **开内动 maxPasses 2**；`silStyleHarmMul` / `_silDrawOx` / `clayMul` 微调。
 - **3.35.25**：格迈分数与待机对齐；解耦拖恢复叠分第二遍；贴边 **`clayMul` / `_wallRegroupK`**；`DRAG_THRESHOLD` 5。

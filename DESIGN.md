@@ -105,7 +105,8 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.35.28**：**渐进换形落巨字**：**`_finishMorph`** 补 **`_maskPack`** 栅格化（曾缺导致 `isMaskBackedMegaKao` 假、呈现巨字不现）；**`_computeMorphGridTargets(mega)`** 与 **`setForm`** 对齐 **`gridCell` / `resolveMegaLayoutInput`**。检阅 **`docs/IMPROVEMENTS.md`**。 |
+| 最新 | **3.35.29**：**渐进换形巨字格距**：目标 **`twx/twy`** 按 **`morphGridCell`** 吸附时，march 与收尾检测曾仍用旧 **`gridCell`** → **`_finishMorph`** 永不触发；现 **`morphFinalMeta.morphGridCell`** + **`startMorphTo`** 重绑 **`mgx`**，换形中跳过 **叠分 / 剪影空位拉粒**。检阅 **`docs/IMPROVEMENTS.md`**。 |
+| 先前 | **3.35.28**：**渐进换形落巨字**：**`_finishMorph`** 补 **`_maskPack`** 栅格化（曾缺导致 `isMaskBackedMegaKao` 假、呈现巨字不现）；**`_computeMorphGridTargets(mega)`** 与 **`setForm`** 对齐 **`gridCell` / `resolveMegaLayoutInput`**。检阅 **`docs/IMPROVEMENTS.md`**。 |
 | 先前 | **3.35.27**：**巨字呈现性能与辨形**：呈现剪影 **叠分遍数**大降；格迈 **每帧最多 1～2 格** + 累积 **略压**；生命周期后叠分 **开内动时 maxPasses 2**；体内微颤 **略收**、亚格 **略快贴目标**；贴边摊开强度回调。检阅 **`docs/IMPROVEMENTS.md`**。 |
 | 先前 | **3.35.26**：**上下文进仓**：新增 **`docs/CONTEXT_ARCHIVE.md`**（用户声音、多轮会话归纳、开放题、PR 线索）；与 **`docs/AI_CONTINUITY.md`** / `HANDOFF` / `AGENTS` 互链；新会话阅读顺序 **档案优先**。检阅 **`docs/IMPROVEMENTS.md`**。 |
 | 先前 | **3.35.25**：**呈现格迈与拖曳**：呈现剪影格迈 **与待机共用** `_gridMarchFrameAcc` 分数扣减（去积压后齐跳）；`GRID_MARCH_CELLS_PER_SEC`、关内静 `accMul` 略抬；**解耦拖**时仍跑叠分 **第二遍**；贴边摊开 **`clayMul`** + **`_wallRegroupK`** 略快；剪影拖 **残差耦合**略降、`app.js` **`DRAG_THRESHOLD`** 5px。检阅 **`docs/IMPROVEMENTS.md`**。 |

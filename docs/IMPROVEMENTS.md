@@ -4,6 +4,7 @@
 
 | 构建 | 主题 | 要点 |
 |------|------|------|
+| **3.35.29** | 渐进换形格距一致 | **`morphFinalMeta.morphGridCell`** 与 **`_computeMorphGridTargets`** 的吸附步长对齐；**`startMorphTo`** 起按该步长重绑 **`mgx/mgy`/`g.x/y`**；march 与 **`_finishMorph` 前置完成检测**用同一 **`morphMarchCell`**；换形中 **跳过叠分/剪影空位拉粒**（避免按旧 `gridCell` 破坏收敛）。 |
 | **3.35.28** | 渐进换形 → 巨字 mask | **`_finishMorph`** 尾帧 **`rasterizeMask` + `_rebuildMatteLayerCanvas`**（与 `setForm` 对齐）；**`_computeMorphGridTargets('mega')`** 临时同步呈现 **`gridCell`** 并传入 **`resolveMegaLayoutInput`**，**`morphFinalMeta.megaResolved`** 供 mask 尺度。 |
 | **3.35.27** | 巨字呈现流畅 / 辨形 | 呈现剪影 **叠分遍数大降**（解耦拖 16→8、开/关内动 12/15→7）；格迈 **每帧 cap 1～2 格** + **`presMarchAccMul`** 压低累积；`GRID_MARCH_CELLS_PER_SEC` **5.05**；生命周期后叠分 **maxPasses 开内动 2**；体内 **`silStyleHarmMul`** 略收、**`_silDrawOx` 收敛**略快；贴边 **`clayMul`** 回调。 |
 | **3.35.26** | 上下文档案 | 新增 **`docs/CONTEXT_ARCHIVE.md`**：用户声音、多轮会话归纳、开放题、PR 线索；**`AI_CONTINUITY` / `HANDOFF` / `AGENTS` / `ZILING_LAYOUT`** 互链；接手阅读顺序 **以档案为首**。 |
