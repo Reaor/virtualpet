@@ -4,6 +4,7 @@
 
 | 构建 | 主题 | 要点 |
 |------|------|------|
+| **3.35.28** | 渐进换形 → 巨字 mask | **`_finishMorph`** 尾帧 **`rasterizeMask` + `_rebuildMatteLayerCanvas`**（与 `setForm` 对齐）；**`_computeMorphGridTargets('mega')`** 临时同步呈现 **`gridCell`** 并传入 **`resolveMegaLayoutInput`**，**`morphFinalMeta.megaResolved`** 供 mask 尺度。 |
 | **3.35.27** | 巨字呈现流畅 / 辨形 | 呈现剪影 **叠分遍数大降**（解耦拖 16→8、开/关内动 12/15→7）；格迈 **每帧 cap 1～2 格** + **`presMarchAccMul`** 压低累积；`GRID_MARCH_CELLS_PER_SEC` **5.05**；生命周期后叠分 **maxPasses 开内动 2**；体内 **`silStyleHarmMul`** 略收、**`_silDrawOx` 收敛**略快；贴边 **`clayMul`** 回调。 |
 | **3.35.26** | 上下文档案 | 新增 **`docs/CONTEXT_ARCHIVE.md`**：用户声音、多轮会话归纳、开放题、PR 线索；**`AI_CONTINUITY` / `HANDOFF` / `AGENTS` / `ZILING_LAYOUT`** 互链；接手阅读顺序 **以档案为首**。 |
 | **3.35.25** | 呈现格迈 / 拖 / 贴边 | 呈现剪影格迈与待机 **共用分数累积**（去「停多帧再齐跳」）；略抬 **`GRID_MARCH_CELLS_PER_SEC`**、关内静 **`accMul`**；**解耦拖**时恢复叠分 **第二遍**；贴边 **橡皮泥**略加强 + **`_wallRegroupK`** 更快；剪影拖 **残差略减**、`app.js` **拖动阈值**略降。 |

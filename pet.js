@@ -5291,7 +5291,39 @@
     _computeMorphGridTargets(name) {
       if (!FORMS[name]) return null;
       const S = this.size;
-      const data = buildFormLayoutData(this, name, this.particleCount, S);
+      const prevGridCell = this.gridCell;
+      let morphStep = this.gridCell;
+      let megaResolvedCache = null;
+      let data;
+      if (name === "mega") {
+        if (
+          this.uiArcMode === "presentation" &&
+          normalizeMegaPresentationLayoutMode(this.presentationMegaLayoutMode) ===
+            "fit_canvas"
+        ) {
+          const rawT = String(this._pickMacroDisplayForLayout() || "字");
+          const G = Math.max(
+            1,
+            segmentStringGraphemes(String(rawT).trim() || "字").length
+          );
+          this.gridCell = computePresentationMegaGridCell(this, S, G);
+        } else {
+          this.gridCell = clamp(Math.round(S * 0.0425), 13, 20);
+        }
+        morphStep = this.gridCell;
+        _megaSuggestMemo.clear();
+        megaResolvedCache = resolveMegaLayoutInput(this, S);
+        data = buildFormLayoutData(
+          this,
+          name,
+          this.particleCount,
+          S,
+          megaResolvedCache
+        );
+        this.gridCell = prevGridCell;
+      } else {
+        data = buildFormLayoutData(this, name, this.particleCount, S);
+      }
       if (!data || !data.targets || !data.targets.length) return null;
       const order = data.ordered
         ? data.targets
@@ -5307,7 +5339,7 @@
         if (d > maxD) maxD = d;
       }
 
-      const step = this.gridCell;
+      const step = morphStep;
       const snap = (v) => Math.round(v / step) * step;
       const list = [];
       for (let i = 0; i < this.glyphs.length; i++) {
@@ -5379,6 +5411,7 @@
       return {
         key: name,
         data,
+        megaResolved: megaResolvedCache,
         targets: list.map((g) => {
           const txl = g.tx * flip;
           const tyl = g.ty;
@@ -5422,7 +5455,11 @@
       const pack = this._computeMorphGridTargets(name);
       if (!pack) return false;
       this.morphToKey = name;
-      this.morphFinalMeta = { data: pack.data, key: name };
+      this.morphFinalMeta = {
+        data: pack.data,
+        key: name,
+        megaResolved: pack.megaResolved || null,
+      };
       this.morphGlyphToTarget = pack.targets;
       this.morphApplyQueue = null;
       this.morphApplyIdx = 0;
@@ -5441,6 +5478,25 @@
         return;
       }
 
+      /** 巨字：与 `setForm` 同步格距，否则尾帧 `mgx/mgy` 仍按旧形 `gridCell` 吸附 */
+      if (key === "mega") {
+        const S0 = this.size;
+        if (
+          this.uiArcMode === "presentation" &&
+          normalizeMegaPresentationLayoutMode(this.presentationMegaLayoutMode) ===
+            "fit_canvas"
+        ) {
+          const rawT = String(this._pickMacroDisplayForLayout() || "字");
+          const G = Math.max(
+            1,
+            segmentStringGraphemes(String(rawT).trim() || "字").length
+          );
+          this.gridCell = computePresentationMegaGridCell(this, S0, G);
+        } else {
+          this.gridCell = clamp(Math.round(S0 * 0.0425), 13, 20);
+        }
+      }
+
       const step = this.gridCell;
       this.form = key;
       this.formStartTime = performance.now();
@@ -5448,6 +5504,22 @@
       this.formData = data;
       this._cinnabarIdx = null;
       this._layoutSettle = 0.35;
+
+      /** 渐进换形尾帧须重建 mask（`setForm` 路径有；此处曾缺 → 巨字/颜 `_maskPack` 空，呈现层无法辨形） */
+      if (data.maskDraw) {
+        const megaMaskS =
+          key === "mega" && meta.megaResolved && meta.megaResolved.Slay > 0
+            ? meta.megaResolved.Slay
+            : this.size;
+        this._maskPack = rasterizeMask(data.maskDraw, megaMaskS, 320);
+        this._maskFormKey = key;
+        this._maskSizeIdx = Math.round(this.size * 10);
+        this._rebuildMatteLayerCanvas(data.maskDraw, megaMaskS);
+      } else {
+        this._maskPack = null;
+        this._maskFormKey = "";
+        this._silhouetteMatteLayer = null;
+      }
 
       const c = Math.cos(this.rotation);
       const s = Math.sin(this.rotation);
