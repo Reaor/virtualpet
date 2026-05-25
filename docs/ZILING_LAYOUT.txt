@@ -19,6 +19,9 @@
   window.ZiLing = { Pet, FORMS, FORM_ORDER, STANDBY_MATH_ORDER, getFormOrderForUiArcMode, getMotionProfileKernelsForPet, ... }
 
 设计/计划
-  DESIGN.md        产品意图与变更摘要
-  PLAN.md          需求对照与版本号
-  HANDOFF.md       接手说明 + §12 控件映射（改侧栏必同步 title 与表）
+  DESIGN.md              产品意图与变更摘要
+  PLAN.md                需求对照与版本号
+  HANDOFF.md             接手说明 + §12 控件映射（改侧栏必同步 title 与表）
+  docs/CONTEXT_ARCHIVE.md 用户声音、会话时间线、开放题（新会话建议首读）
+  docs/AI_CONTINUITY.md   原则、检阅/嵌入目标、接手顺序
+  docs/IMPROVEMENTS.md   按构建检阅改进

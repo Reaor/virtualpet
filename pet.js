@@ -191,7 +191,8 @@
    * 曼哈顿迈格与层 `timeScale` / `marchGms` **解耦**：用累积器得到稳定「格/秒」，
    * 全字同帧共享同一 `stepBudget`，避免 dt 抖动与倍率叠加造成的忽快忽慢、跳格闪烁。
    */
-  const GRID_MARCH_CELLS_PER_SEC = 5.65;
+  /** 全局格/秒；呈现剪影另在 `_update` 内乘 `presMarchAccMul`，避免巨字轮廓路径过载 */
+  const GRID_MARCH_CELLS_PER_SEC = 5.05;
   const GRID_MARCH_MAX_STEPS_PER_FRAME = 3;
 
   function hashShuffle(arr, seed) {
@@ -4546,15 +4547,16 @@
       const rMax = mega ? 90 : kaoMask ? 52 : useMask ? 40 : 22;
       const silMask = isMaskBackedMegaKao(this);
       const relaxM = this._embeddedMobilePerf ? 0.68 : 1;
+      /** 呈现剪影叠分：遍数过高会卡整帧；解耦拖仍略多遍防叠字 */
       let passes = Math.max(
         1,
         Math.round(
           (presDense
             ? decoupDrag
-              ? 16
+              ? 8
               : this.presentationGlyphDynamics
-                ? 12
-                : 15
+                ? 7
+                : 7
             : usesMaskSnakeStream(this) && silMask
               ? 7
               : mega
@@ -6939,10 +6941,23 @@
       if (this.gridMarch && this.gridSnapping) {
         const accMul =
           (this._sleepMotionMul || 1) * (contourStatic ? 0.66 : 1);
-        this._gridMarchFrameAcc += dt * GRID_MARCH_CELLS_PER_SEC * accMul;
-        /** 呈现剪影曾与待机分支分叉为「acc≥1 才迈 1 格」，易积压后整帧齐跳（闪现）；与待机相同分数累积扣减，帧 cap 仍限突进格数 */
+        const presMarchAccMul =
+          presSilHarm && silMaskPet
+            ? this.presentationGlyphDynamics
+              ? 0.82
+              : 0.74
+            : 1;
+        this._gridMarchFrameAcc +=
+          dt * GRID_MARCH_CELLS_PER_SEC * accMul * presMarchAccMul;
+        /** 呈现剪影：与待机共用分数扣减，但 **每帧最多 1～2 格**（待机可到 3），减轻巨字每帧 march+叠分双重压力、改善流畅与辨形 */
         const s0 = Math.floor(this._gridMarchFrameAcc);
-        const stepBudget = Math.min(GRID_MARCH_MAX_STEPS_PER_FRAME, s0);
+        const presMarchCap =
+          presSilHarm && silMaskPet
+            ? this.presentationGlyphDynamics
+              ? 2
+              : 1
+            : GRID_MARCH_MAX_STEPS_PER_FRAME;
+        const stepBudget = Math.min(presMarchCap, s0);
         this._gridMarchFrameAcc -= stepBudget;
         const crispMotion = isGridLayoutImmutableForm(this.form);
         const _sandPlayBounds =
@@ -7078,7 +7093,8 @@
             if (silMaskPet && presSilHarm) {
               if (snakeStream) silStyleHarmMul = 0.4;
               else if (contourDrift) silStyleHarmMul = 1.38;
-              else silStyleHarmMul = 0.66;
+              /** 略压低默认体内颤幅，轮廓上小字更贴格、辨形更稳（算量不变） */
+              else silStyleHarmMul = 0.54;
             }
             const pAmpBase =
               cell *
@@ -7224,7 +7240,7 @@
             const rk = rk0 * rk0 * (3 - 2 * rk0);
             const vnS = Math.tanh(vn * 1.02);
             const clayMul =
-              presSilHarm && !presGlyphSleep && silMaskPet ? 1.32 : 1;
+              presSilHarm && !presGlyphSleep && silMaskPet ? 1.12 : 1;
             const amp =
               cell *
               rk *
@@ -7574,7 +7590,7 @@
             const oyPrev = g._silDrawOy || 0;
             const err = Math.hypot(tox - oxPrev, toy - oyPrev);
             const errNorm = cap > 1e-6 ? err / cap : 0;
-            const baseRate = presGlyphSleep ? 13.5 : 22;
+            const baseRate = presGlyphSleep ? 13.5 : presSilHarm ? 24 : 22;
             /** 误差大时略提高收敛率，贴近目标后自动柔化，减轻贴边微振 */
             const rate = baseRate * (1 + 2.15 * errNorm * errNorm);
             const sm = 1 - Math.exp(-dt * rate);
@@ -7610,7 +7626,10 @@
               this.glyphs &&
               this.glyphs.length > 1
             ) {
-              this._separateOverlappingGridGlyphs({ maxPasses: 4 });
+              /** 开内动时生命周期后叠分从 4 遍收到 2，减轻巨字呈现主线程峰值 */
+              this._separateOverlappingGridGlyphs({
+                maxPasses: this.presentationGlyphDynamics ? 2 : 4,
+              });
             }
           }
           /** 呈现剪影：每帧必跑第一遍叠分；关内动时每帧双遍；开内动时隔帧（移动端隔三帧）第二遍 */

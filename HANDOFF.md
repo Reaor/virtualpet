@@ -1,6 +1,8 @@
 # 字灵（Zì Líng）项目解任 / 接手说明书
 
 > **用途**：供后续 AI 或工程师在 **少试错** 的前提下理解仓库、产品意图、技术债与已知坑。  
+> **用户声音、多轮会话归纳、开放题**：见 **`docs/CONTEXT_ARCHIVE.md`**（建议新会话 **最先**读）。  
+> **产品原则与接手顺序（美观 / 流畅 / 创新）**：见 **`docs/AI_CONTINUITY.md`**。  
 > **局限**：完整人类对话记录不在本仓库；下文 **需求要点** 来自 `PLAN.md` / `DESIGN.md`、代码注释、以及迭代中反复出现的用户反馈的 **归纳**（非逐字「提示词」存档）。若与主分支行为不一致，以 **`index.html` 的 `ziling-build`** 与 `pet.js` 为准。
 
 ---
@@ -86,10 +88,11 @@ uiArcMode === "presentation" && isMaskBackedMegaKao(self)
 
 ### 4.1 呈现层剪影格移
 
-- `stepBudget`：**3.35.25** 起呈现剪影与待机 **同一套** `_gridMarchFrameAcc` 累积、`floor` 扣减、**0～`GRID_MARCH_MAX_STEPS_PER_FRAME`** 共享预算（曾分叉为「acc≥1 才迈 1 格」易闪现）。换形中叠分 **passes** 封顶、暂缓蛇道重建；**解耦拖**仍跑剪影叠分第二遍（**3.35.25**）。
+- `stepBudget`：**3.35.25** 起呈现剪影与待机 **同一套** `_gridMarchFrameAcc` 累积、`floor` 扣减；**3.35.27** 起呈现 mask 巨字/颜另设 **每帧 cap 1～2 格** + **`presMarchAccMul`**，避免与待机同用 **3 格/帧** 时叠分+march 双峰值。**3.35.25**：解耦拖仍跑剪影叠分第二遍。
+- **3.35.27**：呈现剪影 `_separateOverlappingGridGlyphs` **遍数大降**；格迈 **cap 1～2** + `presMarchAccMul`；生命周期后叠分 **开内动 maxPasses 2**；`silStyleHarmMul` / `_silDrawOx` / `clayMul` 微调。
 - **3.35.25**：格迈分数与待机对齐；解耦拖恢复叠分第二遍；贴边 **`clayMul` / `_wallRegroupK`**；`DRAG_THRESHOLD` 5。
 - **3.35.24**：`_separateOverlappingGridGlyphs({ maxPasses })` 供生命周期后 / 换形尾 **轻量补跑**；`_finishMorph` 末尾 **解共格 + enforce**；减轻叠字与 α 闪现。
-- `_separateOverlappingGridGlyphs`：呈现剪影下优先 **正交邻格** 疏散，遍数 **12**（`presDense`）。
+- `_separateOverlappingGridGlyphs`：呈现剪影下优先 **正交邻格** 疏散；**3.35.27** 起 `presDense` 默认遍数约 **7**（解耦拖 **8**；曾 12～16），`_embeddedMobilePerf` 下再 **×0.68**。
 
 ### 4.2 待机层 mask（巨字 / 颜）
 

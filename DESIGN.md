@@ -105,7 +105,9 @@
 
 | 日期（会话） | 决策 |
 |--------------|------|
-| 最新 | **3.35.25**：**呈现格迈与拖曳**：呈现剪影格迈 **与待机共用** `_gridMarchFrameAcc` 分数扣减（去积压后齐跳）；`GRID_MARCH_CELLS_PER_SEC`、关内静 `accMul` 略抬；**解耦拖**时仍跑叠分 **第二遍**；贴边摊开 **`clayMul`** + **`_wallRegroupK`** 略快；剪影拖 **残差耦合**略降、`app.js` **`DRAG_THRESHOLD`** 5px。检阅 **`docs/IMPROVEMENTS.md`**。 |
+| 最新 | **3.35.27**：**巨字呈现性能与辨形**：呈现剪影 **叠分遍数**大降；格迈 **每帧最多 1～2 格** + 累积 **略压**；生命周期后叠分 **开内动时 maxPasses 2**；体内微颤 **略收**、亚格 **略快贴目标**；贴边摊开强度回调。检阅 **`docs/IMPROVEMENTS.md`**。 |
+| 先前 | **3.35.26**：**上下文进仓**：新增 **`docs/CONTEXT_ARCHIVE.md`**（用户声音、多轮会话归纳、开放题、PR 线索）；与 **`docs/AI_CONTINUITY.md`** / `HANDOFF` / `AGENTS` 互链；新会话阅读顺序 **档案优先**。检阅 **`docs/IMPROVEMENTS.md`**。 |
+| 先前 | **3.35.25**：**呈现格迈与拖曳**：呈现剪影格迈 **与待机共用** `_gridMarchFrameAcc` 分数扣减（去积压后齐跳）；`GRID_MARCH_CELLS_PER_SEC`、关内静 `accMul` 略抬；**解耦拖**时仍跑叠分 **第二遍**；贴边摊开 **`clayMul`** + **`_wallRegroupK`** 略快；剪影拖 **残差耦合**略降、`app.js` **`DRAG_THRESHOLD`** 5px。检阅 **`docs/IMPROVEMENTS.md`**。 |
 | 先前 | **3.35.24**：**剪影叠字与闪现**：`_separateOverlappingGridGlyphs` 支持 **`{ maxPasses }`** 轻量补跑；**`_finishMorph`** 尾部 **`_resolveUniqueLocalGrid`** + 叠分（cap 12）+ **`_enforceMaskBackedGlyphWalkable`** + 再叠分（cap 5）；**生命周期**后补 **maxPasses 4** 叠分；生命周期 **α 每帧限幅**收紧、淡出重生 **从更低 α 起步**；`spd` 改用 **`FIXED_GLYPH_MOTION_SPEED`**；换形中叠分上限 **3→6**。检阅索引见 **`docs/IMPROVEMENTS.md`**。 |
 | 先前 | **3.35.23**：**连点不卡（嵌入向）**：`Pet.scheduleStabilizeAfterControl` 合并同一 tick 内多次尾部 **`stabilizeAfterControl`**（`layoutHard` OR 合并）；`app.js` 左栏 `finally` 改调该方法。轻点 **`scatterTapBurst`** 在字粒数大时 **步长采样**（cap≈72 / 移动 40），避免每次点击全量 O(N)。 |
 | 先前 | **3.35.22**：**匀速纵横 + 减负**：曼哈顿迈格改为 **`_gridMarchFrameAcc` + `GRID_MARCH_CELLS_PER_SEC`**（与 `marchGms` 解耦），全字同帧共享 `stepBudget`；**格移开时禁用格间 ease**（免格心对角飘移）。**换形**：叠分遍数封顶、**不换蛇道**、剪影**跳过第二遍叠分**；`FIXED_GLYPH_MOTION_SPEED` **0.5**。 |
